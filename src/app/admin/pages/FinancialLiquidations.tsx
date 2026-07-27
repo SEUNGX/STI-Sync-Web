@@ -70,21 +70,21 @@ export function FinancialLiquidations() {
       {/* Status Tabs */}
       <Tabs defaultValue="pending" className="w-full">
         <TabsList className="bg-white border border-[#E0E0E0]">
-          <TabsTrigger 
+          <TabsTrigger
             value="pending"
             className="data-[state=active]:bg-[#001A4D] data-[state=active]:text-white data-[state=active]:border-b-[3px] data-[state=active]:border-[#FFC107]"
           >
             Pending Review
             <Badge className="ml-2 bg-[#FFC107] text-[#001A4D] hover:bg-[#FFC107]">3</Badge>
           </TabsTrigger>
-          <TabsTrigger 
+          <TabsTrigger
             value="approved"
             className="data-[state=active]:bg-[#001A4D] data-[state=active]:text-white data-[state=active]:border-b-[3px] data-[state=active]:border-[#FFC107]"
           >
             Approved
             <Badge className="ml-2 bg-[#FFC107] text-[#001A4D] hover:bg-[#FFC107]">15</Badge>
           </TabsTrigger>
-          <TabsTrigger 
+          <TabsTrigger
             value="returned"
             className="data-[state=active]:bg-[#001A4D] data-[state=active]:text-white data-[state=active]:border-b-[3px] data-[state=active]:border-[#FFC107]"
           >
@@ -131,9 +131,8 @@ export function FinancialLiquidations() {
                       </div>
                       <div>
                         <p className="text-xs text-gray-500 mb-1">Surplus/Deficit</p>
-                        <p className={`text-lg font-semibold ${
-                          liquidation.surplus.includes('-') ? 'text-red-600' : 'text-green-600'
-                        }`}>
+                        <p className={`text-lg font-semibold ${liquidation.surplus.includes('-') ? 'text-red-600' : 'text-green-600'
+                          }`}>
                           {liquidation.surplus}
                         </p>
                       </div>

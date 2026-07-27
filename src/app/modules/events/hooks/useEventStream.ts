@@ -73,3 +73,37 @@ export function useEventById(eventId: string | undefined) {
 
   return { event, loading, error };
 }
+
+export function useDraftEvents() {
+  const [drafts, setDrafts] = useState<EventDocument[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    const q = query(
+      collection(db, EVENTS_COLLECTION),
+      where('proposalStatus', '==', 'draft'),
+      orderBy('updatedAt', 'desc')
+    );
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const fetchedDrafts = snapshot.docs.map(
+          (doc) => ({ id: doc.id, ...doc.data() } as EventDocument)
+        );
+        setDrafts(fetchedDrafts);
+        setLoading(false);
+      },
+      (err) => {
+        console.error('Error fetching drafts:', err);
+        setError(err);
+        setLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, []);
+
+  return { drafts, loading, error };
+}

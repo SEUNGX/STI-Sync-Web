@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { X, Shield, Rocket } from 'lucide-react';
+import { X, Shield, Rocket, Save } from 'lucide-react';
+import { toast } from 'sonner';
 import Step1EventDetails from '../../modules/events/components/wizard/Step1EventDetails';
 import Step2Schedule from '../../modules/events/components/wizard/Step2Schedule';
 import Step3Participants from '../../modules/events/components/wizard/Step3Participants';
@@ -7,12 +8,16 @@ import Step4Staff from '../../modules/events/components/wizard/Step4Staff';
 import Step5Budget from '../../modules/events/components/wizard/Step5Budget';
 import Step6Documents from '../../modules/events/components/wizard/Step6Documents';
 import Step7Publish from '../../modules/events/components/wizard/Step7Publish';
-import type { EventFormData } from '../../modules/events/types/event.types';
+import type { EventDocument, EventFormData } from '../../modules/events/types/event.types';
 import { useEventCreation } from '../../modules/events/hooks/useEventCreation';
 
 interface SaoEventCreationModalProps {
   isOpen: boolean;
   onClose: () => void;
+  /** Pre-populate the form when resuming a saved draft */
+  initialDraft?: EventDocument;
+  /** Firestore document ID of the draft being resumed */
+  draftId?: string;
 }
 
 const STEPS = [
@@ -25,9 +30,38 @@ const STEPS = [
   'Publish'
 ];
 
-export default function SaoEventCreationModal({ isOpen, onClose }: SaoEventCreationModalProps) {
-  const [currentStep, setCurrentStep] = useState(0);
-  const [formData, setFormData] = useState<EventFormData>({});
+/**
+ * Infer the last wizard step the admin was working on based on which
+ * fields are populated in the draft. Returns the 0-based step index.
+ */
+function inferLastStep(draft: EventDocument): number {
+  if (draft.documents && draft.documents.length > 0) return 5; // Documents (Step 6)
+  if (
+    draft.budgetItems && draft.budgetItems.length > 0
+  ) return 4; // Budget (Step 5)
+  if (draft.scanners && draft.scanners.length > 0) return 3; // Staff (Step 4)
+  if (
+    draft.targetYearLevels && draft.targetYearLevels.length > 0
+  ) return 2; // Participants (Step 3)
+  if (draft.sessions && draft.sessions.length > 0) return 1; // Schedule (Step 2)
+  return 0; // Event Details (Step 1)
+}
+
+export default function SaoEventCreationModal({
+  isOpen,
+  onClose,
+  initialDraft,
+  draftId,
+}: SaoEventCreationModalProps) {
+  const [currentStep, setCurrentStep] = useState(
+    initialDraft ? inferLastStep(initialDraft) : 0
+  );
+  const [formData, setFormData] = useState<EventFormData>(
+    initialDraft ? { ...initialDraft } : {}
+  );
+  const [activeDraftId, setActiveDraftId] = useState<string | undefined>(draftId);
+  const [saving, setSaving] = useState(false);
+
   const { createEvent, saveDraft, loading } = useEventCreation();
 
   if (!isOpen) return null;
@@ -62,9 +96,27 @@ export default function SaoEventCreationModal({ isOpen, onClose }: SaoEventCreat
   };
 
   const handleSaveDraft = async () => {
-    const id = await saveDraft(formData);
-    if (id) {
-      onClose();
+    setSaving(true);
+    try {
+      const id = await saveDraft(formData, activeDraftId);
+      if (id) {
+        // Keep the draft ID so future saves overwrite the same document
+        setActiveDraftId(id);
+        toast.success('Draft saved!', {
+          description: 'Your progress has been saved. You can resume any time from the Drafts tab.',
+          duration: 4000,
+        });
+      } else {
+        toast.error('Failed to save draft', {
+          description: 'Something went wrong. Please try again.',
+        });
+      }
+    } catch {
+      toast.error('Failed to save draft', {
+        description: 'An unexpected error occurred. Please try again.',
+      });
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -103,12 +155,19 @@ export default function SaoEventCreationModal({ isOpen, onClose }: SaoEventCreat
             <div className="flex items-center gap-4">
               <div className="text-white font-bold text-lg flex items-center gap-2">
                 <span>STI Sync</span>
-                <span className="font-normal">Event Creation — Admin</span>
+                <span className="font-normal">
+                  {activeDraftId ? 'Resume Draft — Admin' : 'Event Creation — Admin'}
+                </span>
               </div>
               <div className="px-3 py-1 bg-[#001A4D] rounded-full flex items-center gap-1.5">
                 <Shield className="w-3.5 h-3.5 text-[#FFC107]" />
                 <span className="text-[#FFC107] text-sm font-medium">SAO Admin</span>
               </div>
+              {activeDraftId && (
+                <div className="px-3 py-1 bg-amber-500/20 border border-amber-400/40 rounded-full">
+                  <span className="text-amber-300 text-xs font-medium">Resuming Draft</span>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center gap-4">
@@ -173,10 +232,23 @@ export default function SaoEventCreationModal({ isOpen, onClose }: SaoEventCreat
               <div className="flex items-center gap-3">
                 <button
                   onClick={handleSaveDraft}
-                  disabled={loading}
-                  className="px-6 py-2.5 border border-[#83358E] text-[#83358E] rounded-lg font-medium hover:bg-[#83358E]/5 transition-colors disabled:opacity-50"
+                  disabled={saving || loading}
+                  className="px-6 py-2.5 border border-[#83358E] text-[#83358E] rounded-lg font-medium hover:bg-[#83358E]/5 transition-colors disabled:opacity-50 flex items-center gap-2"
                 >
-                  Save as Draft
+                  {saving ? (
+                    <>
+                      <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                      </svg>
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      Save as Draft
+                    </>
+                  )}
                 </button>
                 <button
                   onClick={nextStep}

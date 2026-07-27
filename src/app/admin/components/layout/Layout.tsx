@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router";
 import { Sidebar } from "./Sidebar";
 import { TopNav } from "./TopNav";
+import { Toaster } from "../../../components/ui/sonner";
 
 const pageTitles: Record<string, string> = {
   "/home": "Dashboard Overview",
@@ -48,6 +49,7 @@ export function Layout() {
           <Outlet context={{ globalSearch, setGlobalSearch }} />
         </main>
       </div>
+      <Toaster position="bottom-right" richColors />
     </div>
   );
 }
