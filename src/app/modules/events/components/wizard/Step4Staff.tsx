@@ -150,10 +150,22 @@ export default function Step4Staff({ data, onUpdate }: Step4Props) {
                     disabled={officersLoading || !data.hostingOrgId}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] focus:border-transparent disabled:opacity-50"
                   >
-                    <option value="">{officersLoading ? 'Loading officers...' : 'Select officer...'}</option>
-                    {officers.map(o => (
-                      <option key={o.studentId} value={o.studentId}>{o.studentName}</option>
-                    ))}
+                    <option value="">
+                      {officersLoading
+                        ? 'Loading officers...'
+                        : officers.length === 0
+                        ? 'No active officers found for this organization'
+                        : 'Select officer...'}
+                    </option>
+                    {officers.map(o => {
+                      const val = o.studentId || o.id;
+                      const label = o.studentName || o.email || 'Unnamed Officer';
+                      return (
+                        <option key={o.id || o.studentId} value={val}>
+                          {label} {o.studentId ? `(${o.studentId})` : ''}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
 
