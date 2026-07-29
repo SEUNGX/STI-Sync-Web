@@ -10,11 +10,11 @@ export function useEventCreation() {
   const { user } = useAdviserProfile();
   const uid = user?.uid || 'UNKNOWN-UID';
 
-  const handleCreateEvent = async (data: EventFormData): Promise<string | null> => {
+  const handleCreateEvent = async (data: EventFormData, draftId?: string, isOfficerProposal = false): Promise<string | null> => {
     setLoading(true);
     setError(null);
     try {
-      const id = await createEvent(data, uid);
+      const id = await createEvent(data, uid, draftId, isOfficerProposal);
       setLoading(false);
       return id;
     } catch (err: any) {

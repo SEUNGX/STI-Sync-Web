@@ -1,61 +1,176 @@
 import { useState } from "react";
-import { X, FileText, Files, Printer, CheckCircle, Download } from "lucide-react";
+import { X, FileText, Files, Printer, CheckCircle, Download, AlertTriangle } from "lucide-react";
+import jsPDF from "jspdf";
+import type { CertificateRecipient, CertificateTemplate } from "../../../modules/certificates/types/certificate.types";
+import { recordIssuedCertificates } from "../../../modules/certificates/services/certificate.service";
+import { useAdviserProfile } from "../../../modules/auth/hooks/useAdviserProfile";
+import { toast } from "sonner";
 
 interface Props {
+  eventId: string;
   eventName: string;
-  totalRecipients: number;
-  includedCount: number;
+  recipients: CertificateRecipient[];
+  template: CertificateTemplate | null;
   onClose: () => void;
 }
 
-const FORMAT_OPTIONS = [
-  { id: "single", label: "Single PDF", desc: "All certificates in one file", icon: FileText, iconColor: "text-[#0E4EBD]" },
-  { id: "individual", label: "Individual PDFs", desc: "One file per student, zipped", icon: Files, iconColor: "text-[#83358E]" },
-  { id: "print-ready", label: "Print-Ready PDF", desc: "Crop marks included", icon: Printer, iconColor: "text-[#001A4D]" },
-];
-
-const NAMING = [
-  "StudentName_Certificate.pdf",
-  "StudentID_Certificate.pdf",
-  "EventName_StudentName.pdf",
-  "Custom",
-];
-
-export default function ExportModal({ eventName, totalRecipients, includedCount, onClose }: Props) {
+export default function ExportModal({ eventId, eventName, recipients, template, onClose }: Props) {
   const [format, setFormat] = useState("single");
   const [paperSize, setPaperSize] = useState("A4");
   const [orientation, setOrientation] = useState("Landscape");
-  const [quality, setQuality] = useState(150);
-  const [naming, setNaming] = useState(NAMING[0]);
+  const [includeFlagged, setIncludeFlagged] = useState(true);
   const [phase, setPhase] = useState<"config" | "progress" | "done">("config");
   const [progress, setProgress] = useState(0);
+  const [exporting, setExporting] = useState(false);
+  const [pdfDoc, setPdfDoc] = useState<jsPDF | null>(null);
 
-  const qualityLabel = quality <= 72 ? "72 DPI — Screen" : quality <= 150 ? "150 DPI — Standard Print" : "300 DPI — High Quality Print";
+  const { user } = useAdviserProfile();
+  const uid = user?.uid || "ADMIN";
 
-  const startExport = () => {
+  const eligibleRecipients = recipients.filter(r => {
+    if (!r.include) return false;
+    if (r.status === 'Flagged' && !includeFlagged) return false;
+    return true;
+  });
+
+  const totalCount = recipients.length;
+  const includedCount = eligibleRecipients.length;
+  const flaggedCount = recipients.filter(r => r.status === 'Flagged').length;
+
+  const startExport = async () => {
+    if (eligibleRecipients.length === 0) {
+      toast.error("No recipients selected for export.");
+      return;
+    }
+
     setPhase("progress");
-    let p = 0;
-    const interval = setInterval(() => {
-      p += Math.random() * 8 + 2;
-      if (p >= 100) { p = 100; clearInterval(interval); setTimeout(() => setPhase("done"), 400); }
-      setProgress(Math.min(100, p));
-    }, 120);
+    setExporting(true);
+    setProgress(5);
+
+    try {
+      // 1. Create Landscape A4 jsPDF instance (297mm x 210mm)
+      const doc = new jsPDF({
+        orientation: "landscape",
+        unit: "mm",
+        format: "a4",
+      });
+
+      const pageWidth = 297;
+      const pageHeight = 210;
+
+      // Extract template position settings
+      const pos = template?.namePosition || {
+        xPercent: 50,
+        yPercent: 45,
+        widthPercent: 50,
+        fontSizePt: 32,
+        fontFamily: "Arial",
+        fontWeight: "Bold",
+        textColor: "#001A4D",
+        textAlign: "center",
+      };
+
+      const bgImg = template?.imageUrl;
+
+      for (let i = 0; i < eligibleRecipients.length; i++) {
+        const r = eligibleRecipients[i];
+        if (i > 0) {
+          doc.addPage("a4", "landscape");
+        }
+
+        // Render Background Template Image if exists
+        if (bgImg) {
+          try {
+            doc.addImage(bgImg, "JPEG", 0, 0, pageWidth, pageHeight);
+          } catch (_) {
+            try {
+              doc.addImage(bgImg, "PNG", 0, 0, pageWidth, pageHeight);
+            } catch (_) {}
+          }
+        }
+
+        // Configure font & size
+        const fontSize = pos.fontSizePt || 32;
+        doc.setFontSize(fontSize);
+        doc.setTextColor(pos.textColor || "#001A4D");
+
+        // Set font family style
+        try {
+          const font = (pos.fontFamily || "helvetica").toLowerCase();
+          const isBold = pos.fontWeight?.toLowerCase().includes("bold");
+          const isItalic = pos.fontWeight?.toLowerCase().includes("italic");
+          const style = isBold && isItalic ? "bolditalic" : isBold ? "bold" : isItalic ? "italic" : "normal";
+          
+          if (font.includes("times")) {
+            doc.setFont("times", style);
+          } else if (font.includes("georgia")) {
+            doc.setFont("times", style);
+          } else {
+            doc.setFont("helvetica", style);
+          }
+        } catch (_) {
+          doc.setFont("helvetica", "bold");
+        }
+
+        // Position coordinates
+        const xMM = ((pos.xPercent || 50) / 100) * pageWidth;
+        const yMM = ((pos.yPercent || 45) / 100) * pageHeight;
+        const align = pos.textAlign || "center";
+
+        // Print attendee full name
+        doc.text(r.name, xMM, yMM, { align: align as any });
+
+        const pct = Math.round(((i + 1) / eligibleRecipients.length) * 100);
+        setProgress(pct);
+      }
+
+      // 2. Record issued certificates in Firestore
+      const issuedRecordsPayload = eligibleRecipients.map(r => ({
+        eventId,
+        eventTitle: eventName,
+        templateId: template?.id || "default",
+        templateName: template?.name || "Standard Template",
+        recipientName: r.name,
+        studentId: r.studentId,
+        course: r.course,
+      }));
+
+      await recordIssuedCertificates(issuedRecordsPayload, uid);
+
+      setPdfDoc(doc);
+      setPhase("done");
+      toast.success("Certificates generated successfully!");
+    } catch (err) {
+      console.error("PDF generation error:", err);
+      toast.error("An error occurred during PDF generation.");
+      setPhase("config");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleDownload = () => {
+    if (!pdfDoc) return;
+    const safeName = eventName.replace(/[^a-zA-Z0-9]/g, '_');
+    const filename = `${safeName}_Landscape_Certificates.pdf`;
+    pdfDoc.save(filename);
+    toast.success("Downloaded Landscape A4 Certificates PDF!");
   };
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl w-[560px] overflow-hidden shadow-2xl">
+      <div className="bg-white rounded-2xl w-[580px] overflow-hidden shadow-2xl">
         {/* Header */}
         <div className="bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] px-6 py-4 flex items-center gap-3">
           <div className="w-8 h-8 bg-[#FFD41C]/20 rounded-full flex items-center justify-center">
             <Download className="w-5 h-5 text-[#FFD41C]" />
           </div>
           <div>
-            <p className="text-white font-bold text-base">Export Certificates</p>
-            <p className="text-[#FFD41C] text-xs">{eventName}</p>
+            <p className="text-white font-bold text-base">Export Landscape A4 Certificates</p>
+            <p className="text-[#FFD41C] text-xs font-medium">{eventName}</p>
           </div>
-          <button onClick={onClose} className="ml-auto p-1.5 hover:bg-white/10 rounded-lg transition-colors">
-            <X className="w-5 h-5 text-white" />
+          <button onClick={onClose} className="ml-auto p-1.5 hover:bg-white/10 rounded-lg transition-colors text-white">
+            <X className="w-5 h-5" />
           </button>
         </div>
 
@@ -63,98 +178,89 @@ export default function ExportModal({ eventName, totalRecipients, includedCount,
         <div className="p-6 space-y-5">
           {phase === "config" && (
             <>
-              {/* Summary */}
+              {/* Summary Metrics */}
               <div className="bg-[#F3E8FF] border border-[#83358E]/20 rounded-xl p-4 flex items-center justify-around">
                 <div className="text-center">
-                  <p className="text-[#001A4D] font-bold text-xl">{totalRecipients}</p>
-                  <p className="text-[#9E9E9E] text-xs">Total Recipients</p>
+                  <p className="text-[#001A4D] font-bold text-xl">{totalCount}</p>
+                  <p className="text-[#9E9E9E] text-xs">Total Attendees</p>
                 </div>
                 <div className="w-px h-10 bg-[#83358E]/20" />
                 <div className="text-center">
                   <p className="text-[#22C55E] font-bold text-xl">{includedCount}</p>
-                  <p className="text-[#9E9E9E] text-xs">Included</p>
+                  <p className="text-[#9E9E9E] text-xs">Selected & Ready</p>
                 </div>
-                <div className="w-px h-10 bg-[#83358E]/20" />
-                <div className="text-center">
-                  <p className="text-[#9E9E9E] font-bold text-xl">{totalRecipients - includedCount}</p>
-                  <p className="text-[#9E9E9E] text-xs">Excluded</p>
-                </div>
+                {flaggedCount > 0 && (
+                  <>
+                    <div className="w-px h-10 bg-[#83358E]/20" />
+                    <div className="text-center">
+                      <p className="text-[#FFC107] font-bold text-xl">{flaggedCount}</p>
+                      <p className="text-[#9E9E9E] text-xs">Flagged Entries</p>
+                    </div>
+                  </>
+                )}
               </div>
 
-              {/* Format */}
-              <div>
-                <p className="text-[#001A4D] font-bold text-xs mb-2 border-l-[3px] border-[#83358E] pl-2">Export Format</p>
-                <div className="grid grid-cols-3 gap-3">
-                  {FORMAT_OPTIONS.map(f => {
-                    const Icon = f.icon;
-                    return (
-                      <button
-                        key={f.id}
-                        onClick={() => setFormat(f.id)}
-                        className={`p-3 rounded-xl border-2 text-left transition-all ${format === f.id ? "border-[#83358E] bg-[#F3E8FF]" : "border-[#E0E0E0] bg-white hover:border-gray-300"}`}
-                      >
-                        <Icon className={`w-5 h-5 mb-2 ${f.iconColor}`} />
-                        <p className="text-[#001A4D] font-bold text-xs">{f.label}</p>
-                        <p className="text-[#9E9E9E] text-[10px] mt-0.5">{f.desc}</p>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Paper & Orientation */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs text-[#9E9E9E] mb-1">Paper Size</label>
-                  <select value={paperSize} onChange={e => setPaperSize(e.target.value)} className="w-full px-3 py-2 border border-[#E0E0E0] rounded-lg text-sm focus:outline-none">
-                    {["A4", "Letter", "Legal", "Custom"].map(s => <option key={s}>{s}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs text-[#9E9E9E] mb-1">Orientation</label>
-                  <div className="flex gap-2">
-                    {["Landscape", "Portrait"].map(o => (
-                      <button key={o} onClick={() => setOrientation(o)} className={`flex-1 py-2 rounded-lg text-xs font-semibold border transition-colors ${orientation === o ? "bg-[#001A4D] text-white border-[#001A4D]" : "bg-white text-[#9E9E9E] border-[#E0E0E0] hover:border-gray-400"}`}>{o}</button>
-                    ))}
+              {/* Include Flagged Switch */}
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                  <div>
+                    <p className="text-xs font-bold text-[#001A4D]">Include Flagged Attendance Entries?</p>
+                    <p className="text-[11px] text-gray-500">Includes students who checked in with grace/late flag exceptions.</p>
                   </div>
                 </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={includeFlagged}
+                    onChange={e => setIncludeFlagged(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#83358E]"></div>
+                </label>
               </div>
 
-              {/* Quality */}
-              <div>
-                <label className="block text-xs text-[#9E9E9E] mb-2">Quality — {qualityLabel}</label>
-                <input type="range" min={72} max={300} step={78} value={quality} onChange={e => setQuality(Number(e.target.value))} className="w-full accent-[#83358E]" />
-              </div>
-
-              {/* File naming */}
-              <div>
-                <label className="block text-xs text-[#9E9E9E] mb-1.5">File Naming Convention</label>
-                <select value={naming} onChange={e => setNaming(e.target.value)} className="w-full px-3 py-2 border border-[#E0E0E0] rounded-lg text-sm focus:outline-none">
-                  {NAMING.map(n => <option key={n}>{n}</option>)}
-                </select>
-                <p className="text-[#9E9E9E] text-xs font-mono mt-1.5">e.g., JuandelaCruz_Certificate.pdf</p>
+              {/* Output Format Information */}
+              <div className="border border-gray-200 rounded-xl p-4 bg-gray-50/50 space-y-2">
+                <div className="flex items-center justify-between text-xs font-medium text-gray-700">
+                  <span>File Output:</span>
+                  <span className="font-bold text-[#001A4D]">Single Combined Landscape A4 PDF</span>
+                </div>
+                <div className="flex items-center justify-between text-xs font-medium text-gray-700">
+                  <span>Page Dimensions:</span>
+                  <span className="font-bold text-[#001A4D]">A4 Landscape (297 × 210 mm)</span>
+                </div>
+                <div className="flex items-center justify-between text-xs font-medium text-gray-700">
+                  <span>Template Background:</span>
+                  <span className="font-bold text-[#83358E]">{template?.name || "Standard Certificate Template"}</span>
+                </div>
               </div>
             </>
           )}
 
           {phase === "progress" && (
-            <div className="py-4 space-y-4">
+            <div className="py-6 space-y-4 text-center">
               <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-                <div className="h-full bg-[#83358E] rounded-full transition-all duration-150" style={{ width: `${progress}%` }} />
+                <div className="h-full bg-[#83358E] rounded-full transition-all duration-200" style={{ width: `${progress}%` }} />
               </div>
-              <p className="text-[#001A4D] font-semibold text-sm">Generating certificate {Math.round(progress / 100 * includedCount)} of {includedCount}...</p>
-              <p className="text-[#9E9E9E] text-xs">Please wait — do not close this window.</p>
+              <p className="text-[#001A4D] font-bold text-sm">
+                Generating Landscape Certificate {Math.round((progress / 100) * includedCount)} of {includedCount}...
+              </p>
+              <p className="text-[#9E9E9E] text-xs">Rendering high-resolution A4 pages and embedding recipient names.</p>
             </div>
           )}
 
           {phase === "done" && (
-            <div className="py-4">
-              <div className="bg-gradient-to-br from-[#22C55E] to-[#16A34A] rounded-2xl p-6 text-center">
-                <CheckCircle className="w-10 h-10 text-white mx-auto mb-3" />
-                <p className="text-white font-bold text-base">{includedCount} certificates generated successfully!</p>
-                <p className="text-white/80 text-sm mt-1">Download ready.</p>
-                <button className="mt-4 w-full bg-white text-[#22C55E] font-bold text-sm py-3 rounded-xl hover:bg-gray-50 transition-colors">
-                  Download ZIP / PDF
+            <div className="py-2">
+              <div className="bg-gradient-to-br from-[#22C55E] to-[#16A34A] rounded-2xl p-6 text-center shadow-md">
+                <CheckCircle className="w-12 h-12 text-white mx-auto mb-3" />
+                <p className="text-white font-bold text-lg">{includedCount} Landscape A4 Certificates Generated!</p>
+                <p className="text-white/90 text-xs mt-1">Single combined multi-page PDF ready for download.</p>
+                <button
+                  onClick={handleDownload}
+                  className="mt-5 w-full bg-white text-[#22C55E] font-bold text-sm py-3 rounded-xl hover:bg-gray-50 transition-colors flex items-center justify-center gap-2 shadow"
+                >
+                  <Download className="w-4 h-4" /> Download Combined PDF File
                 </button>
               </div>
             </div>
@@ -162,15 +268,18 @@ export default function ExportModal({ eventName, totalRecipients, includedCount,
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-[#E0E0E0] flex items-center justify-between">
-          <button onClick={onClose} className="px-4 py-2 border border-[#E0E0E0] rounded-lg text-sm text-[#9E9E9E] hover:bg-gray-50 transition-colors">Cancel</button>
+        <div className="px-6 py-4 border-t border-[#E0E0E0] flex items-center justify-between bg-gray-50">
+          <button onClick={onClose} className="px-4 py-2 border border-[#E0E0E0] rounded-lg text-sm text-gray-600 hover:bg-white transition-colors">
+            {phase === "done" ? "Close" : "Cancel"}
+          </button>
           {phase === "config" && (
-            <button onClick={startExport} className="px-5 py-2 bg-[#001A4D] text-white text-sm font-semibold rounded-lg hover:bg-[#0E4EBD] transition-colors">
-              Export {includedCount} Certificates
+            <button
+              onClick={startExport}
+              disabled={exporting || includedCount === 0}
+              className="px-6 py-2.5 bg-[#001A4D] text-white text-sm font-semibold rounded-lg hover:bg-[#0E4EBD] disabled:opacity-50 transition-colors flex items-center gap-2"
+            >
+              <FileText className="w-4 h-4" /> Export {includedCount} Certificates
             </button>
-          )}
-          {phase === "done" && (
-            <button onClick={onClose} className="px-5 py-2 text-[#9E9E9E] text-sm hover:underline">Done</button>
           )}
         </div>
       </div>

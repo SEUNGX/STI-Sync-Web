@@ -9,12 +9,43 @@ interface Step2Props {
   onUpdate: (data: Partial<EventFormData>) => void;
 }
 
+function formatTime12Hour(timeStr?: string): string {
+  if (!timeStr) return '';
+  const [hStr, mStr] = timeStr.split(':');
+  let h = parseInt(hStr, 10);
+  if (isNaN(h)) return timeStr;
+  const m = mStr || '00';
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12;
+  if (h === 0) h = 12;
+  return `${h}:${m} ${ampm}`;
+}
+
+function addMinutesToTime(timeStr: string, minutesToAdd: number): string {
+  if (!timeStr) return '';
+  const [hStr, mStr] = timeStr.split(':');
+  let h = parseInt(hStr, 10);
+  let m = parseInt(mStr, 10);
+  if (isNaN(h) || isNaN(m)) return timeStr;
+
+  let totalMins = h * 60 + m + minutesToAdd;
+  if (totalMins < 0) totalMins = (totalMins % 1440) + 1440;
+  totalMins = totalMins % 1440;
+
+  const newH = Math.floor(totalMins / 60);
+  const newM = totalMins % 60;
+  return `${newH.toString().padStart(2, '0')}:${newM.toString().padStart(2, '0')}`;
+}
+
 export default function Step2Schedule({ data, onUpdate }: Step2Props) {
   const { data: semesters, loading: semestersLoading } = useSemesters();
   const { venues, loading: venuesLoading } = useVenuesStream();
 
   const activeSemesters = semesters.filter(s => !s.archived);
   const activeVenues = venues.filter(v => !v.archived && v.status === 'available');
+
+  const graceMins = data.gracePeriodMinutes ?? 15;
+  const lateMins = data.lateThresholdMinutes ?? 60;
 
   // Auto-set school year when semester is selected or loaded
   useEffect(() => {
@@ -24,7 +55,6 @@ export default function Step2Schedule({ data, onUpdate }: Step2Props) {
         onUpdate({ schoolYear: sem.academicYear });
       }
     } else if (!data.semesterId && activeSemesters.length > 0) {
-      // Auto-select ACTIVE semester by default if available
       const activeSem = activeSemesters.find(s => s.status === 'ACTIVE');
       if (activeSem) {
         onUpdate({ semesterId: activeSem.id, schoolYear: activeSem.academicYear });
@@ -50,7 +80,22 @@ export default function Step2Schedule({ data, onUpdate }: Step2Props) {
   };
 
   const updateSession = (id: string, field: keyof EventSession, value: any) => {
-    updateField('sessions', sessions.map(s => s.id === id ? { ...s, [field]: value } : s));
+    const nextSessions = sessions.map(s => {
+      if (s.id !== id) return s;
+      const updated = { ...s, [field]: value };
+      
+      // Auto-compute attendance windows if start/end time updated
+      if (field === 'startTime' && value) {
+        if (!updated.timeInOpen) updated.timeInOpen = addMinutesToTime(value, -30);
+        updated.timeInClose = addMinutesToTime(value, lateMins);
+      }
+      if (field === 'endTime' && value) {
+        if (!updated.timeOutOpen) updated.timeOutOpen = addMinutesToTime(value, -30);
+        if (!updated.timeOutClose) updated.timeOutClose = addMinutesToTime(value, 30);
+      }
+      return updated;
+    });
+    updateField('sessions', nextSessions);
   };
 
   const selectedSemester = activeSemesters.find(s => s.id === data.semesterId);
@@ -136,8 +181,8 @@ export default function Step2Schedule({ data, onUpdate }: Step2Props) {
                   />
                   <div className="grid grid-cols-3 gap-3">
                     <input type="date" value={session.date} onChange={(e) => updateSession(session.id, 'date', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
-                    <input type="time" value={session.startTime} onChange={(e) => updateSession(session.id, 'startTime', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
-                    <input type="time" value={session.endTime} onChange={(e) => updateSession(session.id, 'endTime', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                    <input type="time" step="600" value={session.startTime} onChange={(e) => updateSession(session.id, 'startTime', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                    <input type="time" step="600" value={session.endTime} onChange={(e) => updateSession(session.id, 'endTime', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
                   </div>
                 </div>
               </div>
@@ -145,27 +190,12 @@ export default function Step2Schedule({ data, onUpdate }: Step2Props) {
           </div>
         </div>
 
-        {/* Section C — Venue Assignment */}
+        {/* Section C — Venue Assignment & Attendance Thresholds */}
         <div>
           <div className="border-l-4 border-[#83358E] pl-3 mb-4">
-            <h3 className="text-[#001A4D] font-bold text-base">Venue Assignment</h3>
+            <h3 className="text-[#001A4D] font-bold text-base">Venue & Attendance Thresholds</h3>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Event Format <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={data.eventFormat || 'On-Campus'}
-                onChange={(e) => updateField('eventFormat', e.target.value)}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
-              >
-                <option value="On-Campus">On-Campus</option>
-                <option value="Online">Online</option>
-                <option value="Hybrid">Hybrid</option>
-              </select>
-            </div>
-            
+          <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
                 Venue <span className="text-red-500">*</span>
@@ -181,6 +211,52 @@ export default function Step2Schedule({ data, onUpdate }: Step2Props) {
                   <option key={v.id} value={v.id}>{v.name} (Cap: {v.capacity})</option>
                 ))}
               </select>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center">
+                  Grace Period (minutes)
+                  <span className="relative group inline-block ml-1.5 cursor-pointer">
+                    <span className="w-4 h-4 bg-gray-200 text-gray-600 rounded-full flex items-center justify-center text-[10px] font-bold">?</span>
+                    <span className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 hidden group-hover:block w-48 p-2 bg-gray-900 text-white text-[11px] rounded shadow-xl z-20 pointer-events-none text-center">
+                      Buffer minutes after start time before check-in is marked Late.
+                    </span>
+                  </span>
+                </label>
+                <input
+                  type="number"
+                  placeholder="5"
+                  value={data.gracePeriodMinutes || ''}
+                  onChange={(e) => updateField('gracePeriodMinutes', e.target.value ? Number(e.target.value) : null)}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center">
+                  Late Threshold (minutes)
+                  <span className="relative group inline-block ml-1.5 cursor-pointer">
+                    <span className="w-4 h-4 bg-gray-200 text-gray-600 rounded-full flex items-center justify-center text-[10px] font-bold">?</span>
+                    <span className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 hidden group-hover:block w-48 p-2 bg-gray-900 text-white text-[11px] rounded shadow-xl z-20 pointer-events-none text-center">
+                      Cutoff minutes after start time after which check-in closes.
+                    </span>
+                  </span>
+                </label>
+                <input
+                  type="number"
+                  placeholder="15"
+                  value={data.lateThresholdMinutes || ''}
+                  onChange={(e) => updateField('lateThresholdMinutes', e.target.value ? Number(e.target.value) : null)}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+                />
+              </div>
+
+              {graceMins >= lateMins && lateMins > 0 && (
+                <div className="col-span-1 sm:col-span-2 p-2.5 bg-red-50 border border-red-200 rounded-lg text-xs text-red-600 font-medium">
+                  ⚠️ Grace Period ({graceMins} mins) must be less than Late Threshold ({lateMins} mins).
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -201,7 +277,9 @@ export default function Step2Schedule({ data, onUpdate }: Step2Props) {
               {sessions.map((session, index) => (
                 <div key={session.id} className="py-2 border-b border-gray-100 last:border-0">
                   <div className="text-sm font-medium">{session.title || `Session ${index + 1}`}</div>
-                  <div className="text-xs text-gray-500">{session.date || 'Date not set'} {session.startTime ? `• ${session.startTime}` : ''}</div>
+                  <div className="text-xs text-gray-500">
+                    {session.date || 'Date not set'} {session.startTime ? `• ${formatTime12Hour(session.startTime)} – ${formatTime12Hour(session.endTime)}` : ''}
+                  </div>
                 </div>
               ))}
             </div>

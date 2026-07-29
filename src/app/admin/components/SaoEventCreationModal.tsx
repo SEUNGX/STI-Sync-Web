@@ -70,8 +70,15 @@ export default function SaoEventCreationModal({
     setFormData({ ...formData, ...stepData });
   };
 
+  const isQREnabled = formData.enableQRTickets !== false;
+  const steps = isQREnabled
+    ? ['Event Details', 'Schedule', 'Participants', 'Staff', 'Budget', 'Documents', 'Publish']
+    : ['Event Details', 'Schedule', 'Participants', 'Budget', 'Documents', 'Publish'];
+
+  const currentStepName = steps[currentStep] || steps[0];
+
   const nextStep = () => {
-    if (currentStep < STEPS.length - 1) {
+    if (currentStep < steps.length - 1) {
       setCurrentStep(currentStep + 1);
     }
   };
@@ -89,8 +96,12 @@ export default function SaoEventCreationModal({
   };
 
   const handleSubmit = async () => {
-    const id = await createEvent(formData);
+    const id = await createEvent(formData, activeDraftId);
     if (id) {
+      toast.success('Event Published!', {
+        description: 'The event has been successfully published and activated.',
+        duration: 4000,
+      });
       onClose();
     }
   };
@@ -100,7 +111,6 @@ export default function SaoEventCreationModal({
     try {
       const id = await saveDraft(formData, activeDraftId);
       if (id) {
-        // Keep the draft ID so future saves overwrite the same document
         setActiveDraftId(id);
         toast.success('Draft saved!', {
           description: 'Your progress has been saved. You can resume any time from the Drafts tab.',
@@ -121,20 +131,20 @@ export default function SaoEventCreationModal({
   };
 
   const renderStep = () => {
-    switch (currentStep) {
-      case 0:
+    switch (currentStepName) {
+      case 'Event Details':
         return <Step1EventDetails data={formData} onUpdate={updateFormData} />;
-      case 1:
+      case 'Schedule':
         return <Step2Schedule data={formData} onUpdate={updateFormData} />;
-      case 2:
+      case 'Participants':
         return <Step3Participants data={formData} onUpdate={updateFormData} />;
-      case 3:
+      case 'Staff':
         return <Step4Staff data={formData} onUpdate={updateFormData} />;
-      case 4:
+      case 'Budget':
         return <Step5Budget data={formData} onUpdate={updateFormData} />;
-      case 5:
+      case 'Documents':
         return <Step6Documents data={formData} onUpdate={updateFormData} />;
-      case 6:
+      case 'Publish':
         return <Step7Publish data={formData} onUpdate={updateFormData} />;
       default:
         return null;
@@ -172,7 +182,7 @@ export default function SaoEventCreationModal({
 
             <div className="flex items-center gap-4">
               <div className="text-[#FFC107] font-bold">
-                Step {currentStep + 1} of {STEPS.length} — {STEPS[currentStep]}
+                Step {currentStep + 1} of {steps.length} — {currentStepName}
               </div>
               <button
                 onClick={onClose}
@@ -187,13 +197,13 @@ export default function SaoEventCreationModal({
           <div className="h-1 bg-white/20">
             <div
               className="h-full bg-[#FFC107] transition-all duration-300"
-              style={{ width: `${((currentStep + 1) / STEPS.length) * 100}%` }}
+              style={{ width: `${((currentStep + 1) / steps.length) * 100}%` }}
             ></div>
           </div>
 
           {/* Step Navigator */}
           <div className="px-6 py-4 border-b border-gray-200 flex gap-2 overflow-x-auto">
-            {STEPS.map((step, index) => (
+            {steps.map((step, index) => (
               <button
                 key={index}
                 onClick={() => goToStep(index)}

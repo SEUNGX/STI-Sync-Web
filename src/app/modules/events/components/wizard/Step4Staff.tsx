@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, Shield } from 'lucide-react';
+import { Plus, Trash2, Shield, UserCheck } from 'lucide-react';
+import { collection, onSnapshot } from 'firebase/firestore';
+import { db } from '../../../../../services/firebase';
 import { useOrgOfficers } from '../../../organizations';
 import type { EventFormData, EventScanner } from '../../types/event.types';
 
@@ -10,6 +12,18 @@ interface Step4Props {
 
 export default function Step4Staff({ data, onUpdate }: Step4Props) {
   const { officers, loading: officersLoading } = useOrgOfficers(data.hostingOrgId);
+  const [advisers, setAdvisers] = useState<any[]>([]);
+
+  // Fetch real SAO Adviser / Admin profiles from Firestore
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'sas_admins'), (snap) => {
+      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setAdvisers(docs);
+    }, (err) => {
+      console.warn('Failed to stream sas_admins:', err);
+    });
+    return () => unsub();
+  }, []);
   
   // Set default scanners if none exist
   useEffect(() => {
@@ -72,11 +86,13 @@ export default function Step4Staff({ data, onUpdate }: Step4Props) {
     ));
   };
 
+  const activeAdviser = advisers.find(a => a.status === 'active') || advisers[0];
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-6">
       <div className="space-y-6">
 
-        {/* Section A — Event Core Team (Reduced to Supervisor Only) */}
+        {/* Section A — Event Core Team & SAO Adviser */}
         <div>
           <div className="border-l-4 border-[#83358E] pl-3 mb-4">
             <h3 className="text-[#001A4D] font-bold text-base">Event Core Team</h3>
@@ -84,17 +100,28 @@ export default function Step4Staff({ data, onUpdate }: Step4Props) {
 
           <div className="space-y-3">
             {/* SAO Supervisor banner */}
-            <div className="p-4 bg-gradient-to-br from-[#001A4D] to-[#83358E] rounded-lg border-2 border-[#FFC107]">
-              <div className="flex items-center gap-2 mb-3">
-                <Shield className="w-5 h-5 text-[#FFC107]" />
-                <h4 className="font-bold text-white">SAO Event Supervisor</h4>
-                <span className="px-2 py-0.5 bg-[#FFC107] text-[#001A4D] text-xs rounded font-medium">Admin Role</span>
+            <div className="p-4 bg-gradient-to-br from-[#001A4D] to-[#83358E] rounded-xl border-2 border-[#FFC107] text-white">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Shield className="w-5 h-5 text-[#FFC107]" />
+                  <h4 className="font-bold text-white text-sm">SAO Event Supervisor</h4>
+                </div>
+                <span className="px-2 py-0.5 bg-[#FFC107] text-[#001A4D] text-xs rounded font-bold uppercase">
+                  SAO Adviser Oversight
+                </span>
               </div>
-              <div className="flex items-center gap-3 px-4 py-2.5 bg-white rounded-lg">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#0E4EBD] to-[#83358E] flex items-center justify-center text-white font-bold text-sm">SAO</div>
+
+              <div className="flex items-center gap-3 px-4 py-3 bg-white rounded-lg text-gray-900">
+                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#0E4EBD] to-[#83358E] flex items-center justify-center text-white font-bold text-sm">
+                  {activeAdviser?.fullName?.charAt(0) || 'S'}
+                </div>
                 <div>
-                  <div className="font-medium text-gray-900">SAO Adviser</div>
-                  <div className="text-xs text-gray-500">System Administrator • Full Oversight</div>
+                  <div className="font-bold text-gray-900 text-sm">
+                    {activeAdviser?.fullName || activeAdviser?.name || 'Student Affairs Office Adviser'}
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    {activeAdviser?.email || 'sao.adviser@sti.edu'} • {activeAdviser?.role || 'SAO Administrator'}
+                  </div>
                 </div>
               </div>
             </div>
@@ -102,27 +129,28 @@ export default function Step4Staff({ data, onUpdate }: Step4Props) {
         </div>
 
         {/* Section B — Scanner Assignment */}
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <div className="border-l-4 border-[#83358E] pl-3">
-              <h3 className="text-[#001A4D] font-bold text-base">Scanner Assignment</h3>
+        {data.enableQRTickets !== false ? (
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <div className="border-l-4 border-[#83358E] pl-3">
+                <h3 className="text-[#001A4D] font-bold text-base">Scanner Assignment</h3>
+              </div>
+              <button
+                onClick={addScanner}
+                className="px-4 py-2 bg-[#1E70E8] text-white rounded-lg text-sm font-medium hover:bg-[#0E4EBD] flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" /> Add Scanner
+              </button>
             </div>
-            <button
-              onClick={addScanner}
-              className="px-4 py-2 bg-[#1E70E8] text-white rounded-lg text-sm font-medium hover:bg-[#0E4EBD] flex items-center gap-2"
-            >
-              <Plus className="w-4 h-4" /> Add Scanner
-            </button>
-          </div>
 
-          {!data.hostingOrgId && (
-            <div className="p-3 mb-4 bg-amber-50 border border-amber-200 text-amber-700 rounded-lg text-sm">
-              Please select a Hosting Organization in Step 1 first to assign scanners.
-            </div>
-          )}
+            {!data.hostingOrgId && (
+              <div className="p-3 mb-4 bg-amber-50 border border-amber-200 text-amber-700 rounded-lg text-sm">
+                Please select a Hosting Organization in Step 1 first to assign scanners.
+              </div>
+            )}
 
-          <div className="space-y-3">
-            {scanners.map((scanner, index) => (
+            <div className="space-y-3">
+              {scanners.map((scanner, index) => (
               <div key={scanner.id} className="p-4 border border-gray-200 rounded-lg">
                 <div className="flex items-center justify-between mb-3">
                   <h4 className="font-medium text-gray-900">Scanner Officer {index + 1}</h4>
@@ -224,6 +252,12 @@ export default function Step4Staff({ data, onUpdate }: Step4Props) {
             ))}
           </div>
         </div>
+        ) : (
+          <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl text-gray-600 text-sm">
+            <span className="font-semibold text-gray-800">QR Tickets & Scanner Assignment Disabled</span>
+            <p className="text-xs text-gray-500 mt-1">To assign attendance scanners, enable "Enable QR Tickets" in Step 1 Event Settings.</p>
+          </div>
+        )}
       </div>
 
       {/* Right Panel — Team Hierarchy */}

@@ -60,7 +60,7 @@ export function Certificates() {
           </nav>
         </div>
         <button
-          onClick={() => setScreen("template-editor")}
+          onClick={() => { setEditTemplateId(""); setScreen("template-editor"); }}
           className="flex items-center gap-2 px-4 py-2.5 bg-[#001A4D] text-[#FFD41C] font-semibold text-sm rounded-xl hover:bg-[#0E4EBD] transition-colors"
         >
           <Award className="w-4 h-4" />
@@ -75,19 +75,20 @@ export function Certificates() {
           isAdmin={true}
           onGenerate={handleGenerate}
           onOpenTemplateLibrary={() => setScreen("template-library")}
-          onOpenEditor={() => setScreen("template-editor")}
+          onOpenEditor={() => { setEditTemplateId(""); setScreen("template-editor"); }}
         />
       )}
       {screen === "template-library" && (
         <TemplateLibrary
           isAdmin={true}
           onEditTemplate={handleEditTemplate}
-          onUploadNew={() => setScreen("template-editor")}
+          onUploadNew={() => { setEditTemplateId(""); setScreen("template-editor"); }}
         />
       )}
       {screen === "template-editor" && (
         <TemplateEditor
           isAdmin={true}
+          templateId={editTemplateId}
           onSave={() => setScreen("template-library")}
         />
       )}

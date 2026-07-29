@@ -208,11 +208,22 @@ export function EventApprovals() {
   const getOrgName = (orgId: string) => orgs.find(o => o.id === orgId)?.acronym || orgId;
   const getCategoryName = (catId: string) => categories.find(c => c.id === catId)?.name || catId;
 
+  // ── Set of Non-Draft Event Identifiers for Draft Deduplication ────────────
+  const nonDraftRefs = useMemo(() => {
+    const refs = new Set<string>();
+    events.forEach(e => {
+      if (e.id) refs.add(e.id);
+      if (e.referenceId) refs.add(e.referenceId);
+      if (e.title) refs.add(e.title.trim().toLowerCase());
+    });
+    return refs;
+  }, [events]);
+
   // ── Filtered event list (non-drafts) ─────────────────────────────────────
   const filteredEvents = useMemo(() => {
     return events.filter(event => {
       // Tab filter
-      if (activeTab === "pending" && event.proposalStatus !== "pending_review") return false;
+      if (activeTab === "pending" && event.proposalStatus !== "pending" && event.proposalStatus !== "pending_review") return false;
       if (activeTab === "approved" && (event.proposalStatus !== "approved" || isEventPast(event))) return false;
       if (activeTab === "completed" && (event.proposalStatus !== "approved" || !isEventPast(event))) return false;
       if (activeTab === "rejected" && event.proposalStatus !== "rejected") return false;
@@ -230,31 +241,40 @@ export function EventApprovals() {
 
       // Search
       const q = searchQuery.toLowerCase();
-      if (q && !event.title?.toLowerCase().includes(q)) return false;
+      if (q) {
+        const titleMatch = event.title?.toLowerCase().includes(q);
+        const refMatch = event.referenceId?.toLowerCase().includes(q);
+        const orgMatch = getOrgName(event.hostingOrgId).toLowerCase().includes(q);
+        if (!titleMatch && !refMatch && !orgMatch) return false;
+      }
 
       return true;
     });
   }, [events, searchQuery, activeTab, filterOrg, filterDateRange, filterCategory, customFrom, customTo]);
 
-  // ── Filtered drafts ───────────────────────────────────────────────────────
+  // ── Filtered drafts (excluding approved/published events) ───────────────
   const filteredDrafts = useMemo(() => {
-    if (activeTab !== "drafts") return [];
     return drafts.filter(draft => {
+      // Exclude if an approved / pending event with same ID, referenceId, or title exists
+      if (draft.id && nonDraftRefs.has(draft.id)) return false;
+      if (draft.referenceId && nonDraftRefs.has(draft.referenceId)) return false;
+      if (draft.title && nonDraftRefs.has(draft.title.trim().toLowerCase())) return false;
+
       if (filterOrg !== "all" && draft.hostingOrgId !== filterOrg) return false;
       if (filterCategory !== "all" && draft.eventCategoryId !== filterCategory) return false;
       const q = searchQuery.toLowerCase();
-      if (q && !draft.title?.toLowerCase().includes(q)) return false;
+      if (q && !draft.title?.toLowerCase().includes(q) && !draft.referenceId?.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [drafts, activeTab, filterOrg, filterCategory, searchQuery]);
+  }, [drafts, nonDraftRefs, filterOrg, filterCategory, searchQuery]);
 
   // ── Badge counts ──────────────────────────────────────────────────────────
   const allCount = events.length;
-  const pendingCount = events.filter(e => e.proposalStatus === "pending_review").length;
+  const pendingCount = events.filter(e => e.proposalStatus === "pending" || e.proposalStatus === "pending_review").length;
   const approvedCount = events.filter(e => e.proposalStatus === "approved" && !isEventPast(e)).length;
   const completedCount = events.filter(e => e.proposalStatus === "approved" && isEventPast(e)).length;
   const rejectedCount = events.filter(e => e.proposalStatus === "rejected").length;
-  const draftsCount = drafts.length;
+  const draftsCount = filteredDrafts.length;
 
   // ── Pagination ────────────────────────────────────────────────────────────
   const activeList = activeTab === "drafts" ? filteredDrafts : filteredEvents;

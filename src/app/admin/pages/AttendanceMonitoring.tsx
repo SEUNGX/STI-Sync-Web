@@ -605,7 +605,7 @@ export function AttendanceMonitoring() {
     if (dbEvents.length === 0) return FALLBACK_EVENTS;
 
     return dbEvents
-      .filter(evt => evt.attendanceEnabled !== false)
+      .filter(evt => evt.enableQRTickets !== false && (evt as any).enableQR !== false)
       .map(evt => {
       const evtAttendance = dbAttendance.filter(a => a.eventId === evt.id || a.event === evt.title);
       

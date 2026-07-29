@@ -1,4 +1,8 @@
 import { Award, Clock, CheckCircle, UserPlus, Calendar, Eye, ChevronRight } from "lucide-react";
+import { useAllEvents } from "../../../modules/events/hooks/useEventStream";
+import { useAttendanceStream } from "../../../modules/attendance/hooks/useAttendanceStream";
+import { useCertificateTemplatesStream, useIssuedCertificatesStream } from "../../../modules/certificates/hooks/useCertificateStream";
+import { useOrganizationStream } from "../../../modules/organizations/hooks/useOrganizationStream";
 
 interface Props {
   isAdmin: boolean;
@@ -7,27 +11,41 @@ interface Props {
   onOpenEditor: () => void;
 }
 
-const readyEvents = [
-  { id: "1", name: "IT Guild Tech Summit 2025", org: "IT Guild – CCS", date: "Nov 28, 2025", attended: 72, manual: 3 },
-  { id: "2", name: "Business Plan Competition", org: "JPIA – CBA", date: "Dec 2, 2025", attended: 48, manual: 0 },
-  { id: "3", name: "Cultural Night Showcase", org: "Cultura Dance Org", date: "Dec 5, 2025", attended: 130, manual: 7 },
-  { id: "4", name: "Leadership Summit", org: "SSG", date: "Dec 10, 2025", attended: 91, manual: 2 },
-];
-
-const savedTemplates = [
-  { id: "1", name: "Certificate of Participation", used: 12, uploaded: "Nov 15, 2025" },
-  { id: "2", name: "Certificate of Recognition", used: 5, uploaded: "Oct 20, 2025" },
-  { id: "3", name: "Certificate of Achievement", used: 3, uploaded: "Sep 8, 2025" },
-];
-
-const metrics = [
-  { label: "Total Templates", value: 3, note: "uploaded this account", icon: Award, gradient: "from-[#0E4EBD] to-[#1E70E8]", pill: null },
-  { label: "Pending Generation", value: 4, note: "events with completed attendance", icon: Clock, gradient: "from-[#FFC107] to-[#FFD54F]", textDark: true, pill: "Generate Now" },
-  { label: "Certificates Issued", value: 847, note: "+124 this semester", icon: CheckCircle, gradient: "from-[#22C55E] to-[#16A34A]", pill: null },
-  { label: "Manual Recipients", value: 12, note: "added outside app attendance", icon: UserPlus, gradient: "from-[#83358E] to-[#5B1F6B]", pill: null },
-];
-
 export default function CertificateDashboard({ isAdmin, onGenerate, onOpenTemplateLibrary, onOpenEditor }: Props) {
+  const { events, loading: eventsLoading } = useAllEvents();
+  const { attendance, loading: attendanceLoading } = useAttendanceStream();
+  const { templates, loading: templatesLoading } = useCertificateTemplatesStream();
+  const { issuedRecords, loading: issuedLoading } = useIssuedCertificatesStream();
+  const { data: orgs } = useOrganizationStream();
+
+  const getOrgName = (orgId: string) => orgs.find(o => o.id === orgId)?.acronym || orgs.find(o => o.id === orgId)?.name || orgId || 'General';
+
+  // Events with attendance (enableQRTickets or attendanceEnabled)
+  const readyEvents = events
+    .filter(e => e.enableQRTickets !== false && e.proposalStatus === 'approved')
+    .map(e => {
+      const eventAttendance = attendance.filter(a => a.eventId === e.id || a.event === e.title);
+      const attendedCount = eventAttendance.filter(a => a.status === 'Checked In' || a.status === 'Complete' || a.status === 'Late' || a.status === 'Flagged').length;
+      const firstDate = e.sessions && e.sessions.length > 0 ? e.sessions[0].date : 'TBA';
+
+      return {
+        id: e.id,
+        name: e.title,
+        org: getOrgName(e.hostingOrgId),
+        date: firstDate,
+        attended: attendedCount,
+      };
+    });
+
+  const totalIssuedCount = issuedRecords.length;
+
+  const metrics = [
+    { label: "Total Templates", value: templates.length, note: "uploaded in system", icon: Award, gradient: "from-[#0E4EBD] to-[#1E70E8]", pill: null },
+    { label: "Ready Events", value: readyEvents.length, note: "events with attendance", icon: Clock, gradient: "from-[#FFC107] to-[#FFD54F]", textDark: true, pill: "Generate Now" },
+    { label: "Certificates Issued", value: totalIssuedCount, note: "total issued across system", icon: CheckCircle, gradient: "from-[#22C55E] to-[#16A34A]", pill: null },
+    { label: "Total Attendees", value: attendance.length, note: "checked-in attendance records", icon: UserPlus, gradient: "from-[#83358E] to-[#5B1F6B]", pill: null },
+  ];
+
   return (
     <div className="space-y-6">
       {/* Officer scope note */}
@@ -46,12 +64,12 @@ export default function CertificateDashboard({ isAdmin, onGenerate, onOpenTempla
           </div>
           <div>
             <p className="text-white font-bold text-xl">Certificate Management</p>
-            <p className="text-white/70 text-sm mt-0.5">Upload a template, position names, preview, and export certificates for your events.</p>
+            <p className="text-white/70 text-sm mt-0.5">Upload a template, position names, preview, and export landscape A4 certificates for your events.</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <span className="bg-[#FFD41C] text-[#001A4D] text-xs font-semibold px-3 py-1.5 rounded-full">3 Templates Saved</span>
-          <span className="bg-[#FFD41C] text-[#001A4D] text-xs font-semibold px-3 py-1.5 rounded-full">847 Certificates Issued</span>
+          <span className="bg-[#FFD41C] text-[#001A4D] text-xs font-semibold px-3 py-1.5 rounded-full">{templates.length} Templates Saved</span>
+          <span className="bg-[#FFD41C] text-[#001A4D] text-xs font-semibold px-3 py-1.5 rounded-full">{totalIssuedCount} Certificates Issued</span>
         </div>
       </div>
 
@@ -82,56 +100,66 @@ export default function CertificateDashboard({ isAdmin, onGenerate, onOpenTempla
             <span className="bg-[#FFC107] text-[#001A4D] text-xs font-bold px-2 py-0.5 rounded-full">{readyEvents.length}</span>
           </div>
           <div className="divide-y divide-[#E0E0E0]">
-            {readyEvents.map((ev) => (
-              <div key={ev.id} className="flex items-center gap-4 px-5 h-14 hover:bg-gray-50 transition-colors">
-                <div className="flex-1 min-w-0">
-                  <p className="text-[#001A4D] font-bold text-sm truncate">{ev.name}</p>
-                  {isAdmin && <p className="text-[#9E9E9E] text-xs">{ev.org}</p>}
+            {eventsLoading || attendanceLoading ? (
+              <div className="p-8 text-center text-gray-500 text-sm">Loading events & attendance...</div>
+            ) : readyEvents.length === 0 ? (
+              <div className="p-8 text-center text-gray-500 text-sm">No approved events with attendance records found yet.</div>
+            ) : (
+              readyEvents.map((ev) => (
+                <div key={ev.id} className="flex items-center gap-4 px-5 h-14 hover:bg-gray-50 transition-colors">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[#001A4D] font-bold text-sm truncate">{ev.name}</p>
+                    {isAdmin && <p className="text-[#9E9E9E] text-xs">{ev.org}</p>}
+                  </div>
+                  <div className="flex items-center gap-1.5 text-[#9E9E9E] text-xs">
+                    <Calendar className="w-3.5 h-3.5" />
+                    {ev.date}
+                  </div>
+                  <span className="bg-[#22C55E]/10 text-[#22C55E] text-xs font-semibold px-2.5 py-1 rounded-full">{ev.attended} Attendees</span>
+                  <button
+                    onClick={() => onGenerate(ev.id)}
+                    className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${
+                      isAdmin
+                        ? "bg-[#FFD41C] text-[#001A4D] hover:bg-[#FFC107]"
+                        : "bg-[#83358E] text-white hover:bg-[#5B1F6B]"
+                    }`}
+                  >
+                    Generate Certificates
+                  </button>
                 </div>
-                <div className="flex items-center gap-1.5 text-[#9E9E9E] text-xs">
-                  <Calendar className="w-3.5 h-3.5" />
-                  {ev.date}
-                </div>
-                <span className="bg-[#22C55E]/10 text-[#22C55E] text-xs font-semibold px-2 py-0.5 rounded-full">{ev.attended} attended</span>
-                {ev.manual > 0 && (
-                  <span className="bg-[#FFC107]/10 text-[#FFC107] text-xs font-semibold px-2 py-0.5 rounded-full">+{ev.manual} manual</span>
-                )}
-                <button
-                  onClick={() => onGenerate(ev.id)}
-                  className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${
-                    isAdmin
-                      ? "bg-[#FFD41C] text-[#001A4D] hover:bg-[#FFC107]"
-                      : "bg-[#83358E] text-white hover:bg-[#5B1F6B]"
-                  }`}
-                >
-                  Generate Certificates
-                </button>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
 
         {/* Saved Templates */}
         <div className="col-span-4 bg-white rounded-2xl border border-[#E0E0E0] overflow-hidden">
           <div className="bg-[#001A4D] px-5 py-3 flex items-center justify-between">
-            <span className="text-white font-bold text-sm">My Templates</span>
+            <span className="text-white font-bold text-sm">Saved Templates</span>
             <button onClick={onOpenEditor} className="text-[#FFD41C] text-xs font-semibold hover:underline">+ Upload New</button>
           </div>
           <div className="divide-y divide-[#E0E0E0]">
-            {savedTemplates.map((t) => (
-              <div key={t.id} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors group">
-                <div className="w-12 h-8 bg-[#F8F8F8] rounded border border-[#E0E0E0] flex items-center justify-center flex-shrink-0">
-                  <Award className="w-4 h-4 text-[#9E9E9E]" />
+            {templatesLoading ? (
+              <div className="p-6 text-center text-gray-400 text-xs">Loading templates...</div>
+            ) : templates.length === 0 ? (
+              <div className="p-6 text-center text-gray-400 text-xs">No templates saved yet. Click + Upload New to create one!</div>
+            ) : (
+              templates.map((t) => (
+                <div key={t.id} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors group">
+                  <div className="w-12 h-8 bg-[#F8F8F8] rounded border border-[#E0E0E0] flex items-center justify-center flex-shrink-0 overflow-hidden">
+                    {t.imageUrl ? (
+                      <img src={t.imageUrl} alt={t.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <Award className="w-4 h-4 text-[#9E9E9E]" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[#001A4D] font-bold text-xs truncate">{t.name}</p>
+                    <p className="text-[#9E9E9E] text-[11px]">{t.namePosition?.fontFamily || 'Arial'} · {t.namePosition?.textColor || '#001A4D'}</p>
+                  </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[#001A4D] font-bold text-xs truncate">{t.name}</p>
-                  <p className="text-[#9E9E9E] text-[11px]">Used {t.used} times · {t.uploaded}</p>
-                </div>
-                <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button className="p-1 rounded hover:bg-[#EEF2FF]"><Eye className="w-3.5 h-3.5 text-[#0E4EBD]" /></button>
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
           <div className="px-4 py-3 border-t border-[#E0E0E0]">
             <button onClick={onOpenTemplateLibrary} className="text-[#0E4EBD] text-xs font-semibold hover:underline flex items-center gap-1">

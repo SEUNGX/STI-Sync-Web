@@ -60,7 +60,7 @@ export default function OfficerCertificates() {
           </nav>
         </div>
         <button
-          onClick={() => setScreen("template-editor")}
+          onClick={() => { setEditTemplateId(""); setScreen("template-editor"); }}
           className="flex items-center gap-2 px-4 py-2.5 bg-[#83358E] text-white font-semibold text-sm rounded-xl hover:bg-[#5B1F6B] transition-colors"
         >
           <Award className="w-4 h-4" />
@@ -74,19 +74,20 @@ export default function OfficerCertificates() {
           isAdmin={false}
           onGenerate={handleGenerate}
           onOpenTemplateLibrary={() => setScreen("template-library")}
-          onOpenEditor={() => setScreen("template-editor")}
+          onOpenEditor={() => { setEditTemplateId(""); setScreen("template-editor"); }}
         />
       )}
       {screen === "template-library" && (
         <TemplateLibrary
           isAdmin={false}
           onEditTemplate={handleEditTemplate}
-          onUploadNew={() => setScreen("template-editor")}
+          onUploadNew={() => { setEditTemplateId(""); setScreen("template-editor"); }}
         />
       )}
       {screen === "template-editor" && (
         <TemplateEditor
           isAdmin={false}
+          templateId={editTemplateId}
           onSave={() => setScreen("template-library")}
         />
       )}

@@ -28,7 +28,12 @@ export default function Step1EventDetails({ data, onUpdate }: Step1Props) {
   const [isUploadingBanner, setIsUploadingBanner] = useState(false);
 
   const updateField = (field: keyof EventFormData, value: any) => {
-    onUpdate({ [field]: value });
+    const updates: any = { [field]: value };
+    if (field === 'enableQRTickets' || (field as string) === 'enableQR') {
+      updates.enableQRTickets = value;
+      updates.enableQR = value;
+    }
+    onUpdate(updates);
   };
 
   const handleAddObjective = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -144,17 +149,6 @@ export default function Step1EventDetails({ data, onUpdate }: Step1Props) {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Event Tagline</label>
-              <input
-                type="text"
-                placeholder="Short catchy description..."
-                value={data.tagline || ''}
-                onChange={(e) => updateField('tagline', e.target.value)}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
-              />
-            </div>
-
-            <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
                 Event Description <span className="text-red-500">*</span>
               </label>
@@ -165,26 +159,6 @@ export default function Step1EventDetails({ data, onUpdate }: Step1Props) {
                 onChange={(e) => updateField('description', e.target.value)}
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent resize-none"
               />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Event Objectives</label>
-              <input
-                type="text"
-                placeholder="Type and press Enter to add objectives..."
-                value={objectiveInput}
-                onChange={(e) => setObjectiveInput(e.target.value)}
-                onKeyDown={handleAddObjective}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
-              />
-              <div className="flex flex-wrap gap-2 mt-2">
-                {(data.objectives || []).map(obj => (
-                  <span key={obj} className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm flex items-center gap-1">
-                    {obj}
-                    <button onClick={() => handleRemoveObjective(obj)} className="hover:text-blue-900">&times;</button>
-                  </span>
-                ))}
-              </div>
             </div>
           </div>
         </div>
@@ -242,20 +216,17 @@ export default function Step1EventDetails({ data, onUpdate }: Step1Props) {
           </div>
           <div className="space-y-3">
             {[
-              { key: 'enableQRTickets', label: 'Enable QR Tickets', desc: 'Generate scannable QR code tickets', admin: false },
-              { key: 'mandatoryAttendance', label: 'Mandatory Attendance', desc: 'Mark as compulsory institutional event', admin: true },
-              { key: 'lockAfterApproval', label: 'Lock Event After Approval', desc: 'Prevent officers from editing after creation', admin: true },
+              { key: 'enableQRTickets', label: 'Enable QR Tickets', desc: 'Generate scannable QR code tickets & attendance scanner option', admin: false },
             ].map((setting) => (
               <div key={setting.key} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
                     <span className="font-medium text-gray-900">{setting.label}</span>
-                    {setting.admin && <span className="px-2 py-0.5 bg-[#83358E] text-white text-xs rounded">Admin Only</span>}
                   </div>
                   <p className="text-sm text-gray-600">{setting.desc}</p>
                 </div>
                 <button
-                  onClick={() => updateField(setting.key as keyof EventFormData, !data[setting.key as keyof EventFormData])}
+                  onClick={() => updateField(setting.key as keyof EventFormData, data[setting.key as keyof EventFormData] === false ? true : false)}
                   className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ml-4 ${(data[setting.key as keyof EventFormData] !== false && data[setting.key as keyof EventFormData] !== undefined) ? 'bg-[#83358E]' : 'bg-gray-300'}`}
                 >
                   <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${(data[setting.key as keyof EventFormData] !== false && data[setting.key as keyof EventFormData] !== undefined) ? 'translate-x-6' : ''}`} />

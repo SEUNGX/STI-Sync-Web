@@ -35,31 +35,37 @@ export default function Step5Budget({ data, onUpdate }: Step5Props) {
     updateField('budgetItems', budgetItems.filter(i => i.id !== id));
   };
 
-  const updateItem = (id: string, field: keyof BudgetLineItem, value: any) => {
-    updateField('budgetItems', budgetItems.map(i => i.id === id ? { ...i, [field]: value } : i));
+  const updateItem = (id: string, updates: Partial<BudgetLineItem>) => {
+    updateField('budgetItems', budgetItems.map(i => {
+      if (i.id === id) {
+        const merged = { ...i, ...updates };
+        merged.approvedAmount = (merged.quantity || 0) * (merged.unitCost || 0);
+        return merged;
+      }
+      return i;
+    }));
   };
 
-  const totalApproved = budgetItems.reduce((sum, i) => sum + (i.approvedAmount || 0), 0);
-  const totalRequested = budgetItems.reduce((sum, i) => sum + ((i.quantity || 0) * (i.unitCost || 0)), 0);
+  const totalProposed = budgetItems.reduce((sum, i) => sum + ((i.quantity || 0) * (i.unitCost || 0)), 0);
 
-  // Sync totalApprovedBudget to data
+  // Sync total proposed budget to data
   useEffect(() => {
-    if (data.totalApprovedBudget !== totalApproved) {
-      onUpdate({ totalApprovedBudget: totalApproved });
+    if (data.totalApprovedBudget !== totalProposed) {
+      onUpdate({ totalApprovedBudget: totalProposed });
     }
-  }, [totalApproved]);
+  }, [totalProposed]);
 
-  const participantCount = data.expectedParticipantCount || 1000;
-  const calculatedPerStudent = participantCount > 0 ? Math.ceil(totalApproved / participantCount) : 0;
-  const amountPerStudent = data.adminFeeOverride || calculatedPerStudent;
+  const participantCount = data.expectedParticipantCount || 0;
+  const calculatedPerStudent = participantCount > 0 ? Math.ceil(totalProposed / participantCount) : 0;
+  const amountPerStudent = data.adminFeeOverride !== undefined ? data.adminFeeOverride : calculatedPerStudent;
   const totalCollected = amountPerStudent * participantCount;
-  const surplus = totalCollected - totalApproved;
+  const surplus = totalCollected - totalProposed;
 
   useEffect(() => {
     if (data.studentPayablesEnabled && data.adminFeeOverride === undefined) {
       onUpdate({ adminFeeOverride: calculatedPerStudent, totalExpectedCollection: calculatedPerStudent * participantCount });
     }
-  }, [data.studentPayablesEnabled]);
+  }, [data.studentPayablesEnabled, calculatedPerStudent]);
 
   const handleAmountOverrideChange = (val: number) => {
     onUpdate({ adminFeeOverride: val, totalExpectedCollection: val * participantCount });
@@ -69,32 +75,18 @@ export default function Step5Budget({ data, onUpdate }: Step5Props) {
     <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-6">
       <div className="space-y-6">
 
-        {/* Admin Banner */}
-        <div className="p-4 bg-[#001A4D] border-l-4 border-[#FFC107] rounded-lg">
-          <div className="flex items-start gap-3">
-            <Shield className="w-6 h-6 text-[#FFC107] flex-shrink-0 mt-0.5" />
+        {/* Proposed Budget Banner */}
+        <div className="p-4 bg-gradient-to-r from-[#001A4D] to-[#83358E] rounded-xl text-white">
+          <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-white font-bold text-base mb-1">Administrative Budget Authority</h3>
-              <p className="text-gray-200 text-sm">
-                As SAO Adviser, you are setting the official approved budget for this event. All expenditures must be liquidated against this approved budget.
+              <h3 className="font-bold text-base text-white mb-1">Proposed Event Budget</h3>
+              <p className="text-white/80 text-xs">
+                Enter line items with estimated quantity and unit cost. The total overall budget will be calculated automatically.
               </p>
             </div>
-          </div>
-        </div>
-
-        {/* Budget Overview */}
-        <div>
-          <div className="border-l-4 border-[#83358E] pl-3 mb-4">
-            <h3 className="text-[#001A4D] font-bold text-base">Budget Overview</h3>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="p-4 bg-gradient-to-br from-[#83358E] to-[#A855F7] rounded-lg text-white">
-              <div className="text-sm opacity-90 mb-1">Approved Total</div>
-              <div className="text-2xl font-bold">₱{totalApproved.toLocaleString()}</div>
-            </div>
-            <div className="p-4 bg-gradient-to-br from-[#0E4EBD] to-[#1E70E8] rounded-lg text-white">
-              <div className="text-sm opacity-90 mb-1">Requested Total</div>
-              <div className="text-2xl font-bold">₱{totalRequested.toLocaleString()}</div>
+            <div className="text-right pl-4">
+              <div className="text-xs text-white/70 uppercase tracking-wider font-semibold">Total Proposed Budget</div>
+              <div className="text-2xl font-black text-[#FFC107]">₱{totalProposed.toLocaleString()}</div>
             </div>
           </div>
         </div>
@@ -103,7 +95,7 @@ export default function Step5Budget({ data, onUpdate }: Step5Props) {
         <div>
           <div className="flex items-center justify-between mb-4">
             <div className="border-l-4 border-[#83358E] pl-3">
-              <h3 className="text-[#001A4D] font-bold text-base">Approved Budget Breakdown</h3>
+              <h3 className="text-[#001A4D] font-bold text-base">Proposed Line Items Breakdown</h3>
             </div>
             <div className="flex items-center gap-2">
               <div className="flex items-center bg-gray-100 rounded-lg p-1 mr-2">
@@ -142,19 +134,15 @@ export default function Step5Budget({ data, onUpdate }: Step5Props) {
 
           <div className="border border-gray-200 rounded-lg overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[800px]">
+              <table className="w-full min-w-[700px]">
                 <thead className="bg-gray-100">
                   <tr>
-                    <th className="px-3 py-2 text-left text-xs font-bold text-gray-700 w-[20%]">Item</th>
-                    <th className="px-3 py-2 text-left text-xs font-bold text-gray-700 w-[20%]">Description</th>
-                    <th className="px-3 py-2 text-left text-xs font-bold text-gray-700 w-[10%]">Qty</th>
-                    <th className="px-3 py-2 text-left text-xs font-bold text-gray-700 w-[12%]">Unit Cost</th>
-                    <th className="px-3 py-2 text-left text-xs font-bold text-gray-700 w-[12%]">Total</th>
-                    <th className="px-3 py-2 text-left text-xs font-bold text-gray-700 w-[15%]">
-                      <span className="flex items-center gap-1">Approved <span className="px-1.5 py-0.5 bg-[#83358E] text-white text-xs rounded">Admin</span></span>
-                    </th>
-                    <th className="px-3 py-2 text-left text-xs font-bold text-gray-700 w-[10%]">Status</th>
-                    <th className="px-3 py-2 w-[30px]" />
+                    <th className="px-3 py-2.5 text-left text-xs font-bold text-gray-700 w-[25%]">Item Name / Category</th>
+                    <th className="px-3 py-2.5 text-left text-xs font-bold text-gray-700 w-[30%]">Description</th>
+                    <th className="px-3 py-2.5 text-left text-xs font-bold text-gray-700 w-[12%]">Quantity</th>
+                    <th className="px-3 py-2.5 text-left text-xs font-bold text-gray-700 w-[18%]">Estimated Unit Cost</th>
+                    <th className="px-3 py-2.5 text-left text-xs font-bold text-gray-700 w-[15%]">Total Proposed</th>
+                    <th className="px-3 py-2.5 w-[30px]" />
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -166,27 +154,27 @@ export default function Step5Budget({ data, onUpdate }: Step5Props) {
                           <input
                             type="text"
                             list={`item-suggestions-${item.id}`}
-                            placeholder="e.g. Tarpaulin"
+                            placeholder="e.g. Catering / Food"
                             value={item.item || ''}
-                            onChange={(e) => updateItem(item.id, 'item', e.target.value)}
+                            onChange={(e) => updateItem(item.id, { item: e.target.value })}
                             className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
                           />
                           <datalist id={`item-suggestions-${item.id}`}>
                             <option>Venue & Facilities</option>
-                            <option>Materials & Supplies</option>
-                            <option>Food & Refreshments</option>
-                            <option>Promotions & Marketing</option>
+                            <option>Materials & Printing</option>
+                            <option>Food & Catering</option>
+                            <option>Honorarium</option>
+                            <option>Transportation</option>
                             <option>Equipment Rental</option>
-                            <option>Honoraria & Fees</option>
                             <option>Miscellaneous</option>
                           </datalist>
                         </td>
                         <td className="px-3 py-2">
                           <input
                             type="text"
-                            placeholder="Description..."
+                            placeholder="Detailed description..."
                             value={item.description || ''}
-                            onChange={(e) => updateItem(item.id, 'description', e.target.value)}
+                            onChange={(e) => updateItem(item.id, { description: e.target.value })}
                             className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
                           />
                         </td>
@@ -194,8 +182,9 @@ export default function Step5Budget({ data, onUpdate }: Step5Props) {
                           <input
                             type="number"
                             placeholder="1"
+                            min="1"
                             value={item.quantity || ''}
-                            onChange={(e) => updateItem(item.id, 'quantity', Number(e.target.value))}
+                            onChange={(e) => updateItem(item.id, { quantity: Number(e.target.value) })}
                             className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
                           />
                         </td>
@@ -203,34 +192,14 @@ export default function Step5Budget({ data, onUpdate }: Step5Props) {
                           <input
                             type="number"
                             placeholder="0"
+                            min="0"
                             value={item.unitCost || ''}
-                            onChange={(e) => updateItem(item.id, 'unitCost', Number(e.target.value))}
+                            onChange={(e) => updateItem(item.id, { unitCost: Number(e.target.value) })}
                             className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
                           />
                         </td>
                         <td className="px-3 py-2">
-                          <div className="text-xs text-gray-600 font-medium">₱{total.toLocaleString()}</div>
-                        </td>
-                        <td className="px-3 py-2">
-                          <input
-                            type="number"
-                            placeholder="0"
-                            value={item.approvedAmount || ''}
-                            onChange={(e) => updateItem(item.id, 'approvedAmount', Number(e.target.value))}
-                            className="w-full px-2 py-1.5 border-2 border-[#001A4D] rounded text-xs font-medium focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
-                          />
-                        </td>
-                        <td className="px-3 py-2">
-                          <select
-                            value={item.status || 'approved'}
-                            onChange={(e) => updateItem(item.id, 'status', e.target.value as any)}
-                            className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
-                          >
-                            <option value="approved">Approved</option>
-                            <option value="reduced">Reduced</option>
-                            <option value="rejected">Rejected</option>
-                            <option value="pending">Pending</option>
-                          </select>
+                          <div className="text-xs font-bold text-[#83358E]">₱{total.toLocaleString()}</div>
                         </td>
                         <td className="px-3 py-2">
                           {budgetItems.length > 1 && (
@@ -247,12 +216,12 @@ export default function Step5Budget({ data, onUpdate }: Step5Props) {
             </div>
           </div>
           
-          <div className="mt-3 p-3 bg-gray-50 border border-gray-200 rounded-lg flex items-center justify-between">
+          <div className="mt-3 p-3 bg-[#001A4D]/5 border border-[#001A4D]/20 rounded-lg flex items-center justify-between">
             <div>
-              <span className="font-bold text-gray-700">Total Approved Budget</span>
-              <span className="text-xs text-gray-500 ml-3">Requested: ₱{totalRequested.toLocaleString()}</span>
+              <span className="font-bold text-[#001A4D]">Total Overall Proposed Budget</span>
+              <p className="text-xs text-gray-500">Sum of all proposed line items for this event</p>
             </div>
-            <span className="text-2xl font-bold text-[#001A4D]">₱{totalApproved.toLocaleString()}</span>
+            <span className="text-2xl font-black text-[#83358E]">₱{totalProposed.toLocaleString()}</span>
           </div>
         </div>
       </div>
@@ -262,18 +231,18 @@ export default function Step5Budget({ data, onUpdate }: Step5Props) {
         <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
           <h4 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
             <PieChart className="w-5 h-5 text-[#83358E]" />
-            Budget Breakdown
+            Proposed Budget Summary
           </h4>
           <div className="space-y-4">
             <div className="relative aspect-square max-w-[180px] mx-auto">
               <svg viewBox="0 0 100 100" className="transform -rotate-90">
                 <circle cx="50" cy="50" r="40" fill="none" stroke="#E5E7EB" strokeWidth="20" />
                 <circle cx="50" cy="50" r="40" fill="none" stroke="#83358E" strokeWidth="20"
-                  strokeDasharray={`${totalApproved > 0 ? 251.2 : 0} 251.2`} />
+                  strokeDasharray={`${totalProposed > 0 ? 251.2 : 0} 251.2`} />
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <div className="text-lg font-bold text-gray-900">₱{totalApproved.toLocaleString()}</div>
-                <div className="text-xs text-gray-500">Total</div>
+                <div className="text-lg font-bold text-gray-900">₱{totalProposed.toLocaleString()}</div>
+                <div className="text-xs text-gray-500 font-medium">Proposed Total</div>
               </div>
             </div>
 
@@ -281,10 +250,10 @@ export default function Step5Budget({ data, onUpdate }: Step5Props) {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 rounded-full bg-[#83358E]" />
-                  <span className="text-sm text-gray-700">Approved Budget</span>
+                  <span className="text-sm text-gray-700 font-medium">Proposed Budget</span>
                 </div>
                 <div className="text-right">
-                  <div className="text-sm font-bold text-gray-900">₱{totalApproved.toLocaleString()}</div>
+                  <div className="text-sm font-bold text-gray-900">₱{totalProposed.toLocaleString()}</div>
                   <div className="text-xs text-gray-500">100%</div>
                 </div>
               </div>
@@ -327,12 +296,12 @@ export default function Step5Budget({ data, onUpdate }: Step5Props) {
               {/* Event Budget + Participant Summary */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="p-4 bg-[#001A4D]/5 border border-[#001A4D]/20 rounded-xl">
-                  <div className="text-xs text-gray-500 mb-1">Total Event Budget</div>
-                  <div className="text-2xl font-bold text-[#001A4D]">₱{totalApproved.toLocaleString()}</div>
-                  <div className="text-xs text-gray-500 mt-1">All funding sources combined</div>
+                  <div className="text-xs text-gray-500 mb-1">Total Proposed Budget</div>
+                  <div className="text-2xl font-bold text-[#001A4D]">₱{totalProposed.toLocaleString()}</div>
+                  <div className="text-xs text-gray-500 mt-1">Sum of all proposed line items</div>
                 </div>
                 <div className="p-4 bg-[#83358E]/5 border border-[#83358E]/20 rounded-xl">
-                  <div className="text-xs text-gray-500 mb-1">Expected Participants</div>
+                  <div className="text-xs text-gray-500 mb-1">Target Audience (Step 3)</div>
                   <div className="flex items-baseline gap-1">
                     <input
                       type="number"
@@ -340,8 +309,9 @@ export default function Step5Budget({ data, onUpdate }: Step5Props) {
                       onChange={(e) => updateField('expectedParticipantCount', Math.max(1, Number(e.target.value)))}
                       className="w-24 text-2xl font-bold text-[#83358E] bg-transparent border-b-2 border-[#83358E] focus:outline-none"
                     />
+                    <span className="text-xs text-gray-500 font-medium">students</span>
                   </div>
-                  <div className="text-xs text-gray-500 mt-1">Total attendees</div>
+                  <div className="text-xs text-gray-500 mt-1">Matching active audience</div>
                 </div>
               </div>
 
@@ -349,13 +319,13 @@ export default function Step5Budget({ data, onUpdate }: Step5Props) {
               <div className="p-4 bg-gradient-to-br from-[#FFC107]/10 to-[#FFD41C]/5 border-2 border-[#FFC107] rounded-xl">
                 <div className="flex items-center gap-2 mb-3">
                   <Calculator className="w-5 h-5 text-[#001A4D]" />
-                  <span className="font-bold text-[#001A4D]">Cost Per Student Calculation</span>
+                  <span className="font-bold text-[#001A4D]">Suggested Baseline Contribution Per Student</span>
                 </div>
 
                 <div className="flex items-center justify-center gap-4 py-3">
                   <div className="text-center">
                     <div className="text-xs text-gray-500 mb-1">Total Budget</div>
-                    <div className="text-xl font-bold text-[#001A4D]">₱{totalApproved.toLocaleString()}</div>
+                    <div className="text-xl font-bold text-[#001A4D]">₱{totalProposed.toLocaleString()}</div>
                   </div>
                   <div className="text-2xl text-gray-400 font-light">÷</div>
                   <div className="text-center">
@@ -364,7 +334,7 @@ export default function Step5Budget({ data, onUpdate }: Step5Props) {
                   </div>
                   <div className="text-2xl text-gray-400 font-light">=</div>
                   <div className="text-center">
-                    <div className="text-xs text-gray-500 mb-1">Suggested</div>
+                    <div className="text-xs text-gray-500 mb-1">Baseline Fee</div>
                     <div className="text-2xl font-bold text-green-600">₱{calculatedPerStudent.toLocaleString()}</div>
                   </div>
                 </div>
@@ -381,8 +351,9 @@ export default function Step5Budget({ data, onUpdate }: Step5Props) {
                       <span className="text-xl font-bold text-gray-500 mr-2">₱</span>
                       <input
                         type="number"
+                        min="0"
                         value={amountPerStudent || ''}
-                        onChange={(e) => handleAmountOverrideChange(Number(e.target.value))}
+                        onChange={(e) => handleAmountOverrideChange(Math.max(0, Number(e.target.value)))}
                         placeholder={calculatedPerStudent.toString()}
                         className="flex-1 text-2xl font-bold text-[#001A4D] focus:outline-none bg-transparent"
                       />

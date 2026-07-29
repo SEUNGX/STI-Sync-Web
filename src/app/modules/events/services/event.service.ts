@@ -15,9 +15,13 @@ export const generateScannerCode = (): string => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
-export const createEvent = async (data: EventFormData, uid: string): Promise<string> => {
-  const refId = generateReferenceId();
-  const scannerCode = generateScannerCode();
+export const createEvent = async (
+  data: EventFormData, 
+  uid: string, 
+  draftId?: string, 
+  isOfficerProposal = false
+): Promise<string> => {
+  const refId = data.referenceId || generateReferenceId();
   
   const scannerUserIds = data.scanners
     ? data.scanners.map(s => s.officerUserId).filter((id): id is string => id !== null && id !== undefined)
@@ -26,18 +30,26 @@ export const createEvent = async (data: EventFormData, uid: string): Promise<str
   const eventPayload: Partial<EventDocument> = {
     ...data,
     referenceId: refId,
-    scannerActivationCode: scannerCode,
     scannerUserIds,
-    proposalStatus: 'approved', // SAO Admin creations are auto-approved
+    proposalStatus: isOfficerProposal ? 'pending' : 'approved', // SAO Admin creations are auto-approved, Officer proposals are pending
     createdBy: uid,
-    createdAt: serverTimestamp() as any,
     updatedAt: serverTimestamp() as any,
   };
 
-  const docRef = await addDoc(collection(db, EVENTS_COLLECTION), eventPayload);
+  let docId = draftId;
 
-  // Handle payables creation
-  if (data.studentPayablesEnabled && data.adminFeeOverride && data.adminFeeOverride > 0) {
+  if (draftId) {
+    // Update existing draft document in-place so proposalStatus changes from 'draft' to 'approved' / 'pending'
+    const docRef = doc(db, EVENTS_COLLECTION, draftId);
+    await updateDoc(docRef, eventPayload);
+  } else {
+    eventPayload.createdAt = serverTimestamp() as any;
+    const docRef = await addDoc(collection(db, EVENTS_COLLECTION), eventPayload);
+    docId = docRef.id;
+  }
+
+  // Handle payables creation for approved events
+  if (eventPayload.proposalStatus === 'approved' && data.studentPayablesEnabled && data.adminFeeOverride && data.adminFeeOverride > 0) {
     try {
       const q = query(collection(db, STUDENTS_COLLECTION));
       const snapshot = await getDocs(q);
@@ -57,7 +69,6 @@ export const createEvent = async (data: EventFormData, uid: string): Promise<str
       });
 
       if (studentsToCharge.length > 0) {
-        // Firestore batch has 500 operation limit
         const chunks = [];
         for (let i = 0; i < studentsToCharge.length; i += 500) {
           chunks.push(studentsToCharge.slice(i, i + 500));
@@ -70,8 +81,8 @@ export const createEvent = async (data: EventFormData, uid: string): Promise<str
             batch.set(payableRef, {
               id: payableRef.id,
               memberId: student.id,
-              typeId: docRef.id, // using event id as type id for event fee
-              eventId: docRef.id,
+              typeId: docId,
+              eventId: docId,
               assignedAmount: data.adminFeeOverride,
               paidAmount: 0,
               status: 'pending',
@@ -88,7 +99,7 @@ export const createEvent = async (data: EventFormData, uid: string): Promise<str
     }
   }
 
-  return docRef.id;
+  return docId!;
 };
 
 export const saveEventDraft = async (data: EventFormData, uid: string, existingId?: string): Promise<string> => {
@@ -107,10 +118,6 @@ export const saveEventDraft = async (data: EventFormData, uid: string, existingI
 
   if (!eventPayload.referenceId) {
     eventPayload.referenceId = generateReferenceId();
-  }
-  
-  if (!eventPayload.scannerActivationCode) {
-    eventPayload.scannerActivationCode = generateScannerCode();
   }
 
   if (existingId) {

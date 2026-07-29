@@ -1,9 +1,14 @@
 import { useState } from 'react';
 import { X, Plus, Trash2, Upload, FileText, CheckCircle, AlertCircle, Users, Send, GripVertical } from 'lucide-react';
+import { toast } from 'sonner';
+import { useEventCreation } from '../../modules/events/hooks/useEventCreation';
+import type { EventDocument } from '../../modules/events/types/event.types';
 
 interface OfficerEventProposalModalProps {
   isOpen: boolean;
   onClose: () => void;
+  initialDraft?: EventDocument;
+  draftId?: string;
 }
 
 const STEPS = [
@@ -43,7 +48,12 @@ function Step1({ data, onUpdate }: { data: any; onUpdate: (d: any) => void }) {
 
   const set = (k: string, v: any) => {
     const next = { ...form, [k]: v };
-    setForm(next); onUpdate(next);
+    if (k === 'enableQR' || k === 'enableQRTickets') {
+      next.enableQR = v;
+      next.enableQRTickets = v;
+    }
+    setForm(next); 
+    onUpdate(next);
   };
 
   return (
@@ -721,8 +731,8 @@ function Step5({ data, onUpdate }: { data: any; onUpdate: (d: any) => void }) {
               </tbody>
               <tfoot className="bg-gray-50 border-t-2 border-gray-200">
                 <tr>
-                  <td colSpan={4} className="px-4 py-3 text-sm font-bold text-gray-700 text-right">Requested Total</td>
-                  <td className="px-4 py-3 text-right font-bold text-[#001A4D]">₱{total.toLocaleString()}</td>
+                  <td colSpan={4} className="px-4 py-3 text-sm font-bold text-gray-700 text-right">Total Proposed Event Budget</td>
+                  <td className="px-4 py-3 text-right font-black text-[#83358E]">₱{total.toLocaleString()}</td>
                   <td />
                 </tr>
               </tfoot>
@@ -736,9 +746,9 @@ function Step5({ data, onUpdate }: { data: any; onUpdate: (d: any) => void }) {
         <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm sticky top-0">
           <h4 className="font-bold text-gray-900 mb-3">Budget Summary</h4>
           <div className="space-y-3">
-            <div className="p-4 bg-[#83358E] rounded-xl text-white text-center">
-              <div className="text-xs opacity-80 mb-1">Total Requested</div>
-              <div className="text-2xl font-bold">₱{total.toLocaleString()}</div>
+            <div className="p-4 bg-gradient-to-br from-[#001A4D] to-[#83358E] rounded-xl text-white text-center">
+              <div className="text-xs opacity-80 mb-1">Total Proposed Budget</div>
+              <div className="text-2xl font-black text-[#FFC107]">₱{total.toLocaleString()}</div>
             </div>
             <div className="space-y-2">
               {budgetItems.filter(i => i.item).map(i => (
@@ -967,27 +977,79 @@ function Step7({ data }: { data: any; onUpdate: (d: any) => void }) {
 }
 
 // ─── Main Modal ───────────────────────────────────────────────────
-export default function OfficerEventProposalModal({ isOpen, onClose }: OfficerEventProposalModalProps) {
+export default function OfficerEventProposalModal({ isOpen, onClose, initialDraft, draftId }: OfficerEventProposalModalProps) {
   const [currentStep, setCurrentStep] = useState(0);
-  const [formData, setFormData] = useState<any>({});
+  const [formData, setFormData] = useState<any>(initialDraft ? { ...initialDraft } : {});
+  const [activeDraftId, setActiveDraftId] = useState<string | undefined>(draftId);
+  const [saving, setSaving] = useState(false);
+
+  const { createEvent, saveDraft, loading } = useEventCreation();
 
   if (!isOpen) return null;
 
   const update = (d: any) => setFormData({ ...formData, ...d });
-  const next = () => { if (currentStep < STEPS.length - 1) setCurrentStep(currentStep + 1); };
+
+  const isQREnabled = formData.enableQR !== false && formData.enableQRTickets !== false;
+  const activeSteps = isQREnabled
+    ? ['Event Details', 'Schedule', 'Participants', 'Staff', 'Budget', 'Documents', 'Submit']
+    : ['Event Details', 'Schedule', 'Participants', 'Budget', 'Documents', 'Submit'];
+
+  const currentStepName = activeSteps[currentStep] || activeSteps[0];
+
+  const next = () => { if (currentStep < activeSteps.length - 1) setCurrentStep(currentStep + 1); };
   const prev = () => { if (currentStep > 0) setCurrentStep(currentStep - 1); };
   const goTo = (i: number) => { if (i <= currentStep) setCurrentStep(i); };
 
+  const handleSaveDraft = async () => {
+    setSaving(true);
+    try {
+      const id = await saveDraft(formData, activeDraftId);
+      if (id) {
+        setActiveDraftId(id);
+        toast.success('Draft saved!', {
+          description: 'Your proposal draft has been saved successfully.',
+          duration: 4000,
+        });
+      } else {
+        toast.error('Failed to save draft');
+      }
+    } catch {
+      toast.error('An error occurred while saving draft.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSubmitProposal = async () => {
+    setSaving(true);
+    try {
+      const id = await createEvent(formData, activeDraftId, true);
+      if (id) {
+        toast.success('Proposal Submitted!', {
+          description: 'Your event proposal has been submitted for SAO review.',
+          duration: 4000,
+        });
+        onClose();
+      } else {
+        toast.error('Failed to submit proposal');
+      }
+    } catch {
+      toast.error('An error occurred while submitting proposal.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const renderStep = () => {
     const props = { data: formData, onUpdate: update };
-    switch (currentStep) {
-      case 0: return <Step1 {...props} />;
-      case 1: return <Step2 {...props} />;
-      case 2: return <Step3 {...props} />;
-      case 3: return <Step4 {...props} />;
-      case 4: return <Step5 {...props} />;
-      case 5: return <Step6 {...props} />;
-      case 6: return <Step7 {...props} />;
+    switch (currentStepName) {
+      case 'Event Details': return <Step1 {...props} />;
+      case 'Schedule': return <Step2 {...props} />;
+      case 'Participants': return <Step3 {...props} />;
+      case 'Staff': return <Step4 {...props} />;
+      case 'Budget': return <Step5 {...props} />;
+      case 'Documents': return <Step6 {...props} />;
+      case 'Submit': return <Step7 {...props} />;
       default: return null;
     }
   };
@@ -1006,12 +1068,14 @@ export default function OfficerEventProposalModal({ isOpen, onClose }: OfficerEv
               </div>
               <div>
                 <p className="text-white font-bold">Create Event Proposal</p>
-                <p className="text-white/70 text-xs">STI IT Guild</p>
+                <p className="text-white/70 text-xs">
+                  {activeDraftId ? 'Resuming Draft' : 'STI IT Guild'}
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-4">
               <span className="text-white/90 text-sm font-medium">
-                Step {currentStep + 1} of {STEPS.length} — <span className="text-white font-bold">{STEPS[currentStep]}</span>
+                Step {currentStep + 1} of {activeSteps.length} — <span className="text-white font-bold">{currentStepName}</span>
               </span>
               <button onClick={onClose} className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors">
                 <X className="w-5 h-5" />
@@ -1021,12 +1085,12 @@ export default function OfficerEventProposalModal({ isOpen, onClose }: OfficerEv
 
           {/* Progress bar */}
           <div className="h-1 bg-white/20 bg-gray-100 flex-shrink-0">
-            <div className="h-full bg-[#83358E] transition-all duration-300" style={{ width: `${((currentStep + 1) / STEPS.length) * 100}%` }} />
+            <div className="h-full bg-[#83358E] transition-all duration-300" style={{ width: `${((currentStep + 1) / activeSteps.length) * 100}%` }} />
           </div>
 
           {/* Step navigator */}
           <div className="px-6 py-3 border-b border-gray-200 flex gap-2 overflow-x-auto flex-shrink-0">
-            {STEPS.map((step, i) => (
+            {activeSteps.map((step, i) => (
               <button key={i} onClick={() => goTo(i)} disabled={i > currentStep}
                 className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
                   i === currentStep ? 'bg-[#83358E] text-white' :
@@ -1050,11 +1114,14 @@ export default function OfficerEventProposalModal({ isOpen, onClose }: OfficerEv
               Previous
             </button>
 
-            {currentStep < STEPS.length - 1 ? (
+            {currentStep < activeSteps.length - 1 ? (
               <div className="flex items-center gap-3">
-                <button onClick={() => console.log('Draft saved:', formData)}
-                  className="px-5 py-2.5 border border-[#83358E] text-[#83358E] rounded-lg text-sm font-medium hover:bg-[#83358E]/5 transition-colors">
-                  Save as Draft
+                <button 
+                  onClick={handleSaveDraft} 
+                  disabled={saving || loading}
+                  className="px-5 py-2.5 border border-[#83358E] text-[#83358E] rounded-lg text-sm font-medium hover:bg-[#83358E]/5 disabled:opacity-50 transition-colors"
+                >
+                  {saving ? 'Saving...' : 'Save as Draft'}
                 </button>
                 <button onClick={next}
                   className="px-5 py-2.5 bg-[#83358E] text-white rounded-lg text-sm font-medium hover:bg-[#6D2A78] transition-colors">
@@ -1062,10 +1129,13 @@ export default function OfficerEventProposalModal({ isOpen, onClose }: OfficerEv
                 </button>
               </div>
             ) : (
-              <button onClick={() => { console.log('Submitting proposal:', formData); onClose(); }}
-                className="px-6 py-2.5 bg-[#83358E] text-white rounded-lg text-sm font-medium hover:bg-[#6D2A78] transition-colors flex items-center gap-2">
+              <button 
+                onClick={handleSubmitProposal} 
+                disabled={saving || loading}
+                className="px-6 py-2.5 bg-[#83358E] text-white rounded-lg text-sm font-medium hover:bg-[#6D2A78] disabled:opacity-50 transition-colors flex items-center gap-2"
+              >
                 <Send className="w-4 h-4" />
-                Submit for Approval
+                {saving || loading ? 'Submitting...' : 'Submit for Approval'}
               </button>
             )}
           </div>
