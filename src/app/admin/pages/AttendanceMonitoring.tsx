@@ -604,7 +604,9 @@ export function AttendanceMonitoring() {
   const mappedEvents: Event[] = useMemo(() => {
     if (dbEvents.length === 0) return FALLBACK_EVENTS;
 
-    return dbEvents.map(evt => {
+    return dbEvents
+      .filter(evt => evt.attendanceEnabled !== false)
+      .map(evt => {
       const evtAttendance = dbAttendance.filter(a => a.eventId === evt.id || a.event === evt.title);
       
       const registered = evt.expectedParticipantCount || evtAttendance.length || 50;

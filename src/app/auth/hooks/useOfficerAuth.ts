@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { collection, query, where, getDocs } from 'firebase/firestore';
-import { db } from '../../../services/firebase';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { db, auth } from '../../../services/firebase';
 
 const SESSION_KEY = 'sti_sync_officer_session';
 
@@ -12,20 +13,53 @@ export function useOfficerAuth() {
     setIsLoggingIn(true);
     setError(null);
     try {
-      const q = query(
+      const trimmedId = identifier.trim();
+      const trimmedPass = password.trim();
+
+      if (!trimmedId || !trimmedPass) {
+        setError('Please enter both student ID/email and password.');
+        return false;
+      }
+
+      // 1. If identifier is an email and not logged in, attempt Firebase Auth sign-in
+      if (!auth.currentUser && trimmedId.includes('@')) {
+        try {
+          await signInWithEmailAndPassword(auth, trimmedId, trimmedPass);
+        } catch (authErr: any) {
+          // Log auth attempt note; will continue to match temporaryPassword in Firestore
+          console.warn('[useOfficerAuth] Firebase Auth note:', authErr?.code || authErr?.message);
+        }
+      }
+
+      // 2. Query organization_officers by studentId
+      let q = query(
         collection(db, 'organization_officers'),
+        where('studentId', '==', trimmedId),
         where('isActive', '==', true)
       );
-      
-      const querySnapshot = await getDocs(q);
-      
-      let matchedDoc = null;
+      let querySnapshot = await getDocs(q);
+
+      // 3. Fallback: Query by email if no studentId match
+      if (querySnapshot.empty) {
+        q = query(
+          collection(db, 'organization_officers'),
+          where('email', '==', trimmedId),
+          where('isActive', '==', true)
+        );
+        querySnapshot = await getDocs(q);
+      }
+
+      // 4. Match temporaryPassword or authenticated user profile
+      let matchedDoc: any = null;
+      const cleanId = trimmedId.toLowerCase();
       for (const doc of querySnapshot.docs) {
         const data = doc.data();
-        const isMatchIdentifier = data.studentId === identifier || data.email === identifier;
-        const isMatchPassword = data.temporaryPassword === password;
-        
-        if (isMatchIdentifier && isMatchPassword) {
+        const docStudentId = (data.studentId || '').trim().toLowerCase();
+        const docEmail = (data.email || '').trim().toLowerCase();
+        const isMatchId = docStudentId === cleanId || docEmail === cleanId;
+        const isMatchPass = data.temporaryPassword === trimmedPass || auth.currentUser !== null;
+
+        if (isMatchId && isMatchPass) {
           matchedDoc = data;
           break;
         }
@@ -44,12 +78,16 @@ export function useOfficerAuth() {
         localStorage.setItem(SESSION_KEY, JSON.stringify(session));
         return true;
       } else {
-        setError('Invalid username or password.');
+        setError('Invalid student ID/email or password. Please verify your officer account details.');
         return false;
       }
     } catch (e: any) {
       console.error("Login failed:", e);
-      setError('An error occurred during login. Please try again.');
+      if (e?.code === 'permission-denied') {
+        setError('Database Permission Error: Please ensure Firestore rules in Firebase Console allow reading organization_officers (allow read: if true;).');
+      } else {
+        setError('An error occurred during login. Please try again.');
+      }
       return false;
     } finally {
       setIsLoggingIn(false);

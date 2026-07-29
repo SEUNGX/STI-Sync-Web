@@ -11,10 +11,7 @@ export function useAllEvents() {
 
   useEffect(() => {
     // Get all events that are not drafts
-    const q = query(
-      collection(db, EVENTS_COLLECTION),
-      orderBy('createdAt', 'desc')
-    );
+    const q = collection(db, EVENTS_COLLECTION);
 
     const unsubscribe = onSnapshot(
       q,
@@ -22,6 +19,13 @@ export function useAllEvents() {
         const fetchedEvents = snapshot.docs
           .map(doc => ({ id: doc.id, ...doc.data() } as EventDocument))
           .filter(e => e.proposalStatus !== 'draft');
+
+        fetchedEvents.sort((a, b) => {
+          const aTime = (a.createdAt as any)?.seconds ?? 0;
+          const bTime = (b.createdAt as any)?.seconds ?? 0;
+          return bTime - aTime;
+        });
+
         setEvents(fetchedEvents);
         setLoading(false);
       },
@@ -82,8 +86,7 @@ export function useDraftEvents() {
   useEffect(() => {
     const q = query(
       collection(db, EVENTS_COLLECTION),
-      where('proposalStatus', '==', 'draft'),
-      orderBy('updatedAt', 'desc')
+      where('proposalStatus', '==', 'draft')
     );
 
     const unsubscribe = onSnapshot(
@@ -92,6 +95,11 @@ export function useDraftEvents() {
         const fetchedDrafts = snapshot.docs.map(
           (doc) => ({ id: doc.id, ...doc.data() } as EventDocument)
         );
+        fetchedDrafts.sort((a, b) => {
+          const aTime = (a.updatedAt as any)?.seconds ?? 0;
+          const bTime = (b.updatedAt as any)?.seconds ?? 0;
+          return bTime - aTime;
+        });
         setDrafts(fetchedDrafts);
         setLoading(false);
       },

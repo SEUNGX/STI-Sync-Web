@@ -141,7 +141,7 @@ export default function Step4Staff({ data, onUpdate }: Step4Props) {
                     value={scanner.officerUserId || ''}
                     onChange={(e) => {
                       const selStr = e.target.value;
-                      const officer = officers.find(o => o.studentId === selStr);
+                      const officer = officers.find(o => ((o as any).authUid || o.id || o.studentId) === selStr);
                       updateScanner(scanner.id, { 
                         officerUserId: selStr, 
                         officerName: officer ? officer.studentName : '' 
@@ -158,11 +158,12 @@ export default function Step4Staff({ data, onUpdate }: Step4Props) {
                         : 'Select officer...'}
                     </option>
                     {officers.map(o => {
-                      const val = o.studentId || o.id;
-                      const label = o.studentName || o.email || 'Unnamed Officer';
+                      const val = (o as any).authUid || o.id;
+                      const studentIdPart = o.studentId ? ` (${o.studentId})` : '';
+                      const label = `${o.studentName || o.email || 'Unnamed Officer'}${studentIdPart}`;
                       return (
                         <option key={o.id || o.studentId} value={val}>
-                          {label} {o.studentId ? `(${o.studentId})` : ''}
+                          {label}
                         </option>
                       );
                     })}

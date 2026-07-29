@@ -1,0 +1,77 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper function
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // 1. Organization Officers: allow public read so officers can log in with temporary passwords / studentId
+    match /organization_officers/{docId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+
+    // 2. Events: public read for officer sessions and mobile app
+    match /events/{eventId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // 3. Liquidations collection: public read/write to allow unauthenticated officer sessions to save & submit
+    match /liquidations/{docId} {
+      allow read, write: if true;
+    }
+
+    // 4. Attendance collection group (matches /events/{eventId}/attendance and top-level /attendance)
+    match /{path=**}/attendance/{attendanceId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+
+    // 5. Flagged Attendance collection group (matches /events/{eventId}/flagged_attendance)
+    match /{path=**}/flagged_attendance/{flaggedId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+
+    // 6. SAO Ledger collection
+    match /sao_ledger/{id} {
+      allow read, write: if true;
+    }
+
+    // 7. Students collection
+    match /students/{studentId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+
+    // 8. Payables collection
+    match /payables/{payableId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+
+    // 9. Master & Academic collections
+    match /announcements/{id} { allow read: if true; allow write: if isAuthenticated(); }
+    match /certificates/{id} { allow read: if true; allow write: if isAuthenticated(); }
+    match /organizations/{id} { allow read: if true; allow write: if isAuthenticated(); }
+    match /organization_types/{id} { allow read: if true; allow write: if isAuthenticated(); }
+    match /courses/{id} { allow read: if true; allow write: if isAuthenticated(); }
+    match /sections/{id} { allow read: if true; allow write: if isAuthenticated(); }
+    match /semesters/{id} { allow read: if true; allow write: if isAuthenticated(); }
+    match /departments/{id} { allow read: if true; allow write: if isAuthenticated(); }
+    match /event_types/{id} { allow read: if true; allow write: if isAuthenticated(); }
+    match /event_categories/{id} { allow read: if true; allow write: if isAuthenticated(); }
+    match /venues/{id} { allow read: if true; allow write: if isAuthenticated(); }
+    match /officer_roles/{id} { allow read: if true; allow write: if isAuthenticated(); }
+    match /sas_admins/{id} { allow read: if isAuthenticated(); allow write: if isAuthenticated(); }
+
+    // Fallback rule for all other documents
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}
