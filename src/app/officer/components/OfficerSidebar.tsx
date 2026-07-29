@@ -13,8 +13,10 @@ import {
   ChevronDown,
   Wallet,
   Files,
+  Building2,
 } from 'lucide-react';
 import { useOfficerProfile } from '../../auth/hooks/useOfficerProfile';
+import { useOrganizationStream } from '../../modules/organizations/hooks/useOrganizationStream';
 
 const navGroups = [
   {
@@ -22,6 +24,7 @@ const navGroups = [
     items: [
       { icon: LayoutDashboard, label: 'Dashboard', path: '/officer/dashboard', badge: null },
       { icon: Users, label: 'Member Directory', path: '/officer/members', badge: null },
+      { icon: Building2, label: 'Organization Profile', path: '/officer/organization', badge: null },
     ]
   },
   {
@@ -53,6 +56,9 @@ export function OfficerSidebar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { profile, logout } = useOfficerProfile();
+  const { data: orgs } = useOrganizationStream();
+
+  const activeOrg = orgs.find(org => org.id === profile?.activeOrganizationId);
 
   const handleLogout = () => {
     logout();
@@ -77,8 +83,8 @@ export function OfficerSidebar() {
 
         {/* Organization Context Switcher */}
         <button className="w-full flex items-center justify-between px-3 py-2 bg-[#EEEDFE] rounded-lg hover:bg-[#EEEDFE]/80 transition-colors">
-          <span className="text-[#7F77DD] text-sm font-medium truncate pr-2">
-            {profile?.activeOrganizationId ? 'Managing Organization' : 'Select Organization'}
+          <span className="text-[#7F77DD] text-sm font-medium truncate pr-2" title={activeOrg?.name || ''}>
+            {activeOrg ? activeOrg.name : (profile?.activeOrganizationId ? 'Managing Organization...' : 'Select Organization')}
           </span>
           <ChevronDown className="w-4 h-4 text-[#7F77DD] flex-shrink-0" />
         </button>

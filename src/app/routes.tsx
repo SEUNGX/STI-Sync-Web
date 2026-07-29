@@ -24,6 +24,7 @@ import OfficerLogin from "./auth/OfficerLogin";
 // Officer Components
 import { OfficerLayout } from "./officer/components/OfficerLayout";
 import OfficerDashboardPage from "./officer/pages/OfficerDashboardPage";
+import OrganizationProfile from "./officer/pages/OrganizationProfile";
 import EventManagement from "./officer/pages/EventManagement";
 import AttendanceLogs from "./officer/pages/AttendanceLogs";
 import OfficerCertificates from "./officer/pages/OfficerCertificates";
@@ -93,6 +94,7 @@ export const router = createBrowserRouter([
       { path: "finance", Component: FinanceCenter },
       { path: "documents", Component: OfficerDocuments },
       { path: "members", Component: MemberDirectory },
+      { path: "organization", Component: OrganizationProfile },
       { path: "announcements", Component: OfficerAnnouncements },
       { path: "settings", Component: OfficerSettings },
     ],

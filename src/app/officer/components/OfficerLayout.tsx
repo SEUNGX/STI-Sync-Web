@@ -9,6 +9,7 @@ const pageTitles: Record<string, string> = {
   '/officer/attendance': 'Attendance Logs',
   '/officer/liquidation': 'Financial Liquidation',
   '/officer/members': 'Member Directory',
+  '/officer/organization': 'Organization Profile',
   '/officer/announcements': 'Announcements',
   '/officer/settings': 'Settings',
 };

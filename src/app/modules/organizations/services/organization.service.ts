@@ -1,4 +1,4 @@
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../../../services/firebase';
 import { uploadToCloudinary } from '../../../../services/cloudinary';
 import type { CreateOrganizationPayload } from '../types/organization.types';
@@ -47,5 +47,44 @@ export const createOrganization = async (
   } catch (error: any) {
     console.error("Organization creation failed:", error);
     throw new Error(`Organization creation failed: ${error.message}`);
+  }
+};
+
+export const updateOrganization = async (
+  orgId: string,
+  payload: Partial<CreateOrganizationPayload>,
+  logoFile?: File | null
+): Promise<void> => {
+  let logoUrl: string | null | undefined = payload.logoUrl;
+  
+  if (logoFile) {
+    const { secureUrl } = await uploadToCloudinary(logoFile, {
+      folder: 'organizations/logos',
+    });
+    logoUrl = secureUrl;
+  }
+
+  try {
+    const docRef = doc(db, COLLECTION, orgId);
+    
+    const updateData: any = {
+      ...payload,
+      updatedAt: serverTimestamp(),
+    };
+    
+    if (logoUrl !== undefined) {
+      updateData.logoUrl = logoUrl;
+    }
+
+    const updatePromise = updateDoc(docRef, updateData);
+    
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error("Firestore database write timed out.")), 15000);
+    });
+    
+    await Promise.race([updatePromise, timeoutPromise]);
+  } catch (error: any) {
+    console.error("Organization update failed:", error);
+    throw new Error(`Organization update failed: ${error.message}`);
   }
 };
