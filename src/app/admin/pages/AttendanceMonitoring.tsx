@@ -242,16 +242,19 @@ const FALLBACK_EVENTS: Event[] = [
 // Chart data is now computed dynamically below
 
 // ─── Status badge ──────────────────────────────────────────────────────────────
-function StatusBadge({ status }: { status: AttendStatus }) {
-  const map: Record<AttendStatus, string> = {
+function StatusBadge({ status }: { status: AttendStatus | string }) {
+  const map: Record<string, string> = {
     Complete: "bg-green-100 text-green-700",
     "Checked In": "bg-blue-100 text-blue-700",
     Absent: "bg-red-100 text-red-600",
     Flagged: "bg-amber-100 text-amber-700",
     Late: "bg-orange-100 text-orange-700",
+    Present: "bg-green-100 text-green-700",
+    "Checked Out": "bg-blue-100 text-blue-700",
   };
+  const badgeStyle = map[status] || "bg-gray-100 text-gray-700";
   return (
-    <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${map[status]}`}>{status}</span>
+    <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${badgeStyle}`}>{status || "Checked In"}</span>
   );
 }
 
@@ -330,9 +333,13 @@ function EventDetail({ event, onBack }: { event: Event; onBack: () => void }) {
   const rate = event.registered > 0 ? Math.round((event.checkedIn / event.registered) * 100) : 0;
 
   const filteredRecords = (session?.records ?? []).filter((r) => {
-    const matchSearch = r.name.toLowerCase().includes(search.toLowerCase()) ||
-      r.studentId.includes(search) ||
-      r.org.toLowerCase().includes(search.toLowerCase());
+    const nameStr = (r.name || "").toLowerCase();
+    const studentIdStr = (r.studentId || "").toLowerCase();
+    const orgStr = (r.org || "").toLowerCase();
+    const searchStr = (search || "").toLowerCase();
+    const matchSearch = nameStr.includes(searchStr) ||
+      studentIdStr.includes(searchStr) ||
+      orgStr.includes(searchStr);
     const matchStatus = statusFilter === "All" || r.status === statusFilter;
     return matchSearch && matchStatus;
   });
@@ -602,11 +609,12 @@ export function AttendanceMonitoring() {
   const loading = eventsLoading || attendanceLoading || venuesLoading || categoriesLoading;
 
   const mappedEvents: Event[] = useMemo(() => {
-    if (dbEvents.length === 0) return FALLBACK_EVENTS;
+    const validEvents = dbEvents.filter(evt => evt.enableQRTickets !== false);
+    const eventsToUse = validEvents.length > 0 ? validEvents : dbEvents;
 
-    return dbEvents
-      .filter(evt => evt.enableQRTickets !== false && (evt as any).enableQR !== false)
-      .map(evt => {
+    if (eventsToUse.length === 0) return FALLBACK_EVENTS;
+
+    return eventsToUse.map(evt => {
       const evtAttendance = dbAttendance.filter(a => a.eventId === evt.id || a.event === evt.title);
       
       const registered = evt.expectedParticipantCount || evtAttendance.length || 50;
@@ -690,8 +698,10 @@ export function AttendanceMonitoring() {
   const categories = ["All", ...Array.from(new Set(mappedEvents.map((e) => e.category)))];
 
   const filteredEvents = mappedEvents.filter((e) => {
-    const matchSearch = e.name.toLowerCase().includes(eventSearch.toLowerCase()) ||
-      e.org.toLowerCase().includes(eventSearch.toLowerCase());
+    const nameStr = (e.name || "").toLowerCase();
+    const orgStr = (e.org || "").toLowerCase();
+    const searchStr = (eventSearch || "").toLowerCase();
+    const matchSearch = nameStr.includes(searchStr) || orgStr.includes(searchStr);
     const matchCat = categoryFilter === "All" || e.category === categoryFilter;
     return matchSearch && matchCat;
   });
@@ -701,12 +711,15 @@ export function AttendanceMonitoring() {
   const totalAbsent = mappedEvents.reduce((s, e) => s + e.absent, 0);
   const totalFlagged = mappedEvents.reduce((s, e) => s + e.flagged, 0);
 
-  const overviewChart = useMemo(() => mappedEvents.filter((e) => e.status !== "Upcoming").map((e) => ({
-    event: e.name.length > 18 ? e.name.slice(0, 18) + "…" : e.name,
-    registered: e.registered,
-    checkedIn: e.checkedIn,
-    absent: e.absent,
-  })), [mappedEvents]);
+  const overviewChart = useMemo(() => mappedEvents.filter((e) => e.status !== "Upcoming").map((e) => {
+    const evtName = e.name || "Untitled Event";
+    return {
+      event: evtName.length > 18 ? evtName.slice(0, 18) + "…" : evtName,
+      registered: e.registered,
+      checkedIn: e.checkedIn,
+      absent: e.absent,
+    };
+  }), [mappedEvents]);
 
   if (selectedEvent) {
     return <EventDetail event={selectedEvent} onBack={() => setSelectedEvent(null)} />;
@@ -727,9 +740,9 @@ export function AttendanceMonitoring() {
       <div className="grid grid-cols-5 gap-4">
         {[
           { label: "Total Registered", value: totalRegistered, color: "text-[#001A4D]", bg: "bg-blue-50", icon: UserCheck, note: `Across ${mappedEvents.length} events` },
-          { label: "Checked In", value: totalCheckedIn, color: "text-green-600", bg: "bg-green-50", icon: CheckCircle2, note: `${Math.round((totalCheckedIn / totalRegistered) * 100)}% overall rate` },
+          { label: "Checked In", value: totalCheckedIn, color: "text-green-600", bg: "bg-green-50", icon: CheckCircle2, note: `${totalRegistered > 0 ? Math.round((totalCheckedIn / totalRegistered) * 100) : 0}% overall rate` },
           { label: "Checked Out", value: Math.round(totalCheckedIn * 0.94), color: "text-blue-600", bg: "bg-sky-50", icon: CheckCircle2, note: "94% completion" },
-          { label: "Absent", value: totalAbsent, color: "text-red-500", bg: "bg-red-50", icon: XCircle, note: `${Math.round((totalAbsent / totalRegistered) * 100)}% no-show rate` },
+          { label: "Absent", value: totalAbsent, color: "text-red-500", bg: "bg-red-50", icon: XCircle, note: `${totalRegistered > 0 ? Math.round((totalAbsent / totalRegistered) * 100) : 0}% no-show rate` },
           { label: "Flagged", value: totalFlagged, color: "text-amber-600", bg: "bg-amber-50", icon: AlertCircle, note: "Require review" },
         ].map((c) => {
           const Icon = c.icon;

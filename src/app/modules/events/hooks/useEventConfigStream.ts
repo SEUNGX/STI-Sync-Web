@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
-import { db } from '@/services/firebase';
+import { collection, onSnapshot } from 'firebase/firestore';
+import { db } from '../../../../services/firebase';
 import { EventTypeDocument, EventCategoryDocument, VenueDocument } from '../types/event-config.types';
 
 export function useEventTypesStream() {
@@ -9,17 +9,16 @@ export function useEventTypesStream() {
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
-    const q = query(collection(db, 'event_types'), orderBy('name', 'asc'));
     const unsubscribe = onSnapshot(
-      q,
+      collection(db, 'event_types'),
       (snapshot) => {
-        setEventTypes(
-          snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as EventTypeDocument))
-        );
+        const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as EventTypeDocument));
+        docs.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+        setEventTypes(docs);
         setLoading(false);
       },
       (err) => {
-        console.error('Error fetching event types:', err);
+        console.warn('Error fetching event types:', err);
         setError(err);
         setLoading(false);
       }
@@ -37,17 +36,16 @@ export function useEventCategoriesStream() {
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
-    const q = query(collection(db, 'event_categories'), orderBy('name', 'asc'));
     const unsubscribe = onSnapshot(
-      q,
+      collection(db, 'event_categories'),
       (snapshot) => {
-        setCategories(
-          snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as EventCategoryDocument))
-        );
+        const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as EventCategoryDocument));
+        docs.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+        setCategories(docs);
         setLoading(false);
       },
       (err) => {
-        console.error('Error fetching event categories:', err);
+        console.warn('Error fetching event categories:', err);
         setError(err);
         setLoading(false);
       }
@@ -65,17 +63,16 @@ export function useVenuesStream() {
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
-    const q = query(collection(db, 'venues'), orderBy('name', 'asc'));
     const unsubscribe = onSnapshot(
-      q,
+      collection(db, 'venues'),
       (snapshot) => {
-        setVenues(
-          snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as VenueDocument))
-        );
+        const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as VenueDocument));
+        docs.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+        setVenues(docs);
         setLoading(false);
       },
       (err) => {
-        console.error('Error fetching venues:', err);
+        console.warn('Error fetching venues:', err);
         setError(err);
         setLoading(false);
       }

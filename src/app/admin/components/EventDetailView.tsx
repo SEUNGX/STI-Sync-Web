@@ -43,8 +43,12 @@ export default function EventDetailView({ event, onClose }: EventDetailViewProps
   const collectionRate = Math.round((paidCount / students.length) * 100);
 
   const filtered = students.filter(s => {
-    const matchSearch = s.name.toLowerCase().includes(search.toLowerCase()) ||
-      s.studentId.includes(search) || s.course.toLowerCase().includes(search.toLowerCase());
+    const nameStr = (s.name || "").toLowerCase();
+    const courseStr = (s.course || "").toLowerCase();
+    const searchStr = (search || "").toLowerCase();
+    const matchSearch = nameStr.includes(searchStr) ||
+      (s.studentId || "").includes(searchStr) ||
+      courseStr.includes(searchStr);
     const matchFilter = filterStatus === 'all' || s.paymentStatus === filterStatus;
     return matchSearch && matchFilter;
   });

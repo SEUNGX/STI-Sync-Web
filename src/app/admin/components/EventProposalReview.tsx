@@ -483,7 +483,7 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
                         <div key={scanner.id || i} className="px-5 py-3 flex items-center justify-between">
                           <div>
                             <p className="text-[#001A4D] font-semibold text-sm">{scanner.officerName || 'Unnamed Officer'}</p>
-                            <p className="text-gray-400 text-xs mt-0.5">UID: {scanner.officerUserId || 'Not linked'}</p>
+                            <p className="text-gray-400 text-xs mt-0.5">Student ID: {scanner.officerUserId || 'Not linked'}</p>
                           </div>
                           <div className="flex flex-wrap gap-1 justify-end">
                             {scanner.fullAccess && <span className="px-2 py-0.5 bg-[#83358E]/10 text-[#83358E] text-xs rounded-full">Full Access</span>}
