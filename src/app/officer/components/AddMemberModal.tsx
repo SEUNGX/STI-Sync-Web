@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { X, Search, Loader2 } from 'lucide-react';
 import { useStudents } from '../../modules/students/hooks/useStudentStream';
 import { addMember } from '../../modules/organizations/services/member.service';
+import { createPayable, recordPayment } from '../../modules/finance/services/payable.service';
 import type { AddMemberPayload } from '../../modules/organizations/types/member.types';
 
 interface AddMemberModalProps {
@@ -60,7 +61,30 @@ export function AddMemberModal({ isOpen, onClose, organizationId, addedBy }: Add
         status: 'active',
       };
       
-      await addMember(payload, addedBy);
+      const newMemberId = await addMember(payload, addedBy);
+
+      // Auto-create payable doc for membership dues if applicable
+      try {
+        const payableId = await createPayable({
+          studentId: formData.studentId,
+          studentName: formData.studentName,
+          studentSchoolId: formData.studentId,
+          type: 'membership_due',
+          label: 'Membership Due',
+          description: 'Initial membership due upon joining',
+          organizationId,
+          semesterId: 'active',
+          assignedAmount: 50,
+          createdBy: addedBy,
+        });
+
+        if (formData.paymentStatus === 'paid') {
+          await recordPayment(payableId, 50, addedBy, 'cash');
+        }
+      } catch (pErr) {
+        console.warn('Could not auto-create payable for new member:', pErr);
+      }
+
       onClose();
     } catch (err) {
       console.error(err);
@@ -209,7 +233,7 @@ export function AddMemberModal({ isOpen, onClose, organizationId, addedBy }: Add
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Membership Dues</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Membership Dues (₱50)</label>
               <select
                 value={formData.paymentStatus}
                 onChange={(e) => setFormData({ ...formData, paymentStatus: e.target.value as 'paid' | 'outstanding' })}

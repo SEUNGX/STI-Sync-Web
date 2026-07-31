@@ -80,13 +80,24 @@ export const createEvent = async (
             const payableRef = doc(collection(db, 'payables'));
             batch.set(payableRef, {
               id: payableRef.id,
-              memberId: student.id,
-              typeId: docId,
+              studentId: student.id || student.studentId,
+              studentName: `${student.firstName || ''} ${student.lastName || ''}`.trim() || 'Student',
+              studentSchoolId: student.studentId || '',
+              type: 'event_fee',
+              label: `Event Fee — ${data.title}`,
+              description: `Fee for event: ${data.title}`,
+              organizationId: data.hostingOrgId || null,
+              organizationName: null,
+              semesterId: data.semesterId || '',
               eventId: docId,
               assignedAmount: data.adminFeeOverride,
               paidAmount: 0,
               status: 'pending',
-              dueDate: data.startDate || null,
+              dueDate: data.sessions && data.sessions[0]?.date ? Timestamp.fromDate(new Date(data.sessions[0].date)) : null,
+              paidAt: null,
+              recordedBy: null,
+              paymentMethod: null,
+              createdBy: uid,
               createdAt: serverTimestamp(),
               updatedAt: serverTimestamp()
             });

@@ -26,6 +26,7 @@ export interface OrganizationDocument {
   status: 'active' | 'inactive' | 'suspended';
   memberCount: number;
   logoUrl: string | null;
+  membershipFee?: number;
 
   // ─── Timestamps ───
   createdAt: Timestamp;
@@ -42,6 +43,7 @@ export interface CreateOrganizationPayload {
   academicYear: string;
   semester: string;
   logoUrl: string | null;
+  membershipFee?: number;
 }
 
 export interface OrganizationRulesDocument {

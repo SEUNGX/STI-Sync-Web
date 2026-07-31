@@ -3,8 +3,16 @@ import { useState, useMemo } from "react";
 import { useOrgLedger } from '../../modules/finance/hooks/useFinanceStream';
 import { addOrgLedgerTransaction } from '../../modules/finance/services/finance.service';
 import { useSemesters } from '../../modules/academic/hooks/useAcademicStream';
+import { useOrgPayables } from '../../modules/finance/hooks/usePayableStream';
+import { useOfficerProfile } from '../../auth/hooks/useOfficerProfile';
+import { useOrganizationStream } from '../../modules/organizations/hooks/useOrganizationStream';
 import type { OrgLedgerDocument } from '../../modules/finance/types/finance.types';
+import type { PayableDocument } from '../../modules/finance/types/payable.types';
 import { Timestamp } from 'firebase/firestore';
+
+import { GenerateDuesModal } from '../components/GenerateDuesModal';
+import { AddPayableModal } from '../components/AddPayableModal';
+import { RecordPaymentModal } from '../components/RecordPaymentModal';
 
 import {
   Building2,
@@ -14,18 +22,12 @@ import {
   CheckCircle,
   AlertCircle,
   Plus,
-  Edit,
   Archive,
   Eye,
-  Bell,
-  ChevronDown,
   X,
-  Save,
-  Lock,
   Download,
   FileText,
   Users,
-  Calendar,
   History,
   ArrowRight,
   Shield,
@@ -38,144 +40,49 @@ import {
 type FinanceTab = "budget" | "payables" | "liquidation";
 type PayableSubTab = "member" | "type" | "overdue";
 
-interface BudgetItem {
-  id: string;
-  category: string;
-  description: string;
-  estimated: number;
-  actual: number;
-  status: "Planned" | "Approved" | "Overspent";
-}
-
-interface Member {
-  id: string;
-  name: string;
-  studentId: string;
-  course: string;
-  totalAssigned: number;
-  totalPaid: number;
-  lastPayment: string;
-  status: "Paid" | "Partial" | "Unpaid" | "Overdue";
-}
-
-interface PayableType {
-  id: string;
-  name: string;
-  type: string;
-  totalAssigned: number;
-  collected: number;
-  outstanding: number;
-  memberCount: number;
-}
-
-// ─── Mock Data ─────────────────────────────────────────────────────────────────
-const MOCK_ORG_ID = "org1";
-// Removed mock budget items
-
-const MOCK_MEMBERS: Member[] = [
-  { id: "1", name: "Juan Dela Cruz", studentId: "2021-00123", course: "BSIT 3A", totalAssigned: 500, totalPaid: 500, lastPayment: "Mar 2, 2026", status: "Paid" },
-  { id: "2", name: "Maria Santos", studentId: "2021-00124", course: "BSIT 3A", totalAssigned: 500, totalPaid: 250, lastPayment: "Feb 14, 2026", status: "Partial" },
-  { id: "3", name: "Jose Reyes", studentId: "2021-00125", course: "BSCS 2B", totalAssigned: 500, totalPaid: 0, lastPayment: "—", status: "Overdue" },
-  { id: "4", name: "Ana Lopez", studentId: "2021-00126", course: "BSCS 2B", totalAssigned: 500, totalPaid: 500, lastPayment: "Jan 20, 2026", status: "Paid" },
-  { id: "5", name: "Carlos Mendoza", studentId: "2021-00127", course: "BSIT 4A", totalAssigned: 500, totalPaid: 0, lastPayment: "—", status: "Unpaid" },
-];
-
-const MOCK_PAYABLE_TYPES: PayableType[] = [
-  { id: "1", name: "Membership Dues", type: "Recurring", totalAssigned: 12500, collected: 10000, outstanding: 2500, memberCount: 25 },
-  { id: "2", name: "Sports Fest Registration", type: "Event", totalAssigned: 5000, collected: 3500, outstanding: 1500, memberCount: 25 },
-  { id: "3", name: "T-Shirt Fee", type: "One-Time", totalAssigned: 3750, collected: 3750, outstanding: 0, memberCount: 25 },
-];
-
 const MOCK_LIQUIDATIONS = [
   { id: "1", event: "General Assembly 2026", submitted: "Feb 10, 2026", amount: "₱9,300", status: "Approved" as const },
   { id: "2", event: "Induction Ceremony", submitted: "Mar 5, 2026", amount: "₱4,500", status: "Pending" as const },
   { id: "3", event: "IT Symposium", submitted: "Apr 1, 2026", amount: "₱4,600", status: "Under Review" as const },
 ];
 
-// ─── Semester Selector ─────────────────────────────────────────────────────────
-function SemesterSelector({ current, onSelect }: { current: string; onSelect: (s: string) => void }) {
-  const [open, setOpen] = useState(false);
-  const semesters = [
-    { label: "2nd Semester · A.Y. 2025–2026", tag: "CURRENT" },
-    { label: "1st Semester · A.Y. 2025–2026", tag: "COMPLETED" },
-    { label: "2nd Semester · A.Y. 2024–2025", tag: "COMPLETED" },
-  ];
-
-  return (
-    <div className="relative">
-      <button
-        onClick={() => setOpen(!open)}
-        className={`flex items-center gap-2 px-4 py-2 border rounded-lg text-sm transition-colors ${
-          current !== semesters[0].label
-            ? "bg-amber-50 border-amber-300 text-amber-800"
-            : "bg-white border-[#E0E0E0] text-[#001A4D] hover:border-blue-400"
-        }`}
-      >
-        <Calendar className="w-4 h-4 text-blue-600" />
-        <span className="font-bold">{current}</span>
-        {current === semesters[0].label && (
-          <span className="px-1.5 py-0.5 bg-green-100 text-green-700 text-[10px] font-bold rounded-full">CURRENT</span>
-        )}
-        <ChevronDown className="w-4 h-4 text-gray-400" />
-      </button>
-
-      {open && (
-        <div className="absolute top-full mt-1 right-0 w-80 bg-white border border-[#E0E0E0] rounded-xl shadow-lg z-20 overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100">
-            <p className="text-gray-500 text-xs uppercase tracking-wide font-bold">Select Semester</p>
-            <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-600">
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-          {semesters.map((s) => (
-            <button
-              key={s.label}
-              onClick={() => { onSelect(s.label); setOpen(false); }}
-              className={`w-full flex items-center justify-between px-4 py-3 text-left border-b border-gray-100 last:border-0 transition-colors relative ${
-                s.label === current ? "bg-[#F3E8FF] border-l-[3px] border-l-[#83358E]" : "hover:bg-gray-50"
-              }`}
-            >
-              <div>
-                <p className={`text-sm font-bold ${s.label === current ? "text-[#83358E]" : "text-[#001A4D]"}`}>{s.label.split(" · ")[0]}</p>
-                <p className="text-xs text-gray-500">{s.label.split(" · ")[1]}</p>
-              </div>
-              <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full ${
-                s.tag === "CURRENT" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"
-              }`}>{s.tag}</span>
-            </button>
-          ))}
-          <div className="px-4 py-2 border-t border-gray-100">
-            <button className="text-blue-600 text-xs hover:underline">Manage Semesters</button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ─── Metrics Row ───────────────────────────────────────────────────────────────
 
-function MetricsRow({ isPast, ledgerData, semesterId }: { isPast: boolean, ledgerData: OrgLedgerDocument[], semesterId: string }) {
-  const totalPayables = MOCK_MEMBERS.reduce((a, m) => a + m.totalAssigned, 0);
-  const totalCollected = MOCK_MEMBERS.reduce((a, m) => a + m.totalPaid, 0);
+function MetricsRow({
+  isPast,
+  ledgerData,
+  semesterId,
+  payablesData,
+}: {
+  isPast: boolean;
+  ledgerData: OrgLedgerDocument[];
+  semesterId: string;
+  payablesData: PayableDocument[];
+}) {
+  const totalPayables = payablesData.reduce((a, p) => a + (p.assignedAmount || 0), 0);
+  const totalCollected = payablesData.reduce((a, p) => a + (p.paidAmount || 0), 0);
   const totalOutstanding = totalPayables - totalCollected;
 
   const currentSemTransactions = useMemo(() => {
     if (semesterId === "all") return ledgerData;
-    return ledgerData.filter(t => t.semesterId === semesterId);
+    return ledgerData.filter((t) => t.semesterId === semesterId);
   }, [ledgerData, semesterId]);
 
-  const totalIncome = currentSemTransactions.filter(t => t.type === "income").reduce((s, t) => s + t.amount, 0);
-  const totalExpenses = currentSemTransactions.filter(t => t.type === "expense").reduce((s, t) => s + t.amount, 0);
+  const totalIncome = currentSemTransactions
+    .filter((t) => t.type === "income")
+    .reduce((s, t) => s + t.amount, 0);
+  const totalExpenses = currentSemTransactions
+    .filter((t) => t.type === "expense")
+    .reduce((s, t) => s + t.amount, 0);
   const currentBalance = totalIncome - totalExpenses;
 
   const cards = [
     { label: "Club Total Funds (Income)", value: `₱${totalIncome.toLocaleString()}`, note: "this semester", color: "text-[#83358E]", icon: Building2 },
     { label: "Total Club Expenditures", value: `₱${totalExpenses.toLocaleString()}`, note: "this semester", color: "text-blue-600", icon: TrendingUp },
     { label: "Current Club Balance", value: `₱${currentBalance.toLocaleString()}`, note: "available funds", color: "text-green-600", icon: Wallet },
-    { label: "Total Payables Assigned", value: `₱${totalPayables.toLocaleString()}`, note: `across ${MOCK_MEMBERS.length} members`, color: "text-[#001A4D]", icon: Coins },
-    { label: "Total Collected", value: `₱${totalCollected.toLocaleString()}`, note: "+₱250 this month", color: "text-green-600", icon: CheckCircle },
-    { label: "Total Outstanding", value: `₱${totalOutstanding.toLocaleString()}`, note: `across ${MOCK_MEMBERS.filter((m) => m.status !== "Paid").length} members`, color: "text-red-600", icon: AlertCircle },
+    { label: "Total Payables Assigned", value: `₱${totalPayables.toLocaleString()}`, note: `across ${payablesData.length} payable doc(s)`, color: "text-[#001A4D]", icon: Coins },
+    { label: "Total Collected", value: `₱${totalCollected.toLocaleString()}`, note: "collected payments", color: "text-green-600", icon: CheckCircle },
+    { label: "Total Outstanding", value: `₱${totalOutstanding.toLocaleString()}`, note: `outstanding balance`, color: "text-red-600", icon: AlertCircle },
   ];
 
   return (
@@ -197,13 +104,24 @@ function MetricsRow({ isPast, ledgerData, semesterId }: { isPast: boolean, ledge
   );
 }
 
-
 // ─── Budget Tracker Tab ────────────────────────────────────────────────────────
 
-function AddOrgIncomeModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+function AddOrgIncomeModal({
+  organizationId,
+  organizationName,
+  officerStudentId,
+  onClose,
+  onSuccess,
+}: {
+  organizationId: string;
+  organizationName: string;
+  officerStudentId: string;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
   const { data: semesters } = useSemesters();
-  const availableSemesters = semesters.filter(s => s.status === 'ACTIVE' || s.status === 'UPCOMING');
-  const activeSemester = semesters.find(s => s.status === 'ACTIVE');
+  const availableSemesters = semesters.filter((s) => s.status === 'ACTIVE' || s.status === 'UPCOMING');
+  const activeSemester = semesters.find((s) => s.status === 'ACTIVE');
   const [form, setForm] = useState({ amount: "", notes: "", semesterId: activeSemester?.id || "" });
   const [carryOver, setCarryOver] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -213,7 +131,7 @@ function AddOrgIncomeModal({ onClose, onSuccess }: { onClose: () => void; onSucc
     setLoading(true);
     try {
       await addOrgLedgerTransaction({
-        organizationId: MOCK_ORG_ID,
+        organizationId,
         semesterId: form.semesterId || null,
         date: Timestamp.now(),
         description: carryOver ? "Carry-over from previous semester" : (form.notes || "Budget Allocation/Income"),
@@ -221,7 +139,7 @@ function AddOrgIncomeModal({ onClose, onSuccess }: { onClose: () => void; onSucc
         type: "income",
         source: carryOver ? "carry_over" : "allocation",
         amount: parseFloat(form.amount),
-        addedBy: "Officer User"
+        addedBy: officerStudentId,
       });
       onSuccess();
     } catch (e) {
@@ -238,7 +156,7 @@ function AddOrgIncomeModal({ onClose, onSuccess }: { onClose: () => void; onSucc
           <div className="flex items-center gap-3">
             <Plus className="w-5 h-5 text-white" />
             <h3 className="text-white font-bold text-base">Add Club Income / Allocation</h3>
-            <span className="px-2.5 py-0.5 bg-[#FFD41C] text-[#001A4D] text-xs font-bold rounded-full">STI IT Guild</span>
+            <span className="px-2.5 py-0.5 bg-[#FFD41C] text-[#001A4D] text-xs font-bold rounded-full">{organizationName}</span>
           </div>
           <button onClick={onClose} className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10">
             <X className="w-5 h-5" />
@@ -253,7 +171,7 @@ function AddOrgIncomeModal({ onClose, onSuccess }: { onClose: () => void; onSucc
               onChange={(e) => setForm({ ...form, semesterId: e.target.value })}
             >
               <option value="">Select semester...</option>
-              {availableSemesters.map(sem => (
+              {availableSemesters.map((sem) => (
                 <option key={sem.id} value={sem.id}>{sem.label}</option>
               ))}
             </select>
@@ -282,8 +200,8 @@ function AddOrgIncomeModal({ onClose, onSuccess }: { onClose: () => void; onSucc
             />
           </div>
           <div className="flex items-center gap-3 p-4 bg-gray-50 border border-gray-200 rounded-lg">
-             <input type="checkbox" id="carryOver" checked={carryOver} onChange={(e) => setCarryOver(e.target.checked)} className="w-4 h-4 text-[#83358E] rounded focus:ring-[#83358E]" />
-             <label htmlFor="carryOver" className="text-sm text-gray-700 font-medium">Mark as carry-over from previous semester</label>
+            <input type="checkbox" id="carryOver" checked={carryOver} onChange={(e) => setCarryOver(e.target.checked)} className="w-4 h-4 text-[#83358E] rounded focus:ring-[#83358E]" />
+            <label htmlFor="carryOver" className="text-sm text-gray-700 font-medium">Mark as carry-over from previous semester</label>
           </div>
         </div>
         <div className="px-5 py-4 border-t border-gray-200 flex justify-between">
@@ -301,9 +219,19 @@ function AddOrgIncomeModal({ onClose, onSuccess }: { onClose: () => void; onSucc
   );
 }
 
-function AddOrgExpenseModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+function AddOrgExpenseModal({
+  organizationId,
+  officerStudentId,
+  onClose,
+  onSuccess,
+}: {
+  organizationId: string;
+  officerStudentId: string;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
   const { data: semesters } = useSemesters();
-  const activeSemester = semesters.find(s => s.status === 'ACTIVE');
+  const activeSemester = semesters.find((s) => s.status === 'ACTIVE');
   const [form, setForm] = useState({ amount: "", notes: "", eventId: "" });
   const [loading, setLoading] = useState(false);
 
@@ -312,7 +240,7 @@ function AddOrgExpenseModal({ onClose, onSuccess }: { onClose: () => void; onSuc
     setLoading(true);
     try {
       await addOrgLedgerTransaction({
-        organizationId: MOCK_ORG_ID,
+        organizationId,
         semesterId: activeSemester?.id || null,
         date: Timestamp.now(),
         description: form.notes || "Manual Expense",
@@ -320,7 +248,7 @@ function AddOrgExpenseModal({ onClose, onSuccess }: { onClose: () => void; onSuc
         type: "expense",
         source: "manual_expense",
         amount: parseFloat(form.amount),
-        addedBy: "Officer User"
+        addedBy: officerStudentId,
       });
       onSuccess();
     } catch (e) {
@@ -388,21 +316,37 @@ function AddOrgExpenseModal({ onClose, onSuccess }: { onClose: () => void; onSuc
   );
 }
 
-function BudgetTrackerTab({ isPast, ledgerData, semesterId }: { isPast: boolean, ledgerData: OrgLedgerDocument[], semesterId: string }) {
+function BudgetTrackerTab({
+  isPast,
+  ledgerData,
+  semesterId,
+  organizationId,
+  organizationName,
+  officerStudentId,
+}: {
+  isPast: boolean;
+  ledgerData: OrgLedgerDocument[];
+  semesterId: string;
+  organizationId: string;
+  organizationName: string;
+  officerStudentId: string;
+}) {
   const [showAddIncome, setShowAddIncome] = useState(false);
   const [showAddExpense, setShowAddExpense] = useState(false);
 
   const currentSemTransactions = useMemo(() => {
     if (semesterId === "all") return ledgerData;
-    return ledgerData.filter(t => t.semesterId === semesterId);
+    return ledgerData.filter((t) => t.semesterId === semesterId);
   }, [ledgerData, semesterId]);
 
   let runningBalance = 0;
-  const tableRows = currentSemTransactions.map((t) => {
-    if (t.type === 'income') runningBalance += t.amount;
-    else runningBalance -= t.amount;
-    return { ...t, runningBalance };
-  }).reverse(); // newest first
+  const tableRows = currentSemTransactions
+    .map((t) => {
+      if (t.type === 'income') runningBalance += t.amount;
+      else runningBalance -= t.amount;
+      return { ...t, runningBalance };
+    })
+    .reverse();
 
   return (
     <div className="space-y-4">
@@ -441,7 +385,9 @@ function BudgetTrackerTab({ isPast, ledgerData, semesterId }: { isPast: boolean,
             <thead className="bg-gray-50">
               <tr>
                 {["Date", "Description", "Source", "Amount (₱)", "Balance (₱)"].map((col) => (
-                  <th key={col} className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide border-b border-[#E0E0E0]">{col}</th>
+                  <th key={col} className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide border-b border-[#E0E0E0]">
+                    {col}
+                  </th>
                 ))}
               </tr>
             </thead>
@@ -452,8 +398,8 @@ function BudgetTrackerTab({ isPast, ledgerData, semesterId }: { isPast: boolean,
                     No transactions found for this semester.
                   </td>
                 </tr>
-              ) : tableRows.map((item) => {
-                return (
+              ) : (
+                tableRows.map((item) => (
                   <tr key={item.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-4 py-3 text-gray-500 text-sm">
                       {item.date?.toDate ? item.date.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Unknown'}
@@ -467,33 +413,158 @@ function BudgetTrackerTab({ isPast, ledgerData, semesterId }: { isPast: boolean,
                     </td>
                     <td className="px-4 py-3 text-gray-900 font-bold text-sm">₱{item.runningBalance.toLocaleString()}</td>
                   </tr>
-                );
-              })}
+                ))
+              )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {showAddIncome && <AddOrgIncomeModal onClose={() => setShowAddIncome(false)} onSuccess={() => setShowAddIncome(false)} />}
-      {showAddExpense && <AddOrgExpenseModal onClose={() => setShowAddExpense(false)} onSuccess={() => setShowAddExpense(false)} />}
+      {showAddIncome && (
+        <AddOrgIncomeModal
+          organizationId={organizationId}
+          organizationName={organizationName}
+          officerStudentId={officerStudentId}
+          onClose={() => setShowAddIncome(false)}
+          onSuccess={() => setShowAddIncome(false)}
+        />
+      )}
+      {showAddExpense && (
+        <AddOrgExpenseModal
+          organizationId={organizationId}
+          officerStudentId={officerStudentId}
+          onClose={() => setShowAddExpense(false)}
+          onSuccess={() => setShowAddExpense(false)}
+        />
+      )}
     </div>
   );
 }
 
+// ─── Student Payables Tab (Real Firestore Backend) ──────────────────────────────
 
-function StudentPayablesTab({ isPast }: { isPast: boolean }) {
+function StudentPayablesTab({
+  isPast,
+  payables,
+  organizationId,
+  organizationName,
+  officerStudentId,
+}: {
+  isPast: boolean;
+  payables: PayableDocument[];
+  organizationId: string;
+  organizationName: string;
+  officerStudentId: string;
+}) {
   const [subTab, setSubTab] = useState<PayableSubTab>("member");
-  const totalAssigned = MOCK_MEMBERS.reduce((a, m) => a + m.totalAssigned, 0);
-  const totalCollected = MOCK_MEMBERS.reduce((a, m) => a + m.totalPaid, 0);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("All");
+
+  const [showGenerateDues, setShowGenerateDues] = useState(false);
+  const [showAddPayable, setShowAddPayable] = useState(false);
+  const [selectedPayableForPayment, setSelectedPayableForPayment] = useState<PayableDocument | null>(null);
+
+  const totalAssigned = payables.reduce((a, p) => a + (p.assignedAmount || 0), 0);
+  const totalCollected = payables.reduce((a, p) => a + (p.paidAmount || 0), 0);
   const totalOutstanding = totalAssigned - totalCollected;
-  const collectionRate = Math.round((totalCollected / totalAssigned) * 100);
-  const overdueCount = MOCK_MEMBERS.filter((m) => m.status === "Overdue").length;
+  const collectionRate = totalAssigned > 0 ? Math.round((totalCollected / totalAssigned) * 100) : 0;
+
+  // Overdue detection
+  const now = Date.now();
+  const overduePayables = payables.filter((p) => {
+    if (p.status === 'overdue') return true;
+    if (p.status === 'paid' || p.status === 'waived') return false;
+    if (p.dueDate?.toMillis && p.dueDate.toMillis() < now) return true;
+    return false;
+  });
+
+  // Grouping by student for "By Member"
+  const memberGroups = useMemo(() => {
+    const map = new Map<string, { studentId: string; studentName: string; schoolId: string; payables: PayableDocument[] }>();
+    payables.forEach((p) => {
+      const key = p.studentId;
+      if (!map.has(key)) {
+        map.set(key, {
+          studentId: p.studentId,
+          studentName: p.studentName || 'Student',
+          schoolId: p.studentSchoolId || p.studentId,
+          payables: [],
+        });
+      }
+      map.get(key)!.payables.push(p);
+    });
+    return Array.from(map.values());
+  }, [payables]);
+
+  // Grouping by type for "By Payable Type"
+  const typeGroups = useMemo(() => {
+    const map = new Map<string, { label: string; type: string; totalAssigned: number; collected: number; outstanding: number; memberCount: number }>();
+    payables.forEach((p) => {
+      const key = `${p.type}_${p.label}`;
+      if (!map.has(key)) {
+        map.set(key, {
+          label: p.label,
+          type: p.type.replace('_', ' '),
+          totalAssigned: 0,
+          collected: 0,
+          outstanding: 0,
+          memberCount: 0,
+        });
+      }
+      const g = map.get(key)!;
+      g.totalAssigned += p.assignedAmount || 0;
+      g.collected += p.paidAmount || 0;
+      g.outstanding += (p.assignedAmount || 0) - (p.paidAmount || 0);
+      g.memberCount += 1;
+    });
+    return Array.from(map.values());
+  }, [payables]);
+
+  const filteredMembers = memberGroups.filter((m) => {
+    const matchesSearch = m.studentName.toLowerCase().includes(searchQuery.toLowerCase()) || m.schoolId.toLowerCase().includes(searchQuery.toLowerCase());
+    if (!matchesSearch) return false;
+    if (statusFilter === 'All') return true;
+
+    const memberAssigned = m.payables.reduce((a, p) => a + p.assignedAmount, 0);
+    const memberPaid = m.payables.reduce((a, p) => a + p.paidAmount, 0);
+
+    if (statusFilter === 'Paid') return memberPaid >= memberAssigned && memberAssigned > 0;
+    if (statusFilter === 'Partial') return memberPaid > 0 && memberPaid < memberAssigned;
+    if (statusFilter === 'Unpaid') return memberPaid === 0 && memberAssigned > 0;
+    if (statusFilter === 'Overdue') return m.payables.some((p) => p.status === 'overdue' || (p.dueDate?.toMillis && p.dueDate.toMillis() < now && p.status !== 'paid'));
+    return true;
+  });
 
   return (
     <div className="space-y-4">
-      {/* Overview */}
-      <div className="bg-white border border-[#E0E0E0] rounded-xl p-5">
-        <div className="grid grid-cols-4 divide-x divide-gray-200 mb-4">
+      {/* Overview & Action Bar */}
+      <div className="bg-white border border-[#E0E0E0] rounded-xl p-5 space-y-4">
+        <div className="flex items-center justify-between border-b border-gray-100 pb-4">
+          <div>
+            <h3 className="font-bold text-[#001A4D] text-base">Student Payables Overview</h3>
+            <p className="text-gray-500 text-xs mt-0.5">Manage membership dues, fines, and event payables for active members.</p>
+          </div>
+          {!isPast && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowGenerateDues(true)}
+                className="px-3.5 py-2 bg-[#83358E] text-white rounded-lg text-xs font-bold hover:bg-[#6D2A78] transition-colors flex items-center gap-1.5"
+              >
+                <Coins className="w-4 h-4" />
+                Generate Membership Dues
+              </button>
+              <button
+                onClick={() => setShowAddPayable(true)}
+                className="px-3.5 py-2 bg-[#001A4D] text-white rounded-lg text-xs font-bold hover:bg-[#001A4D]/90 transition-colors flex items-center gap-1.5"
+              >
+                <Plus className="w-4 h-4 text-[#FFD41C]" />
+                Add Payable / Fine
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="grid grid-cols-4 divide-x divide-gray-200">
           {[
             { label: "Total Payables Assigned", value: `₱${totalAssigned.toLocaleString()}`, color: "text-[#001A4D]" },
             { label: "Total Collected", value: `₱${totalCollected.toLocaleString()}`, color: "text-green-600" },
@@ -527,173 +598,264 @@ function StudentPayablesTab({ isPast }: { isPast: boolean }) {
             }`}
           >
             {label}
-            {key === "overdue" && overdueCount > 0 && (
-              <span className="w-4 h-4 bg-red-500 rounded-full text-white text-[10px] flex items-center justify-center font-bold">{overdueCount}</span>
+            {key === "overdue" && overduePayables.length > 0 && (
+              <span className="w-4 h-4 bg-red-500 rounded-full text-white text-[10px] flex items-center justify-center font-bold">
+                {overduePayables.length}
+              </span>
             )}
           </button>
         ))}
       </div>
 
-      {/* By Member */}
+      {/* Sub-tab 1: By Member */}
       {subTab === "member" && (
         <div className="bg-white border border-[#E0E0E0] rounded-xl overflow-hidden">
           <div className="flex items-center gap-3 p-4 border-b border-gray-100">
-            <input type="text" placeholder="Search members..." className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] focus:border-transparent" />
-            <select className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] focus:border-transparent">
-              <option>All Status</option>
-              <option>Paid</option>
-              <option>Partial</option>
-              <option>Unpaid</option>
-              <option>Overdue</option>
+            <input
+              type="text"
+              placeholder="Search member by name or student ID..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] focus:border-transparent outline-none"
+            />
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] focus:border-transparent outline-none"
+            >
+              <option value="All">All Status</option>
+              <option value="Paid">Fully Paid</option>
+              <option value="Partial">Partial</option>
+              <option value="Unpaid">Unpaid</option>
+              <option value="Overdue">Overdue</option>
             </select>
           </div>
+
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-50">
                 <tr>
-                  {["Member", "Course & Year", "Total Assigned", "Total Paid", "Outstanding", "Last Payment", "Status", ...(!isPast ? ["Actions"] : [])].map((col) => (
-                    <th key={col} className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide border-b border-[#E0E0E0]">{col}</th>
+                  {["Member", "Assigned Payables", "Total Assigned", "Total Paid", "Outstanding", "Status", ...(!isPast ? ["Actions"] : [])].map((col) => (
+                    <th key={col} className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide border-b border-[#E0E0E0]">
+                      {col}
+                    </th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {MOCK_MEMBERS.map((m) => (
-                  <tr key={m.id} className="hover:bg-gray-50 transition-colors group">
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
-                          m.status === "Paid" ? "bg-green-100 text-green-700" :
-                          m.status === "Overdue" ? "bg-red-100 text-red-700" :
-                          "bg-amber-100 text-amber-700"
-                        }`}>
-                          {m.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
-                        </div>
-                        <div>
-                          <p className="text-[#001A4D] font-medium text-sm">{m.name}</p>
-                          <p className="text-gray-400 text-xs">{m.studentId}</p>
-                        </div>
-                      </div>
+                {filteredMembers.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-8 text-center text-gray-500 text-sm">
+                      No student payables found. Click <strong>Generate Membership Dues</strong> or <strong>Add Payable</strong> to assign fees.
                     </td>
-                    <td className="px-4 py-3 text-gray-600 text-sm">{m.course}</td>
-                    <td className="px-4 py-3 text-gray-700 text-sm">₱{m.totalAssigned.toLocaleString()}</td>
-                    <td className="px-4 py-3 text-green-600 font-medium text-sm">₱{m.totalPaid.toLocaleString()}</td>
-                    <td className="px-4 py-3 text-red-600 font-bold text-sm">₱{(m.totalAssigned - m.totalPaid).toLocaleString()}</td>
-                    <td className="px-4 py-3 text-gray-500 text-sm">{m.lastPayment}</td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${
-                        m.status === "Paid" ? "bg-green-100 text-green-700" :
-                        m.status === "Overdue" ? "bg-red-100 text-red-700" :
-                        m.status === "Partial" ? "bg-amber-100 text-amber-700" :
-                        "bg-gray-100 text-gray-600"
-                      }`}>{m.status}</span>
-                    </td>
-                    {!isPast && (
-                      <td className="px-4 py-3">
-                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-blue-50 text-blue-600 transition-colors" title="View Profile">
-                            <Eye className="w-3.5 h-3.5" />
-                          </button>
-                          <button className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-green-50 text-green-600 transition-colors" title="Record Payment">
-                            <CheckCircle className="w-3.5 h-3.5" />
-                          </button>
-                          <button className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-amber-50 text-amber-500 transition-colors" title="Send Reminder">
-                            <Bell className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    )}
                   </tr>
-                ))}
+                ) : (
+                  filteredMembers.map((m) => {
+                    const assigned = m.payables.reduce((a, p) => a + (p.assignedAmount || 0), 0);
+                    const paid = m.payables.reduce((a, p) => a + (p.paidAmount || 0), 0);
+                    const outstanding = assigned - paid;
+
+                    let statusText = 'Paid';
+                    let statusColor = 'bg-green-100 text-green-700';
+
+                    if (outstanding > 0) {
+                      if (paid > 0) {
+                        statusText = 'Partial';
+                        statusColor = 'bg-amber-100 text-amber-700';
+                      } else {
+                        statusText = 'Unpaid';
+                        statusColor = 'bg-gray-100 text-gray-700';
+                      }
+                    }
+
+                    const hasOverdue = m.payables.some((p) => p.status === 'overdue' || (p.dueDate?.toMillis && p.dueDate.toMillis() < now && p.status !== 'paid'));
+                    if (hasOverdue) {
+                      statusText = 'Overdue';
+                      statusColor = 'bg-red-100 text-red-700';
+                    }
+
+                    return (
+                      <tr key={m.studentId} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-full bg-[#001A4D]/10 text-[#001A4D] flex items-center justify-center text-xs font-bold">
+                              {m.studentName.split(' ').map((n) => n[0]).join('').slice(0, 2)}
+                            </div>
+                            <div>
+                              <p className="text-[#001A4D] font-medium text-sm">{m.studentName}</p>
+                              <p className="text-gray-400 text-xs">{m.schoolId}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-xs text-gray-600 space-y-1">
+                          {m.payables.map((p) => (
+                            <div key={p.id} className="flex items-center justify-between gap-2 border-b border-gray-100 last:border-0 pb-0.5">
+                              <span className="truncate max-w-[160px]" title={p.label}>{p.label}</span>
+                              <span className="font-semibold text-gray-800">₱{p.assignedAmount}</span>
+                            </div>
+                          ))}
+                        </td>
+                        <td className="px-4 py-3 text-gray-700 text-sm font-semibold">₱{assigned.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-green-600 font-semibold text-sm">₱{paid.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-red-600 font-bold text-sm">₱{outstanding.toLocaleString()}</td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${statusColor}`}>
+                            {statusText}
+                          </span>
+                        </td>
+                        {!isPast && (
+                          <td className="px-4 py-3">
+                            {outstanding > 0 ? (
+                              <button
+                                onClick={() => {
+                                  const pendingPayable = m.payables.find((p) => (p.assignedAmount || 0) > (p.paidAmount || 0));
+                                  if (pendingPayable) setSelectedPayableForPayment(pendingPayable);
+                                }}
+                                className="px-3 py-1 bg-green-600 text-white rounded-lg text-xs font-semibold hover:bg-green-700 transition-colors flex items-center gap-1"
+                              >
+                                <CheckCircle className="w-3.5 h-3.5" />
+                                Record Payment
+                              </button>
+                            ) : (
+                              <span className="text-xs text-green-600 font-medium">✓ Settled</span>
+                            )}
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
         </div>
       )}
 
-      {/* By Payable Type */}
+      {/* Sub-tab 2: By Payable Type */}
       {subTab === "type" && (
         <div className="grid grid-cols-3 gap-4">
-          {MOCK_PAYABLE_TYPES.map((pt) => {
-            const pct = Math.round((pt.collected / pt.totalAssigned) * 100);
-            return (
-              <div key={pt.id} className="bg-white border border-[#E0E0E0] rounded-xl p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-[#001A4D] font-bold text-sm">{pt.name}</p>
-                  <span className="px-2 py-0.5 bg-blue-50 text-blue-700 text-xs rounded font-medium">{pt.type}</span>
+          {typeGroups.length === 0 ? (
+            <div className="col-span-3 bg-white border border-[#E0E0E0] rounded-xl p-8 text-center text-gray-500 text-sm">
+              No payable categories defined yet. Generate dues or add a payable to get started.
+            </div>
+          ) : (
+            typeGroups.map((pt, idx) => {
+              const pct = pt.totalAssigned > 0 ? Math.round((pt.collected / pt.totalAssigned) * 100) : 0;
+              return (
+                <div key={idx} className="bg-white border border-[#E0E0E0] rounded-xl p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-[#001A4D] font-bold text-sm truncate" title={pt.label}>{pt.label}</p>
+                    <span className="px-2 py-0.5 bg-blue-50 text-blue-700 text-xs rounded font-medium capitalize">{pt.type}</span>
+                  </div>
+                  <p className="text-[#83358E] font-bold text-lg">₱{pt.totalAssigned.toLocaleString()}</p>
+                  <div className="flex justify-between text-xs mt-1 mb-2">
+                    <span className="text-green-600">₱{pt.collected.toLocaleString()} collected</span>
+                    <span className="text-red-600">₱{pt.outstanding.toLocaleString()} outstanding</span>
+                  </div>
+                  <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mb-2">
+                    <div className="h-full bg-[#83358E]" style={{ width: `${pct}%` }} />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <p className="text-gray-400 text-xs">{pt.memberCount} member(s)</p>
+                  </div>
                 </div>
-                <p className="text-[#83358E] font-bold text-lg">₱{pt.totalAssigned.toLocaleString()}</p>
-                <div className="flex justify-between text-xs mt-1 mb-2">
-                  <span className="text-green-600">₱{pt.collected.toLocaleString()} collected</span>
-                  <span className="text-red-600">₱{pt.outstanding.toLocaleString()} outstanding</span>
-                </div>
-                <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mb-2">
-                  <div className="h-full bg-[#83358E]" style={{ width: `${pct}%` }} />
-                </div>
-                <div className="flex items-center justify-between">
-                  <p className="text-gray-400 text-xs">{pt.memberCount} members</p>
-                  <button className="text-blue-600 text-xs hover:underline">View Breakdown</button>
-                </div>
-              </div>
-            );
-          })}
+              );
+            })
+          )}
         </div>
       )}
 
-      {/* Overdue */}
+      {/* Sub-tab 3: Overdue */}
       {subTab === "overdue" && (
         <div className="space-y-3">
           <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-xl">
             <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
             <div>
-              <p className="text-red-700 font-bold text-sm mb-0.5">Overdue Payables</p>
-              <p className="text-gray-700 text-sm">These members have payables that are past their due date. Send reminders or record manual payments.</p>
+              <p className="text-red-700 font-bold text-sm mb-0.5">Overdue Payables ({overduePayables.length})</p>
+              <p className="text-gray-700 text-sm">These member payables are past their due date and require collection action.</p>
             </div>
           </div>
-          {!isPast && (
-            <div className="flex gap-2">
-              <button className="px-4 py-2 bg-red-600 text-white rounded-lg text-xs font-medium hover:bg-red-700 transition-colors flex items-center gap-1.5">
-                <Bell className="w-3.5 h-3.5" />
-                Send Overdue Reminder to All
-              </button>
-            </div>
-          )}
+
           <div className="bg-white border border-[#E0E0E0] rounded-xl overflow-hidden">
             <table className="w-full">
               <thead className="bg-gray-50">
                 <tr>
-                  {["Member", "Outstanding", "Days Overdue", "Fine Accrued", ...(!isPast ? ["Actions"] : [])].map((col) => (
-                    <th key={col} className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide border-b border-[#E0E0E0]">{col}</th>
+                  {["Member", "Payable", "Outstanding", "Due Date", ...(!isPast ? ["Actions"] : [])].map((col) => (
+                    <th key={col} className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide border-b border-[#E0E0E0]">
+                      {col}
+                    </th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {MOCK_MEMBERS.filter((m) => m.status === "Overdue").map((m) => (
-                  <tr key={m.id} className="hover:bg-red-50/30 transition-colors">
-                    <td className="px-4 py-3">
-                      <p className="text-[#001A4D] font-medium text-sm">{m.name}</p>
-                      <p className="text-gray-400 text-xs">{m.course}</p>
+                {overduePayables.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-8 text-center text-gray-500 text-sm">
+                      🎉 Great job! There are no overdue payables at this time.
                     </td>
-                    <td className="px-4 py-3 text-red-600 font-bold text-sm">₱{(m.totalAssigned - m.totalPaid).toLocaleString()}</td>
-                    <td className="px-4 py-3 text-red-600 font-bold text-sm">18 days</td>
-                    <td className="px-4 py-3 text-red-500 text-sm">₱45</td>
-                    {!isPast && (
-                      <td className="px-4 py-3">
-                        <div className="flex gap-2">
-                          <button className="px-2.5 py-1 bg-green-600 text-white text-xs rounded-lg hover:bg-green-700 transition-colors flex items-center gap-1">
-                            <CheckCircle className="w-3 h-3" /> Record Payment
-                          </button>
-                          <button className="px-2.5 py-1 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-1">
-                            <Bell className="w-3 h-3" /> Remind
-                          </button>
-                        </div>
-                      </td>
-                    )}
                   </tr>
-                ))}
+                ) : (
+                  overduePayables.map((p) => {
+                    const outstanding = (p.assignedAmount || 0) - (p.paidAmount || 0);
+                    const dueStr = p.dueDate?.toDate ? p.dueDate.toDate().toLocaleDateString('en-US') : 'Overdue';
+
+                    return (
+                      <tr key={p.id} className="hover:bg-red-50/30 transition-colors">
+                        <td className="px-4 py-3">
+                          <p className="text-[#001A4D] font-medium text-sm">{p.studentName}</p>
+                          <p className="text-gray-400 text-xs">{p.studentSchoolId || p.studentId}</p>
+                        </td>
+                        <td className="px-4 py-3 text-gray-700 text-sm font-medium">{p.label}</td>
+                        <td className="px-4 py-3 text-red-600 font-bold text-sm">₱{outstanding.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-[#001A4D] text-sm">{dueStr}</td>
+                        {!isPast && (
+                          <td className="px-4 py-3">
+                            <button
+                              onClick={() => setSelectedPayableForPayment(p)}
+                              className="px-3 py-1 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700 transition-colors flex items-center gap-1"
+                            >
+                              <CheckCircle className="w-3.5 h-3.5" /> Record Payment
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
         </div>
+      )}
+
+      {/* Action Modals */}
+      {showGenerateDues && (
+        <GenerateDuesModal
+          isOpen={showGenerateDues}
+          onClose={() => setShowGenerateDues(false)}
+          organizationId={organizationId}
+          organizationName={organizationName}
+          addedBy={officerStudentId}
+        />
+      )}
+
+      {showAddPayable && (
+        <AddPayableModal
+          isOpen={showAddPayable}
+          onClose={() => setShowAddPayable(false)}
+          organizationId={organizationId}
+          organizationName={organizationName}
+          addedBy={officerStudentId}
+        />
+      )}
+
+      {selectedPayableForPayment && (
+        <RecordPaymentModal
+          isOpen={!!selectedPayableForPayment}
+          onClose={() => setSelectedPayableForPayment(null)}
+          payable={selectedPayableForPayment}
+          recordedBy={officerStudentId}
+        />
       )}
     </div>
   );
@@ -727,7 +889,9 @@ function LiquidationTab({ isPast }: { isPast: boolean }) {
           <thead className="bg-gray-50">
             <tr>
               {["Event", "Submitted", "Amount", "Status", "Actions"].map((col) => (
-                <th key={col} className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide border-b border-[#E0E0E0]">{col}</th>
+                <th key={col} className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide border-b border-[#E0E0E0]">
+                  {col}
+                </th>
               ))}
             </tr>
           </thead>
@@ -816,7 +980,7 @@ function SemesterSetupChecklist({ onContinue }: { onContinue: () => void }) {
                   onClick={() => !item.disabled && setDone({ ...done, [item.id]: !done[item.id] })}
                   className={`w-7 h-7 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${done[item.id] ? "bg-green-500 border-green-500" : "border-gray-300"}`}
                 >
-                  {done[item.id] && <Check className="w-4 h-4 text-white" />}
+                  {done[item.id] && <CheckCircle className="w-4 h-4 text-white" />}
                 </button>
                 <div className={`w-10 h-10 ${item.bg} rounded-full flex items-center justify-center flex-shrink-0`}>
                   <Icon className={`w-5 h-5 ${item.color}`} />
@@ -894,16 +1058,26 @@ function HistoricalSummaryCard() {
 
 // ─── Main FinanceCenter Page ───────────────────────────────────────────────────
 export default function FinanceCenter() {
-  const { data: ledgerData, loading: ledgerLoading } = useOrgLedger(MOCK_ORG_ID);
+  const { profile } = useOfficerProfile();
+  const { data: orgs } = useOrganizationStream();
+
+  const activeOrgId = profile?.activeOrganizationId || '';
+  const currentOrg = orgs.find((o) => o.id === activeOrgId);
+  const activeOrgName = currentOrg ? currentOrg.name : 'My Organization';
+  const officerStudentId = profile?.studentId || 'officer';
+
+  const { data: ledgerData } = useOrgLedger(activeOrgId);
   const { data: semesters } = useSemesters();
-  const availableSemesters = semesters.filter(s => s.status === 'ACTIVE' || s.status === 'UPCOMING');
+  const availableSemesters = semesters.filter((s) => s.status === 'ACTIVE' || s.status === 'UPCOMING');
   const [selectedSemId, setSelectedSemId] = useState<string>("all");
+
+  const { data: payablesData } = useOrgPayables(activeOrgId, selectedSemId);
 
   const [activeTab, setActiveTab] = useState<FinanceTab>("budget");
   const [showTransition, setShowTransition] = useState(false);
   const [showSetup, setShowSetup] = useState(false);
 
-  const selectedSemesterObj = semesters.find(s => s.id === selectedSemId);
+  const selectedSemesterObj = semesters.find((s) => s.id === selectedSemId);
   const isPast = selectedSemesterObj?.status === 'COMPLETED';
 
   // Demo: simulate transition screens
@@ -925,26 +1099,27 @@ export default function FinanceCenter() {
       <div className="flex items-start justify-between">
         <div>
           <h2 className="text-2xl font-bold text-[#001A4D]">Finance Center</h2>
-          <p className="text-gray-500 text-sm">Finance &rsaquo; {activeTab === "budget" ? "Budget Tracker" : activeTab === "payables" ? "Student Payables" : "Liquidation Reports"}</p>
+          <p className="text-gray-500 text-sm">
+            Finance &rsaquo; {activeTab === "budget" ? "Budget Tracker" : activeTab === "payables" ? "Student Payables" : "Liquidation Reports"}
+            {activeOrgName && <span className="font-semibold ml-2 text-[#83358E]">({activeOrgName})</span>}
+          </p>
         </div>
         <div className="flex items-center gap-3">
-          
-            <select
-              value={selectedSemId}
-              onChange={(e) => setSelectedSemId(e.target.value)}
-              className="px-4 py-2 border border-[#E0E0E0] rounded-lg text-sm bg-white focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
-            >
-              <option value="all">All Semesters</option>
-              {availableSemesters.map(s => (
-                <option key={s.id} value={s.id}>{s.label}</option>
-              ))}
-            </select>
+          <select
+            value={selectedSemId}
+            onChange={(e) => setSelectedSemId(e.target.value)}
+            className="px-4 py-2 border border-[#E0E0E0] rounded-lg text-sm bg-white focus:ring-2 focus:ring-[#83358E] focus:border-transparent outline-none"
+          >
+            <option value="all">All Semesters</option>
+            {availableSemesters.map((s) => (
+              <option key={s.id} value={s.id}>{s.label}</option>
+            ))}
+          </select>
 
           <button className="px-4 py-2 bg-[#001A4D] text-white rounded-lg text-sm font-medium flex items-center gap-2 hover:bg-[#001A4D]/90 transition-colors">
             <Download className="w-4 h-4" />
             Export Financial Report
           </button>
-          {/* Demo trigger */}
           <button
             onClick={() => setShowTransition(true)}
             className="px-3 py-2 border border-gray-300 text-gray-500 rounded-lg text-xs hover:bg-gray-50 transition-colors"
@@ -972,7 +1147,7 @@ export default function FinanceCenter() {
       {isPast && <HistoricalSummaryCard />}
 
       {/* Metric Cards */}
-      <MetricsRow isPast={isPast} ledgerData={ledgerData} semesterId={selectedSemId} />
+      <MetricsRow isPast={isPast} ledgerData={ledgerData} semesterId={selectedSemId} payablesData={payablesData} />
 
       {/* Export row for past semester */}
       {isPast && (
@@ -1006,8 +1181,27 @@ export default function FinanceCenter() {
           ))}
         </div>
 
-        {activeTab === "budget" && <BudgetTrackerTab isPast={isPast} ledgerData={ledgerData} semesterId={selectedSemId} />}
-        {activeTab === "payables" && <StudentPayablesTab isPast={isPast} />}
+        {activeTab === "budget" && (
+          <BudgetTrackerTab
+            isPast={isPast}
+            ledgerData={ledgerData}
+            semesterId={selectedSemId}
+            organizationId={activeOrgId}
+            organizationName={activeOrgName}
+            officerStudentId={officerStudentId}
+          />
+        )}
+
+        {activeTab === "payables" && (
+          <StudentPayablesTab
+            isPast={isPast}
+            payables={payablesData}
+            organizationId={activeOrgId}
+            organizationName={activeOrgName}
+            officerStudentId={officerStudentId}
+          />
+        )}
+
         {activeTab === "liquidation" && <LiquidationTab isPast={isPast} />}
       </div>
     </div>
