@@ -1,4 +1,17 @@
-import { collection, addDoc, updateDoc, doc, serverTimestamp, writeBatch, getDocs, query } from 'firebase/firestore';
+import {
+  collection,
+  addDoc,
+  updateDoc,
+  setDoc,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  where,
+  serverTimestamp,
+  writeBatch,
+  Timestamp,
+} from 'firebase/firestore';
 import { db } from '../../../../services/firebase';
 import type { EventDocument, EventFormData } from '../types/event.types';
 import { STUDENTS_COLLECTION } from '../../students/services/student.service';
@@ -15,23 +28,139 @@ export const generateScannerCode = (): string => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
+/**
+ * Helper to generate student payables documents when an event with fees is approved/created
+ */
+export async function generatePayablesForEvent(
+  eventData: any,
+  eventId: string,
+  createdByUid: string
+): Promise<void> {
+  const feeAmount =
+    Number(eventData.adminFeeOverride) ||
+    Number(eventData.suggestedFeePerStudent) ||
+    Number(eventData.feeAmount) ||
+    Number(eventData.fee) ||
+    0;
+
+  if (!eventData.studentPayablesEnabled && feeAmount <= 0) {
+    console.log('[generatePayablesForEvent] Skipping: payables not enabled or fee is 0', {
+      studentPayablesEnabled: eventData.studentPayablesEnabled,
+      feeAmount,
+    });
+    return;
+  }
+
+  const assignedFee = feeAmount > 0 ? feeAmount : (Number(eventData.adminFeeOverride) || 0);
+
+  try {
+    // Check if payables already exist for this event to avoid duplication
+    const existingQ = query(collection(db, 'payables'), where('eventId', '==', eventId));
+    const existingSnap = await getDocs(existingQ);
+    if (!existingSnap.empty) {
+      console.log('[generatePayablesForEvent] Payables already exist for event:', eventId);
+      return;
+    }
+
+    const q = query(collection(db, STUDENTS_COLLECTION));
+    const snapshot = await getDocs(q);
+
+    const targetYearLevels = eventData.targetYearLevels || [];
+    const targetDeptIds = eventData.targetDepartmentIds || [];
+    const isAllStudents = eventData.targetAudience === 'all' || !eventData.targetAudience || (targetYearLevels.length === 0 && targetDeptIds.length === 0);
+
+    const studentsToCharge = snapshot.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((student: any) => {
+        // Accept students whose status is ACTIVE, active, or not explicitly INACTIVE/SUSPENDED/ARCHIVED
+        if (student.status && ['INACTIVE', 'SUSPENDED', 'ARCHIVED', 'RETURNED'].includes(String(student.status).toUpperCase())) {
+          return false;
+        }
+        if (isAllStudents) return true;
+
+        const matchesDept =
+          targetDeptIds.length === 0 || targetDeptIds.includes(student.departmentId);
+        const matchesYear =
+          targetYearLevels.length === 0 || targetYearLevels.includes(student.yearLevel);
+
+        return matchesDept && matchesYear;
+      });
+
+    console.log('[generatePayablesForEvent] Charging students count:', studentsToCharge.length, 'for event:', eventId);
+
+    if (studentsToCharge.length > 0) {
+      const chunks = [];
+      for (let i = 0; i < studentsToCharge.length; i += 500) {
+        chunks.push(studentsToCharge.slice(i, i + 500));
+      }
+
+      for (const chunk of chunks) {
+        const batch = writeBatch(db);
+        for (const student of chunk) {
+          const payableRef = doc(collection(db, 'payables'));
+          const studentFullName =
+            `${student.firstName || ''} ${student.lastName || ''}`.trim() ||
+            student.name ||
+            student.studentName ||
+            'Student';
+          const officialSchoolId =
+            student.studentId || student.schoolId || student.studentNumber || '';
+
+          batch.set(payableRef, {
+            id: payableRef.id,
+            studentId: student.id || student.authUid || student.studentId,
+            studentName: studentFullName,
+            studentSchoolId: officialSchoolId,
+            type: 'event_fee',
+            label: `Event Fee — ${eventData.title}`,
+            description: `Fee for event: ${eventData.title}`,
+            organizationId: eventData.hostingOrgId || null,
+            organizationName: null,
+            semesterId: eventData.semesterId || '',
+            eventId: eventId,
+            assignedAmount: assignedFee,
+            paidAmount: 0,
+            status: 'pending',
+            qrTicketUnlocked: false,
+            dueDate:
+              eventData.sessions && eventData.sessions[0]?.date
+                ? Timestamp.fromDate(new Date(eventData.sessions[0].date))
+                : null,
+            paidAt: null,
+            recordedBy: null,
+            paymentMethod: null,
+            createdBy: createdByUid,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+        }
+        await batch.commit();
+      }
+    }
+  } catch (err) {
+    console.error('[generatePayablesForEvent] Error generating payables:', err);
+  }
+}
+
 export const createEvent = async (
-  data: EventFormData, 
-  uid: string, 
-  draftId?: string, 
+  data: EventFormData,
+  uid: string,
+  draftId?: string,
   isOfficerProposal = false
 ): Promise<string> => {
   const refId = data.referenceId || generateReferenceId();
-  
+
   const scannerUserIds = data.scanners
-    ? data.scanners.map(s => s.officerUserId).filter((id): id is string => id !== null && id !== undefined)
+    ? data.scanners
+        .map((s) => s.officerUserId)
+        .filter((id): id is string => id !== null && id !== undefined)
     : [];
-  
+
   const eventPayload: Partial<EventDocument> = {
     ...data,
     referenceId: refId,
     scannerUserIds,
-    proposalStatus: isOfficerProposal ? 'pending' : 'approved', // SAO Admin creations are auto-approved, Officer proposals are pending
+    proposalStatus: isOfficerProposal ? 'pending' : 'approved',
     createdBy: uid,
     updatedAt: serverTimestamp() as any,
   };
@@ -39,7 +168,6 @@ export const createEvent = async (
   let docId = draftId;
 
   if (draftId) {
-    // Update existing draft document in-place so proposalStatus changes from 'draft' to 'approved' / 'pending'
     const docRef = doc(db, EVENTS_COLLECTION, draftId);
     await updateDoc(docRef, eventPayload);
   } else {
@@ -48,72 +176,19 @@ export const createEvent = async (
     docId = docRef.id;
   }
 
-  // Handle payables creation for approved events
-  if (eventPayload.proposalStatus === 'approved' && data.studentPayablesEnabled && data.adminFeeOverride && data.adminFeeOverride > 0) {
-    try {
-      const q = query(collection(db, STUDENTS_COLLECTION));
-      const snapshot = await getDocs(q);
-      
-      const targetYearLevels = data.targetYearLevels || [];
-      const targetDeptIds = data.targetDepartmentIds || [];
-      const isAllStudents = data.targetAudience === 'all';
-      
-      const studentsToCharge = snapshot.docs.map(d => d.data()).filter((student: any) => {
-        if (student.status !== 'ACTIVE') return false;
-        if (isAllStudents) return true;
-        
-        const matchesDept = targetDeptIds.length === 0 || targetDeptIds.includes(student.departmentId);
-        const matchesYear = targetYearLevels.length === 0 || targetYearLevels.includes(student.yearLevel);
-        
-        return matchesDept && matchesYear;
-      });
-
-      if (studentsToCharge.length > 0) {
-        const chunks = [];
-        for (let i = 0; i < studentsToCharge.length; i += 500) {
-          chunks.push(studentsToCharge.slice(i, i + 500));
-        }
-
-        for (const chunk of chunks) {
-          const batch = writeBatch(db);
-          for (const student of chunk) {
-            const payableRef = doc(collection(db, 'payables'));
-            batch.set(payableRef, {
-              id: payableRef.id,
-              studentId: student.id || student.studentId,
-              studentName: `${student.firstName || ''} ${student.lastName || ''}`.trim() || 'Student',
-              studentSchoolId: student.studentId || '',
-              type: 'event_fee',
-              label: `Event Fee — ${data.title}`,
-              description: `Fee for event: ${data.title}`,
-              organizationId: data.hostingOrgId || null,
-              organizationName: null,
-              semesterId: data.semesterId || '',
-              eventId: docId,
-              assignedAmount: data.adminFeeOverride,
-              paidAmount: 0,
-              status: 'pending',
-              dueDate: data.sessions && data.sessions[0]?.date ? Timestamp.fromDate(new Date(data.sessions[0].date)) : null,
-              paidAt: null,
-              recordedBy: null,
-              paymentMethod: null,
-              createdBy: uid,
-              createdAt: serverTimestamp(),
-              updatedAt: serverTimestamp()
-            });
-          }
-          await batch.commit();
-        }
-      }
-    } catch (err) {
-      console.error('[createEvent] Error generating payables:', err);
-    }
+  // Handle payables creation if event is auto-approved
+  if (eventPayload.proposalStatus === 'approved') {
+    await generatePayablesForEvent(eventPayload, docId!, uid);
   }
 
   return docId!;
 };
 
-export const saveEventDraft = async (data: EventFormData, uid: string, existingId?: string): Promise<string> => {
+export const saveEventDraft = async (
+  data: EventFormData,
+  uid: string,
+  existingId?: string
+): Promise<string> => {
   const eventPayload: Partial<EventDocument> = {
     ...data,
     proposalStatus: 'draft',
@@ -123,7 +198,7 @@ export const saveEventDraft = async (data: EventFormData, uid: string, existingI
 
   if (data.scanners) {
     eventPayload.scannerUserIds = data.scanners
-      .map(s => s.officerUserId)
+      .map((s) => s.officerUserId)
       .filter((id): id is string => id !== null && id !== undefined);
   }
 
@@ -148,6 +223,9 @@ export const approveEvent = async (
   remarks: string
 ): Promise<void> => {
   const ref = doc(db, EVENTS_COLLECTION, eventId);
+  const snap = await getDoc(ref);
+  const eventData = snap.exists() ? snap.data() : null;
+
   await updateDoc(ref, {
     proposalStatus: 'approved',
     approvedBy: adminUserId,
@@ -155,6 +233,14 @@ export const approveEvent = async (
     adviserRemarks: remarks || null,
     updatedAt: serverTimestamp(),
   });
+
+  if (eventData) {
+    await generatePayablesForEvent(
+      { ...eventData, proposalStatus: 'approved' },
+      eventId,
+      adminUserId
+    );
+  }
 };
 
 export const rejectEvent = async (

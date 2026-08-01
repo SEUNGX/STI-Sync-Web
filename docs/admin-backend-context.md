@@ -662,3 +662,33 @@ const transactions = rawTransactions.map((tx, idx, arr) => {
   return { ...tx, balance: runningBalance };
 });
 ```
+
+---
+
+## 12. Financial Liquidations Review & Certificate Management System
+
+### Financial Liquidations Review (`FinancialLiquidations.tsx`)
+- Service: `liquidation.service.ts`
+- Hook: `useLiquidationStream()`
+- Enables SAO Advisers to review officer-submitted liquidation reports, verify receipt documents lightbox previews, inspect variances against approved event budgets, and execute `approveLiquidation()`, `rejectLiquidation()`, or `returnLiquidation()` actions.
+
+### Certificate Management & PDF Export (`src/app/admin/components/certificates/`)
+- Services & Hooks: `certificate.service.ts`, `useCertificateStream.ts`
+- **Template Editor (`TemplateEditor.tsx`)**: Visual drag-and-drop canvas supporting landscape and portrait orientation, dynamic placeholder tokens (`{student_name}`, `{event_name}`, `{date}`, etc.), image overlays, and signatory canvas positioning.
+- **Certificate Issuance & Export (`ExportModal.tsx`, `GenerateCertificates.tsx`)**: Bulk PDF rendering via `jspdf` & `html2canvas` for landscape certificate generation and automatic issuance to student profiles.
+
+---
+
+## 13. Event Approval & Automated Payables Denormalization
+
+### Workflow (`EventProposalReview.tsx` & `event.service.ts`)
+- **Approval Action (`approveEvent`)**: When an SAO Admin approves an event proposal (`proposalStatus: 'approved'`), the system automatically invokes `generatePayablesForEvent()`.
+- **Targeted Student Matching**: Queries active students matching the event's target departments and year levels.
+- **Denormalized Roster Generation**: Each document written to `/payables` explicitly stores:
+  - `studentName`: Student's full name (e.g. `"Lei Concordia"`)
+  - `studentSchoolId`: Official 11-digit STI Student ID (e.g. `"02000123456"`)
+  - `qrTicketUnlocked`: `false` (Defaults to **Locked 🔒** until admin unlocks or records payment)
+- **In-Context Access & Sync**:
+  - Embedded **Student Payables & QR Access Control** panel inside [EventProposalReview.tsx](file:///c:/VSCODE%20PROJECTS/STI%20Sync%20Web/src/app/admin/components/EventProposalReview.tsx).
+  - Includes a **Sync Roster Data** button to backfill missing denormalized fields or generate roster records on existing test events.
+

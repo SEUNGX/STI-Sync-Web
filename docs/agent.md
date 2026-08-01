@@ -441,3 +441,9 @@ If you catch yourself doing any of the following, **stop and restructure:**
 | Importing from `"react-router-dom"` | Use `"react-router"` |
 | Creating admin-only toggle in officer component | Hide it entirely; officer must not see admin controls |
 | Skipping doc update after schema change | Update docs before finishing the task |
+
+---
+
+<!-- AGENT-UPDATED: 2026-08-01 — Documented student_payables, financial_liquidations, certificate_templates, issued_certificates, and organization profile services -->
+<!-- AGENT-UPDATED: 2026-08-01 — Implemented automated payables denormalization on event approval and database sync helper in EventPayablesQRControl -->
+

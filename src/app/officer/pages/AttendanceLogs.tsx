@@ -72,19 +72,20 @@ export default function AttendanceLogs() {
       })
       .map((evt) => {
         // Get matching attendance records
-        const evtAttendance = dbAttendance.filter(
-          (a) => a.eventId === evt.id || (a.event && a.event.toLowerCase() === evt.title.toLowerCase())
+        const evtTitle = evt.title || (evt as any).name || '';
+        const evtAttendance = (dbAttendance || []).filter(
+          (a) => a.eventId === evt.id || (a.event && evtTitle && String(a.event).toLowerCase() === String(evtTitle).toLowerCase())
         );
 
-        const orgObj = orgs.find((o) => o.id === evt.hostingOrgId);
+        const orgObj = (orgs || []).find((o) => o.id === evt.hostingOrgId);
         const orgName = orgObj ? orgObj.name : evt.hostingOrgId || 'Organization';
-        const orgInitials = orgObj ? (orgObj.acronym || orgObj.name.substring(0, 3).toUpperCase()) : 'ORG';
+        const orgInitials = orgObj ? (orgObj.acronym || (orgObj.name ? orgObj.name.substring(0, 3).toUpperCase() : 'ORG')) : 'ORG';
 
         const firstSessionDate = evt.sessions && evt.sessions.length > 0 ? evt.sessions[0].date : 'Date TBA';
 
         const formattedRecords: FormattedRecord[] = evtAttendance.map((rec) => {
           const initials = rec.name
-            ? rec.name.split(' ').map((n) => n[0]).join('').substring(0, 2).toUpperCase()
+            ? rec.name.split(' ').filter(Boolean).map((n) => n[0]).join('').substring(0, 2).toUpperCase()
             : 'ST';
 
           const isFlagged = rec.status === 'Flagged' || !!rec.flaggedReason;
@@ -100,7 +101,7 @@ export default function AttendanceLogs() {
             id: rec.id,
             studentName: rec.name || 'Unknown Student',
             studentId: rec.studentId || 'N/A',
-            course: 'BSIT',
+            course: (rec as any).course || 'BSIT',
             year: 'N/A',
             checkInTime: rec.checkIn === '—' ? null : rec.checkIn,
             checkOutTime: rec.checkOut === '—' ? null : rec.checkOut,
@@ -120,7 +121,7 @@ export default function AttendanceLogs() {
 
         return {
           id: evt.id,
-          title: evt.title,
+          title: evtTitle || 'Untitled Event',
           date: firstSessionDate,
           venue: evt.venueId || 'Venue TBA',
           hostingOrgId: evt.hostingOrgId,
@@ -149,11 +150,12 @@ export default function AttendanceLogs() {
   // Filtered student records for active event
   const filteredRecords = useMemo(() => {
     if (!currentEvent) return [];
+    const q = (searchQuery || '').toLowerCase();
     return currentEvent.records.filter((rec) => {
       const matchesSearch =
-        rec.studentName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        rec.studentId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        rec.course.toLowerCase().includes(searchQuery.toLowerCase());
+        (rec.studentName || '').toLowerCase().includes(q) ||
+        (rec.studentId || '').toLowerCase().includes(q) ||
+        (rec.course || '').toLowerCase().includes(q);
 
       const matchesStatus = statusFilter === 'all' || rec.status === statusFilter;
       return matchesSearch && matchesStatus;

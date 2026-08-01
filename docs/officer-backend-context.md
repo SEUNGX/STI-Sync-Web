@@ -699,14 +699,13 @@ useEffect(() => {
 | Create event proposal (draft) | ✅ | `useEventMutations().saveDraft()` |
 | Submit proposal for review | ✅ | `useEventMutations().submitProposal()` |
 | Approve/reject proposals | ❌ | Admin only |
-| Set `fastTrack` flag | ❌ | Admin only |
-| View org attendance logs | ✅ | `useAttendanceStream(orgId)` |
-| Scan QR codes at gate | ✅ | `useValidateGateAccess()` |
-| Write to `/attendance` | ✅ | Only when `qrTicketUnlocked === true` |
-| View org payables (read only) | ✅ | `usePayableStream(orgId)` |
-| Mark student as paid/unpaid | ❌ | Admin only |
-| Modify `qrTicketUnlocked` | ❌ | Admin only |
-| View org members | ✅ | `useMemberStream(orgId)` |
+| View org attendance logs | ✅ | `useAttendanceStream()` |
+| Scan QR codes at gate | ✅ | Mobile scanner / `useAttendanceStream` |
+| View & Manage student payables | ✅ | `usePayableStream()`, `createPayable()`, `recordPayment()` |
+| Generate member dues | ✅ | `payable.service.ts` (`GenerateDuesModal`) |
+| Submit Financial Liquidations | ✅ | `useLiquidationStream()`, `liquidation.service.ts` (`OfficerLiquidationModal`) |
+| Edit Org Profile & Logo | ✅ (Pres/VP/Sec) | `organization.service.ts` (`updateOrganization`) |
+| View org members | ✅ | `useOrgMembers(orgId)` |
 | View other org's data | ❌ | Blocked by `organizationId` filter |
 
 ---
@@ -716,9 +715,10 @@ useEffect(() => {
 | Hook | Collection | Filter | Purpose |
 |------|-----------|--------|---------|
 | `useOrgEvents(orgId)` | `events` | `organizationId === orgId` | Officer event list |
-| `useAttendanceStream(orgId, filters?)` | `attendance` | `organizationId === orgId` | Org attendance log |
-| `usePayableStream(orgId, eventId?)` | `payables` | `organizationId === orgId` | Org payables view |
-| `useMemberStream(orgId)` | `members` | `organizationId === orgId` | Member directory |
-| `useValidateGateAccess(...)` | `payables` + `attendance` | By event + student | QR gate validation engine |
+| `useAttendanceStream()` | `attendance` | `organizationId === orgId` | Org attendance log |
+| `usePayableStream()` | `student_payables` | `organizationId === orgId` | Real-time student payables & dues |
+| `useLiquidationStream()` | `financial_liquidations` | `organizationId === orgId` | Org event budget liquidations |
+| `useOrgMembers(orgId)` | `organization_members` | `organizationId === orgId` | Member directory & officer roster |
 
-All read hooks return `{ data, loading, error }`. All include `useEffect` cleanup. All enforce `organizationId` scoping.
+All read hooks return `{ data/payables/liquidations, loading, error }`. All include `useEffect` cleanup. All enforce `organizationId` scoping.
+

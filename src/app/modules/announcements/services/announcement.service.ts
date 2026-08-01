@@ -8,19 +8,21 @@ export const ANNOUNCEMENTS_COLLECTION = 'announcements';
 export const createAnnouncement = async (
   payload: CreateAnnouncementPayload,
   authorUid: string,
-  authorName: string
+  authorName: string,
+  authorRole?: string
 ): Promise<string> => {
   const docPayload: Partial<AnnouncementDocument> = {
     ...payload,
     authorUid,
     authorName,
+    authorRole: authorRole || payload.authorRole || null,
     createdAt: serverTimestamp() as any,
     updatedAt: serverTimestamp() as any,
   };
 
   const docRef = await addDoc(collection(db, ANNOUNCEMENTS_COLLECTION), docPayload);
   
-  // Dispatch a WebSocket message so connected officer panels can show an instant toast notification
+  // Dispatch a WebSocket message so connected officer/student panels can show an instant toast notification
   websocketHub.send({
     type: 'BROADCAST_ANNOUNCEMENT',
     payload: {
@@ -32,7 +34,7 @@ export const createAnnouncement = async (
         : payload.targetOrgIds
     },
     senderId: authorUid,
-    organizationId: null
+    organizationId: payload.organizationId || null
   });
 
   return docRef.id;

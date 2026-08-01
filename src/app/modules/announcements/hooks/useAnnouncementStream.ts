@@ -4,16 +4,12 @@ import { db } from '@/services/firebase';
 import type { AnnouncementDocument } from '../types/announcement.types';
 import { ANNOUNCEMENTS_COLLECTION } from '../services/announcement.service';
 
-export function useAnnouncementStream() {
+export function useAnnouncementStream(organizationId?: string | null) {
   const [announcements, setAnnouncements] = useState<AnnouncementDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
-    // Note: Firestore doesn't support sorting by boolean (pinned) then descending date easily without composite indexes.
-    // However, since we need pinned items first, we can just fetch all ordered by createdAt DESC,
-    // and sort them locally, or set up a composite index if there are many.
-    // For now, we'll fetch ordered by createdAt DESC and sort locally so pinned is at the top.
     const q = query(
       collection(db, ANNOUNCEMENTS_COLLECTION),
       orderBy('createdAt', 'desc')
@@ -22,13 +18,23 @@ export function useAnnouncementStream() {
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
-        const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AnnouncementDocument));
+        let docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AnnouncementDocument));
         
-        // Sort locally: pinned items first, then by createdAt (already ordered by createdAt from query)
+        // If an organizationId filter is provided (e.g. Officer context), filter for relevant announcements
+        if (organizationId) {
+          docs = docs.filter(a => {
+            const isCampusOrAllOrgs = a.audience === 'campus-wide' || a.audience === 'all-organizations';
+            const isTargetedToMyOrg = Array.isArray(a.targetOrgIds) && a.targetOrgIds.includes(organizationId);
+            const isMyOrgAuthored = a.organizationId === organizationId;
+            return isCampusOrAllOrgs || isTargetedToMyOrg || isMyOrgAuthored;
+          });
+        }
+
+        // Sort locally: pinned items first, then maintains createdAt desc
         const sorted = docs.sort((a, b) => {
           if (a.pinned && !b.pinned) return -1;
           if (!a.pinned && b.pinned) return 1;
-          return 0; // maintain original createdAt desc order for same pinned status
+          return 0;
         });
 
         setAnnouncements(sorted);
@@ -42,7 +48,7 @@ export function useAnnouncementStream() {
     );
 
     return () => unsubscribe();
-  }, []);
+  }, [organizationId]);
 
   return { announcements, loading, error };
 }

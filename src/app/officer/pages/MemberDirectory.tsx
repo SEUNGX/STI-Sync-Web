@@ -36,9 +36,10 @@ export default function MemberDirectory() {
 
   // Filter Members
   const filteredMembers = members.filter((member) => {
+    const q = (searchQuery || '').toLowerCase();
     const matchesSearch =
-      member.studentName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      member.studentId.includes(searchQuery);
+      (member.studentName || '').toLowerCase().includes(q) ||
+      (member.studentId || '').toLowerCase().includes(q);
     const matchesDepartment = filterDepartment === 'All' || member.department === filterDepartment;
     const matchesYear = filterYear === 'All' || member.year === filterYear;
     const matchesStatus = filterStatus === 'All' || member.status === filterStatus;
@@ -48,8 +49,9 @@ export default function MemberDirectory() {
   
   // Filter Officers
   const filteredOfficers = officers.filter((officer) => {
-    return officer.studentName.toLowerCase().includes(searchQuery.toLowerCase()) || 
-           officer.studentId.includes(searchQuery);
+    const q = (searchQuery || '').toLowerCase();
+    return (officer.studentName || '').toLowerCase().includes(q) || 
+           (officer.studentId || '').toLowerCase().includes(q);
   });
 
   const getInitials = (name: string) => name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();

@@ -547,10 +547,15 @@ interface OrganizationDocument {
   // ─── Identity ───
   id: string;                                   // Auto-generated Firestore document ID
   name: string;                                 // e.g., "Supreme Student Government"
-  acronym: string;                              // e.g., "SSG"
-  typeId: string;                               // FK → /organization_types
-  departmentId: string | 'cross-departmental';  // FK → /departments or sentinel value
+  departmentId: string | 'cross-departmental';  // FK → /departments or 'cross-departmental'
   description: string;
+
+  // ─── Academic & Department Scope ───
+  // Departmental clubs (e.g. IT Guild) belong to specific departments (e.g. IT Department: BSIT, BSCS, G11/G12 ICT).
+  // Cross-departmental clubs (e.g. Red Cross Youth - RCY) are open to students from any department.
+  scope: 'departmental' | 'cross-departmental';
+  allowedDepartmentIds?: string[];               // Target department IDs if scope === 'departmental'
+  allowedCourseIds?: string[];                   // Target course IDs if scope === 'departmental'
 
   // ─── Academic Context ───
   academicYear: string;                         // e.g., "2025-2026" — copied from active SemesterDocument
@@ -572,6 +577,7 @@ interface OrganizationDocument {
 - `status` ASC, `name` ASC — for admin org listing
 - `typeId` ASC, `status` ASC — for type-filtered views
 - `departmentId` ASC — for department grouping
+- `scope` ASC, `status` ASC — for filtering departmental vs cross-departmental clubs
 
 ---
 
@@ -1348,3 +1354,171 @@ interface EventDocumentFile {
 **Indexes Required:**
 - `proposalStatus` ASC, `createdAt` DESC
 - `hostingOrgId` ASC, `proposalStatus` ASC
+- `scannerUserIds` ARRAY_CONTAINS — for mobile scanner permission lookup
+
+---
+
+### 1.14 `payables` (also referenced as `student_payables`)
+
+**Path:** `/payables/{payableId}`
+
+Represents real-time student organizational fee obligations, event fees, dues, and QR ticket access control. Automatically generated during event proposal approval or officer fee assignment.
+
+```typescript
+interface PayableDocument {
+  // ─── Identity ───
+  id: string;                              // Auto-generated Firestore document ID
+  studentId: string;                       // Student Auth UID or document ID
+  studentName: string;                     // Denormalized student full name (e.g. "Lei Concordia")
+  studentSchoolId: string;                 // Official 11-digit STI Student ID (e.g. "02000123456")
+  organizationId: string | null;           // FK → /organizations (or null for SAO campus events)
+  organizationName?: string | null;
+  eventId?: string | null;                 // FK → /events (for event-specific fees)
+  semesterId: string;                      // FK → /semesters
+
+  // ─── Fee & Payment Status ───
+  type: 'membership_due' | 'event_fee' | 'org_fine' | 'admin_fine' | 'custom';
+  label: string;                           // e.g. "Event Fee — IT Week 2026"
+  description: string;
+  assignedAmount: number;                  // Total fee amount in PHP (₱)
+  paidAmount: number;                      // Total amount paid to date in PHP (₱)
+  status: 'pending' | 'partial' | 'paid' | 'overdue' | 'waived';
+  dueDate: Timestamp | null;
+
+  // ─── Payment Record & Gate Access ───
+  paidAt: Timestamp | null;
+  recordedBy: string | null;               // Officer or SAO Admin UID who recorded payment
+  paymentMethod: string | null;            // e.g. "cash"
+  qrTicketUnlocked?: boolean;              // Explicit gate control: true = student event QR ticket unlocked for scanner
+
+  // ─── Audit ───
+  createdBy: string;                       // Admin or Officer UID who created the record
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+```
+
+**Indexes Required:**
+- `eventId` ASC, `createdAt` DESC — for event payables roster
+- `organizationId` ASC, `status` ASC, `createdAt` DESC — for org payables center
+- `studentId` ASC, `status` ASC — for student payables view
+
+---
+
+### 1.15 `financial_liquidations`
+
+**Path:** `/financial_liquidations/{liquidationId}`
+
+Stores financial liquidation reports submitted by officers for event budget reconciliation.
+
+```typescript
+interface LiquidationReportDocument {
+  // ─── Identity ───
+  id: string;
+  title: string;                           // e.g. "Liquidation for IT Week 2026"
+  referenceNo: string;                     // e.g. "LIQ-2026-0001"
+  eventId: string;                         // FK → /events
+  eventName: string;
+  organizationId: string;                  // FK → /organizations
+  organizationName: string;
+
+  // ─── Submission Metadata ───
+  submittedBy: string;                     // Officer UID
+  submittedByName: string;
+  submittedAt: Timestamp | string;
+
+  // ─── Financial Summaries ───
+  totalBudgetApproved: number;
+  totalActualExpenses: number;
+  varianceAmount: number;                  // totalBudgetApproved - totalActualExpenses
+
+  // ─── Approval Status ───
+  status: 'draft' | 'pending_review' | 'approved' | 'returned' | 'rejected';
+  rejectionReason?: string;
+  adviserRemarks?: string;
+
+  // ─── Line Items & Attachments ───
+  expenses: LiquidationExpenseItem[];
+  attachedReceiptsCount: number;
+
+  // ─── Timestamps ───
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+interface LiquidationExpenseItem {
+  id: string;
+  category: string;                        // e.g. "Food", "Materials", "Transport"
+  description: string;
+  quantity: number;
+  unitCost: number;
+  totalAmount: number;
+  receiptUrl?: string;                     // Cloudinary image/PDF receipt URL
+  receiptNumber?: string;
+  supplierName?: string;
+  dateIncurred?: string;                   // ISO date string YYYY-MM-DD
+  isVerified?: boolean;
+}
+```
+
+**Indexes Required:**
+- `organizationId` ASC, `status` ASC, `createdAt` DESC
+- `status` ASC, `createdAt` DESC (Admin review queue)
+
+---
+
+### 1.16 `certificate_templates`
+
+**Path:** `/certificate_templates/{templateId}`
+
+Stores certificate layout designs created using the visual drag-and-drop template editor.
+
+```typescript
+interface CertificateTemplate {
+  id: string;
+  title: string;                           // e.g. "Certificate of Attendance Layout"
+  eventId?: string;                        // FK → /events (if associated with specific event)
+  eventName?: string;
+  organizationId?: string;                 // FK → /organizations
+  orientation: 'landscape' | 'portrait';
+  dimensions: { width: number; height: number };
+  elements: any[];                         // Array of text/image elements with canvas coordinates
+  bgImageUrl?: string;                     // Optional background template image URL
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+  createdBy: string;                       // SAO Adviser / Officer UID
+}
+```
+
+**Indexes Required:**
+- `organizationId` ASC, `createdAt` DESC
+- `eventId` ASC
+
+---
+
+### 1.17 `issued_certificates`
+
+**Path:** `/issued_certificates/{certificateId}`
+
+Stores certificates issued to students post-event.
+
+```typescript
+interface IssuedCertificate {
+  id: string;
+  certificateNumber: string;               // e.g. "CERT-2026-0001"
+  templateId: string;                      // FK → /certificate_templates
+  eventId: string;                         // FK → /events
+  eventName: string;
+  studentId: string;                       // FK → /students
+  studentName: string;
+  issueDate: Timestamp | string;
+  pdfUrl?: string;                         // Exported PDF document URL
+  qrCodeUrl?: string;                      // Verification QR code URL
+  organizationId: string;                  // FK → /organizations
+}
+```
+
+**Indexes Required:**
+- `studentId` ASC, `issueDate` DESC
+- `eventId` ASC, `studentId` ASC
+

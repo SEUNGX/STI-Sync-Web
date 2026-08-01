@@ -34,10 +34,11 @@ export interface PayableDocument {
   status: PayableStatus;
   dueDate: Timestamp | null;
 
-  // ─── Payment Record ───
+  // ─── Payment Record & QR Access Control ───
   paidAt: Timestamp | null;
   recordedBy: string | null;
   paymentMethod: string | null;
+  qrTicketUnlocked?: boolean;              // Explicit toggle: true = student event QR ticket unlocked for gate scan
 
   // ─── Audit ───
   createdBy: string;

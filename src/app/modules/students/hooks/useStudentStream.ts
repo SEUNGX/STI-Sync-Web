@@ -10,14 +10,17 @@ export function useStudents() {
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
-    const q = query(collection(db, STUDENTS_COLLECTION), orderBy('lastName', 'asc'));
+    const q = query(collection(db, STUDENTS_COLLECTION));
     const unsubscribe = onSnapshot(
       q,
       (snap) => {
-        setData(snap.docs.map(doc => doc.data() as StudentDocument));
+        const docs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as StudentDocument));
+        docs.sort((a, b) => (a.lastName || '').localeCompare(b.lastName || ''));
+        setData(docs);
         setLoading(false);
       },
       (err) => {
+        console.error('Error fetching students stream:', err);
         setError(err);
         setLoading(false);
       }

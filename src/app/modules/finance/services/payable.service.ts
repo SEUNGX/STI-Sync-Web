@@ -174,7 +174,8 @@ export async function recordPayment(
   payableId: string,
   paymentAmount: number,
   recordedBy: string,
-  paymentMethod: string = 'cash'
+  paymentMethod: string = 'cash',
+  unlockQRTicket?: boolean
 ): Promise<void> {
   const payableRef = doc(db, PAYABLES_COLLECTION, payableId);
   const snap = await getDoc(payableRef);
@@ -198,12 +199,29 @@ export async function recordPayment(
     newStatus = 'partial';
   }
 
-  await updateDoc(payableRef, {
+  const updates: Record<string, any> = {
     paidAmount: newPaidAmount,
     status: newStatus,
     paidAt: paidAtTimestamp,
     recordedBy,
     paymentMethod,
+    updatedAt: serverTimestamp(),
+  };
+
+  if (typeof unlockQRTicket === 'boolean') {
+    updates.qrTicketUnlocked = unlockQRTicket;
+  }
+
+  await updateDoc(payableRef, updates);
+}
+
+/**
+ * Explicitly toggle QR Ticket Unlock status (unlocked vs locked)
+ */
+export async function toggleQRTicketUnlock(payableId: string, unlocked: boolean): Promise<void> {
+  const payableRef = doc(db, PAYABLES_COLLECTION, payableId);
+  await updateDoc(payableRef, {
+    qrTicketUnlocked: unlocked,
     updatedAt: serverTimestamp(),
   });
 }

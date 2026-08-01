@@ -136,3 +136,44 @@ export function usePayableById(payableId: string | null) {
 
   return { data, loading, error };
 }
+
+export function useEventPayablesStream(eventId: string | null) {
+  const [data, setData] = useState<PayableDocument[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    if (!eventId) {
+      setData([]);
+      setLoading(false);
+      return;
+    }
+
+    const q = query(
+      collection(db, 'payables'),
+      where('eventId', '==', eventId)
+    );
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const docs = snapshot.docs.map((d) => ({
+          id: d.id,
+          ...d.data(),
+        })) as PayableDocument[];
+
+        setData(docs);
+        setLoading(false);
+      },
+      (err) => {
+        console.error('Error fetching event payables:', err);
+        setError(err);
+        setLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [eventId]);
+
+  return { data, loading, error };
+}

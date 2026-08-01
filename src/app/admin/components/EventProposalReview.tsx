@@ -4,13 +4,14 @@ import {
   Info, Calendar, Users, Shield, Receipt, FileText, History,
   ChevronDown, ChevronUp, Eye, Mail, MessageSquare, Send,
   Gavel, Check, X, AlertTriangle, AlertCircle, Rocket,
-  FileImage, Plus, Minus
+  FileImage, Plus, Minus, Coins
 } from 'lucide-react';
 import type { EventDocument } from '../../modules/events/types/event.types';
 import { approveEvent, rejectEvent, returnEvent } from '../../modules/events/services/event.service';
 import { useAdviserProfile } from '../../modules/auth/hooks/useAdviserProfile';
 import { useOrganizationStream } from '../../modules/organizations/hooks/useOrganizationStream';
 import { useEventTypesStream, useVenuesStream } from '../../modules/events/hooks/useEventConfigStream';
+import { EventPayablesQRControl } from '../../modules/finance/components/EventPayablesQRControl';
 
 interface EventProposalReviewProps {
   event: EventDocument;
@@ -239,12 +240,18 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
         <div className="w-[320px] flex-shrink-0 border-r border-[#E0E0E0] flex flex-col overflow-y-auto">
           <div className="p-5 space-y-5">
             {/* Nav list */}
+            {/* Nav list */}
             <div>
               <div className="flex items-center justify-between mb-3">
                 <span className="text-[#001A4D] font-bold text-sm">Proposal Sections</span>
               </div>
               <div className="space-y-1">
-                {NAV_SECTIONS.map(s => {
+                {[
+                  ...NAV_SECTIONS,
+                  ...(event.proposalStatus === 'approved' && event.studentPayablesEnabled !== false
+                    ? [{ id: 'payables', icon: Coins, label: 'Payables & QR Tickets', status: 'complete' }]
+                    : []),
+                ].map(s => {
                   const Icon = s.icon;
                   const isActive = activeSection === s.id;
                   const isVisited = visitedSections.has(s.id);
@@ -303,7 +310,7 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
 
         {/* CENTER COLUMN — Proposal Content */}
         <div ref={centerRef} className="flex-1 overflow-y-auto">
-          <div className="p-6 space-y-10 max-w-3xl">
+          <div className="p-6 space-y-10 w-full">
 
             {isDecided && (
               <div className={`p-4 rounded-xl border-l-4 ${decision === 'approved' ? 'bg-green-50 border-green-500' : decision === 'rejected' ? 'bg-red-50 border-red-500' : 'bg-amber-50 border-amber-500'}`}>
@@ -591,6 +598,22 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
                 </div>
               </div>
             </div>
+
+            {/* SECTION 8 — PAYABLES & QR ACCESS CONTROL */}
+            {event.proposalStatus === 'approved' && (
+              <div
+                ref={el => { sectionRefs.current['payables'] = el; }}
+                onMouseEnter={() => { setActiveSection('payables'); setVisitedSections(p => new Set([...p, 'payables'])); }}
+                className="pt-6"
+              >
+                <EventPayablesQRControl
+                  eventId={event.id}
+                  eventTitle={event.title}
+                  adminFeeAmount={event.adminFeeOverride}
+                  recordedByUid={profile?.uid || 'admin'}
+                />
+              </div>
+            )}
 
           </div>
         </div>
