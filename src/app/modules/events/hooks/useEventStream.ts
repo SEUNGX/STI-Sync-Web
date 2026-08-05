@@ -115,3 +115,58 @@ export function useDraftEvents() {
 
   return { drafts, loading, error };
 }
+
+export function useOrgEvents(orgId: string | null | undefined) {
+  const [events, setEvents] = useState<EventDocument[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    const q = collection(db, EVENTS_COLLECTION);
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        let fetched = snapshot.docs.map(
+          (doc) => ({ id: doc.id, ...doc.data() } as EventDocument)
+        );
+
+        if (orgId && orgId.trim()) {
+          const cleanOrgId = orgId.trim().toLowerCase();
+          fetched = fetched.filter((e: any) => {
+            const orgFields = [
+              e.hostingOrgId,
+              e.organizationId,
+              e.createdByOrgId,
+              e.orgId,
+              e.hostingOrgName,
+              e.orgName,
+            ];
+            return orgFields.some(
+              (f) => f && String(f).trim().toLowerCase().includes(cleanOrgId)
+            );
+          });
+        }
+
+        fetched.sort((a, b) => {
+          const aTime = (a.createdAt as any)?.seconds ?? (a.updatedAt as any)?.seconds ?? 0;
+          const bTime = (b.createdAt as any)?.seconds ?? (b.updatedAt as any)?.seconds ?? 0;
+          return bTime - aTime;
+        });
+
+        setEvents(fetched);
+        setLoading(false);
+      },
+      (err) => {
+        console.error('[useOrgEvents] Error streaming org events:', err);
+        setError(err);
+        setLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [orgId]);
+
+  return { events, loading, error };
+}
+

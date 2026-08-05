@@ -2,6 +2,7 @@ import {
   collection,
   addDoc,
   updateDoc,
+  deleteDoc,
   setDoc,
   doc,
   getDoc,
@@ -12,6 +13,7 @@ import {
   writeBatch,
   Timestamp,
 } from 'firebase/firestore';
+
 import { db } from '../../../../services/firebase';
 import type { EventDocument, EventFormData } from '../types/event.types';
 import { STUDENTS_COLLECTION } from '../../students/services/student.service';
@@ -278,3 +280,9 @@ export const returnEvent = async (
     updatedAt: serverTimestamp(),
   });
 };
+
+export const deleteEvent = async (eventId: string): Promise<void> => {
+  const ref = doc(db, EVENTS_COLLECTION, eventId);
+  await deleteDoc(ref);
+};
+

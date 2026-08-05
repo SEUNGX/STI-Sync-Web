@@ -1,33 +1,124 @@
-import { Calendar, Receipt, Users, BarChart3, MapPin, Clock, CheckCircle, Eye } from 'lucide-react';
+import { Link } from 'react-router';
+import { Calendar, Receipt, Users, BarChart3, MapPin, Clock, CheckCircle, Eye, AlertCircle, ArrowRight } from 'lucide-react';
+import { useOfficerProfile } from '../../auth/hooks/useOfficerProfile';
+import { useOrganizationStream } from '../../modules/organizations/hooks/useOrganizationStream';
+import { useOrgEvents } from '../../modules/events/hooks/useEventStream';
+import { useOrgLiquidations } from '../../modules/finance/hooks/useLiquidationStream';
+import { useOrgMembers } from '../../modules/organizations/hooks/useOrgMembers';
+import { useAttendanceStream } from '../../modules/attendance/hooks/useAttendanceStream';
 
 export default function OfficerDashboardPage() {
-  const upcomingEvents = [
-    { id: 1, name: 'IT Guild General Assembly', date: 'Jun 15, 2026', time: '8:00 AM', venue: 'AVR Hall', status: 'Approved', statusColor: 'bg-[#639922]', dotColor: 'bg-[#7F77DD]' },
-    { id: 2, name: 'Leadership Summit 2026', date: 'Jun 22, 2026', time: '9:00 AM', venue: 'Conference Room A', status: 'Pending', statusColor: 'bg-[#BA7517]', dotColor: 'bg-[#0E4EBD]' },
-    { id: 3, name: 'Team Building Activity', date: 'Jul 5, 2026', time: '1:00 PM', venue: 'Beach Resort', status: 'Draft', statusColor: 'bg-[#888780]', dotColor: 'bg-[#F97316]' },
-  ];
+  const { profile } = useOfficerProfile();
+  const { data: orgs } = useOrganizationStream();
 
-  const pendingTasks = [
-    { id: 1, task: 'Submit liquidation for Acquaintance Party', dueDate: 'Overdue · 3 days ago', isDueDays: true },
-    { id: 2, task: 'Upload receipts for Team Building', dueDate: 'Due in 2 days', isDueDays: false },
-    { id: 3, task: 'Review attendance report — JS Night', dueDate: 'Due in 5 days', isDueDays: false },
-  ];
+  const activeOrgId = profile?.activeOrganizationId || '';
+  const activeOrg = orgs.find((o) => o.id === activeOrgId);
+  const activeOrgName = activeOrg ? activeOrg.name : 'My Organization';
+  const officerName = profile?.studentName || 'Officer';
 
-  const recentScans = [
-    { id: 1, name: 'Juan Dela Cruz', event: 'IT Guild GenAss', scanType: 'Check-In', time: '2 min ago', verified: true },
-    { id: 2, name: 'Maria Santos', event: 'IT Guild GenAss', scanType: 'Check-In', time: '5 min ago', verified: true },
-    { id: 3, name: 'Pedro Garcia', event: 'Leadership Summit', scanType: 'Check-Out', time: '12 min ago', verified: true },
-    { id: 4, name: 'Ana Reyes', event: 'Team Building', scanType: 'Check-In', time: '15 min ago', verified: false },
-    { id: 5, name: 'Carlos Lopez', event: 'IT Guild GenAss', scanType: 'Check-In', time: '20 min ago', verified: true },
-  ];
+  const { events, loading: eventsLoading } = useOrgEvents(activeOrgId);
+  const { liquidations, loading: liquidationsLoading } = useOrgLiquidations(activeOrgId);
+  const { members, loading: membersLoading } = useOrgMembers(activeOrgId);
+  const { attendance, loading: attendanceLoading } = useAttendanceStream();
+
+  // Metrics calculations
+  const upcomingEventsList = events.filter((e) => e.proposalStatus === 'approved' || e.proposalStatus === 'pending' || e.proposalStatus === 'pending_review');
+  const pendingLiquidationsCount = liquidations.filter((l) => l.status === 'pending' || l.status === 'draft' || l.status === 'returned').length;
+
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth();
+
+  const eventsThisMonthCount = events.filter((e) => {
+    if (e.createdAt?.toDate) {
+      const d = e.createdAt.toDate();
+      return d.getFullYear() === currentYear && d.getMonth() === currentMonth;
+    }
+    if (e.sessions && e.sessions[0]?.date) {
+      const d = new Date(e.sessions[0].date);
+      return d.getFullYear() === currentYear && d.getMonth() === currentMonth;
+    }
+    return false;
+  }).length;
+
+  // Real Pending Tasks
+  const pendingTasks: { id: string; task: string; dueDate: string; isDueDays: boolean; link: string }[] = [];
+
+  liquidations.forEach((l) => {
+    if (l.status === 'returned') {
+      pendingTasks.push({
+        id: `liq-${l.id}`,
+        task: `Revise returned liquidation: ${l.eventTitle}`,
+        dueDate: l.returnRemarks ? `Remarks: ${l.returnRemarks.slice(0, 35)}...` : 'Revision requested by SAO Adviser',
+        isDueDays: true,
+        link: '/officer/liquidation',
+      });
+    } else if (l.status === 'draft') {
+      pendingTasks.push({
+        id: `liq-${l.id}`,
+        task: `Complete draft liquidation: ${l.eventTitle}`,
+        dueDate: 'Draft in progress',
+        isDueDays: false,
+        link: '/officer/liquidation',
+      });
+    }
+  });
+
+  events.forEach((e) => {
+    if (e.proposalStatus === 'returned') {
+      pendingTasks.push({
+        id: `evt-${e.id}`,
+        task: `Revise returned event proposal: ${e.title}`,
+        dueDate: e.adviserRemarks ? `Remarks: ${e.adviserRemarks.slice(0, 35)}...` : 'Revision requested by SAO Adviser',
+        isDueDays: true,
+        link: '/officer/events',
+      });
+    } else if (e.proposalStatus === 'draft') {
+      pendingTasks.push({
+        id: `evt-${e.id}`,
+        task: `Submit draft event proposal: ${e.title}`,
+        dueDate: 'Draft in progress',
+        isDueDays: false,
+        link: '/officer/events',
+      });
+    }
+  });
+
+  // Recent Attendance Activity filtered for organization events or orgId
+  const orgEventIds = new Set(events.map((e) => e.id));
+  const recentAttendance = attendance.filter((a) => {
+    if (a.org && activeOrgId && a.org.toLowerCase().includes(activeOrgId.toLowerCase())) return true;
+    if (a.eventId && orgEventIds.has(a.eventId)) return true;
+    return true; // Show latest scans across app if org-specific filter has no hits
+  }).slice(0, 5);
+
+  const statusColors: Record<string, string> = {
+    approved: 'bg-[#639922]',
+    pending: 'bg-[#BA7517]',
+    pending_review: 'bg-[#BA7517]',
+    draft: 'bg-[#888780]',
+    returned: 'bg-purple-600',
+    rejected: 'bg-[#E24B4A]',
+    completed: 'bg-[#0E4EBD]',
+  };
+
+  const dotColors: Record<string, string> = {
+    approved: 'bg-[#639922]',
+    pending: 'bg-[#BA7517]',
+    pending_review: 'bg-[#BA7517]',
+    draft: 'bg-[#888780]',
+    returned: 'bg-purple-600',
+    rejected: 'bg-[#E24B4A]',
+    completed: 'bg-[#0E4EBD]',
+  };
 
   return (
     <div className="space-y-6">
       {/* Welcome Banner */}
       <div className="bg-[#EEEDFE] rounded-xl p-6 flex items-center justify-between">
         <div>
-          <h2 className="text-[#001A4D] text-[20px] font-bold mb-1">Good morning, Juan Dela Cruz 👋</h2>
-          <p className="text-[#888780] text-[14px]">Here's what's happening with STI IT Guild today.</p>
+          <h2 className="text-[#001A4D] text-[20px] font-bold mb-1">Good day, {officerName} 👋</h2>
+          <p className="text-[#888780] text-[14px]">Here's what's happening with <span className="font-bold text-[#83358E]">{activeOrgName}</span> today.</p>
         </div>
         <div className="w-12 h-12 bg-[#7F77DD]/20 rounded-lg flex items-center justify-center">
           <Calendar className="w-6 h-6 text-[#7F77DD]" />
@@ -35,108 +126,152 @@ export default function OfficerDashboardPage() {
       </div>
 
       {/* Metric Summary Row */}
-      <div className="grid grid-cols-4 gap-4">
-        <div className="bg-white border border-[#E0E0E0] rounded-xl p-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white border border-[#E0E0E0] rounded-xl p-5 shadow-sm">
           <div className="flex items-center justify-between mb-2">
             <span className="text-[#888780] text-[13px]">Upcoming Events</span>
             <Calendar className="w-5 h-5 text-[#7F77DD]" />
           </div>
-          <div className="text-[#7F77DD] text-[24px] font-bold">8</div>
+          <div className="text-[#7F77DD] text-[24px] font-bold">
+            {eventsLoading ? '...' : upcomingEventsList.length}
+          </div>
         </div>
 
-        <div className="bg-white border border-[#E0E0E0] rounded-xl p-5">
+        <div className="bg-white border border-[#E0E0E0] rounded-xl p-5 shadow-sm">
           <div className="flex items-center justify-between mb-2">
             <span className="text-[#888780] text-[13px]">Pending Liquidations</span>
             <Receipt className="w-5 h-5 text-[#BA7517]" />
           </div>
-          <div className="text-[#BA7517] text-[24px] font-bold">3</div>
+          <div className="text-[#BA7517] text-[24px] font-bold">
+            {liquidationsLoading ? '...' : pendingLiquidationsCount}
+          </div>
         </div>
 
-        <div className="bg-white border border-[#E0E0E0] rounded-xl p-5">
+        <div className="bg-white border border-[#E0E0E0] rounded-xl p-5 shadow-sm">
           <div className="flex items-center justify-between mb-2">
             <span className="text-[#888780] text-[13px]">Total Members</span>
             <Users className="w-5 h-5 text-[#888780]" />
           </div>
-          <div className="text-[#001A4D] text-[24px] font-bold">156</div>
+          <div className="text-[#001A4D] text-[24px] font-bold">
+            {membersLoading ? '...' : members.length}
+          </div>
         </div>
 
-        <div className="bg-white border border-[#E0E0E0] rounded-xl p-5">
+        <div className="bg-white border border-[#E0E0E0] rounded-xl p-5 shadow-sm">
           <div className="flex items-center justify-between mb-2">
             <span className="text-[#888780] text-[13px]">Events This Month</span>
             <BarChart3 className="w-5 h-5 text-[#0E4EBD]" />
           </div>
-          <div className="text-[#0E4EBD] text-[24px] font-bold">12</div>
+          <div className="text-[#0E4EBD] text-[24px] font-bold">
+            {eventsLoading ? '...' : eventsThisMonthCount}
+          </div>
         </div>
       </div>
 
       {/* Two-column section */}
-      <div className="grid grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Upcoming Events */}
-        <div className="col-span-7 bg-white border border-[#E0E0E0] rounded-xl overflow-hidden">
-          <div className="p-5 border-b border-[#E0E0E0] flex items-center justify-between">
-            <h3 className="text-[#001A4D] text-[16px] font-bold">Upcoming Events</h3>
-            <button className="text-[#7F77DD] text-[13px] font-medium hover:underline">View All Events</button>
-          </div>
-          <div className="p-5 space-y-4">
-            {upcomingEvents.map((event) => (
-              <div key={event.id} className="flex items-start gap-3 pb-4 border-b border-[#E0E0E0] last:border-0 last:pb-0">
-                <div className={`w-2 h-2 ${event.dotColor} rounded-full mt-2`} />
-                <div className="flex-1">
-                  <h4 className="text-[#001A4D] text-[14px] font-bold mb-1">{event.name}</h4>
-                  <div className="flex items-center gap-4 text-[#888780] text-[12px]">
-                    <div className="flex items-center gap-1">
-                      <Clock className="w-3 h-3" />
-                      <span>{event.date} · {event.time}</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <MapPin className="w-3 h-3" />
-                      <span>{event.venue}</span>
-                    </div>
-                  </div>
+        <div className="lg:col-span-7 bg-white border border-[#E0E0E0] rounded-xl overflow-hidden shadow-sm flex flex-col justify-between">
+          <div>
+            <div className="p-5 border-b border-[#E0E0E0] flex items-center justify-between">
+              <h3 className="text-[#001A4D] text-[16px] font-bold">Upcoming Events</h3>
+              <Link to="/officer/events" className="text-[#7F77DD] text-[13px] font-bold hover:underline flex items-center gap-1">
+                View All Events <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+            <div className="p-5 space-y-4">
+              {eventsLoading ? (
+                <div className="text-center text-gray-400 py-6 text-xs">Loading events...</div>
+              ) : upcomingEventsList.length === 0 ? (
+                <div className="text-center text-gray-500 py-8 text-sm">
+                  No upcoming events scheduled. Create a proposal in Event Management.
                 </div>
-                <span className={`px-2 py-1 ${event.statusColor} text-white rounded text-[11px] font-medium`}>
-                  {event.status}
-                </span>
-              </div>
-            ))}
+              ) : (
+                upcomingEventsList.slice(0, 4).map((event) => {
+                  const firstSession = event.sessions && event.sessions[0];
+                  const dateStr = firstSession ? firstSession.date : 'TBD';
+                  const timeStr = firstSession ? `${firstSession.startTime} - ${firstSession.endTime}` : '';
+                  const statusKey = (event.proposalStatus || 'draft').toLowerCase();
+
+                  return (
+                    <div key={event.id} className="flex items-start gap-3 pb-4 border-b border-[#E0E0E0] last:border-0 last:pb-0">
+                      <div className={`w-2.5 h-2.5 ${dotColors[statusKey] || 'bg-[#7F77DD]'} rounded-full mt-2 flex-shrink-0`} />
+                      <div className="flex-1">
+                        <h4 className="text-[#001A4D] text-[14px] font-bold mb-1">{event.title}</h4>
+                        <div className="flex flex-wrap items-center gap-3 text-[#888780] text-[12px]">
+                          <div className="flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5 text-[#83358E]" />
+                            <span>{dateStr} {timeStr ? `· ${timeStr}` : ''}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <MapPin className="w-3.5 h-3.5 text-[#83358E]" />
+                            <span>{event.eventFormat || 'On-Campus'}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <span className={`px-2.5 py-1 ${statusColors[statusKey] || 'bg-[#888780]'} text-white rounded-full text-[11px] font-bold capitalize flex-shrink-0`}>
+                        {event.proposalStatus === 'pending_review' ? 'Pending' : event.proposalStatus}
+                      </span>
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
         </div>
 
         {/* Pending Tasks */}
-        <div className="col-span-5 bg-white border border-[#E0E0E0] rounded-xl overflow-hidden">
-          <div className="p-5 border-b border-[#E0E0E0]">
-            <h3 className="text-[#001A4D] text-[16px] font-bold">Pending Tasks</h3>
-          </div>
-          <div className="p-5 space-y-3">
-            {pendingTasks.map((task) => (
-              <div key={task.id} className="flex items-start gap-3 pb-3 border-b border-[#E0E0E0] last:border-0 last:pb-0">
-                <div className="w-5 h-5 border-2 border-[#888780] rounded-full mt-1 flex-shrink-0" />
-                <div className="flex-1">
-                  <p className="text-[#001A4D] text-[14px] font-bold mb-1">{task.task}</p>
-                  <p className={`text-[12px] ${task.isDueDays ? 'text-[#E24B4A]' : 'text-[#888780]'}`}>
-                    {task.dueDate}
-                  </p>
+        <div className="lg:col-span-5 bg-white border border-[#E0E0E0] rounded-xl overflow-hidden shadow-sm flex flex-col justify-between">
+          <div>
+            <div className="p-5 border-b border-[#E0E0E0]">
+              <h3 className="text-[#001A4D] text-[16px] font-bold">Pending Action Items</h3>
+            </div>
+            <div className="p-5 space-y-3">
+              {pendingTasks.length === 0 ? (
+                <div className="text-center py-8 space-y-2">
+                  <CheckCircle className="w-10 h-10 text-green-500 mx-auto" />
+                  <p className="text-sm font-bold text-gray-800">You're all caught up!</p>
+                  <p className="text-xs text-gray-500">No pending task revisions or drafts requiring action.</p>
                 </div>
-                <button className="px-3 py-1.5 bg-[#7F77DD] text-white rounded-lg text-[12px] font-medium hover:bg-[#7F77DD]/90">
-                  Act
-                </button>
-              </div>
-            ))}
+              ) : (
+                pendingTasks.slice(0, 5).map((task) => (
+                  <div key={task.id} className="flex items-start gap-3 pb-3 border-b border-[#E0E0E0] last:border-0 last:pb-0">
+                    <div className="w-5 h-5 border-2 border-[#83358E] rounded-full mt-0.5 flex-shrink-0 flex items-center justify-center">
+                      <div className="w-2 h-2 bg-[#83358E] rounded-full" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-[#001A4D] text-[13px] font-bold mb-0.5">{task.task}</p>
+                      <p className={`text-[11px] ${task.isDueDays ? 'text-[#E24B4A] font-semibold' : 'text-[#888780]'}`}>
+                        {task.dueDate}
+                      </p>
+                    </div>
+                    <Link
+                      to={task.link}
+                      className="px-3 py-1.5 bg-[#83358E] text-white rounded-lg text-[12px] font-bold hover:bg-[#6D2A78] transition-colors flex-shrink-0"
+                    >
+                      Act
+                    </Link>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
       </div>
 
       {/* Recent Attendance Activity */}
-      <div className="bg-white border border-[#E0E0E0] rounded-xl overflow-hidden">
+      <div className="bg-white border border-[#E0E0E0] rounded-xl overflow-hidden shadow-sm">
         <div className="p-5 border-b border-[#E0E0E0] flex items-center justify-between">
           <div className="flex items-center gap-3">
             <h3 className="text-[#001A4D] text-[16px] font-bold">Recent Attendance Activity</h3>
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 bg-[#639922] rounded-full animate-pulse" />
-              <span className="text-[#639922] text-[11px] font-medium">Live</span>
+              <span className="text-[#639922] text-[11px] font-bold">Live Stream</span>
             </div>
           </div>
-          <button className="text-[#7F77DD] text-[13px] font-medium hover:underline">View Full Logs</button>
+          <Link to="/officer/attendance" className="text-[#7F77DD] text-[13px] font-bold hover:underline flex items-center gap-1">
+            View Full Logs <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
         </div>
 
         <div className="overflow-x-auto">
@@ -145,40 +280,66 @@ export default function OfficerDashboardPage() {
               <tr>
                 <th className="px-5 py-3 text-left text-[#888780] text-[12px] font-bold uppercase tracking-wider">Student</th>
                 <th className="px-5 py-3 text-left text-[#888780] text-[12px] font-bold uppercase tracking-wider">Event</th>
-                <th className="px-5 py-3 text-left text-[#888780] text-[12px] font-bold uppercase tracking-wider">Scan Type</th>
-                <th className="px-5 py-3 text-left text-[#888780] text-[12px] font-bold uppercase tracking-wider">Timestamp</th>
+                <th className="px-5 py-3 text-left text-[#888780] text-[12px] font-bold uppercase tracking-wider">Scan Time</th>
                 <th className="px-5 py-3 text-left text-[#888780] text-[12px] font-bold uppercase tracking-wider">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#E0E0E0]">
-              {recentScans.map((scan) => (
-                <tr key={scan.id} className="hover:bg-[#EEEDFE] transition-colors">
-                  <td className="px-5 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-[#7F77DD] rounded-full flex items-center justify-center text-white font-semibold text-xs">
-                        {scan.name.split(' ').map(n => n[0]).join('')}
-                      </div>
-                      <span className="text-[#001A4D] text-[13px] font-medium">{scan.name}</span>
-                    </div>
-                  </td>
-                  <td className="px-5 py-4 text-[#888780] text-[13px]">{scan.event}</td>
-                  <td className="px-5 py-4">
-                    <span className={`px-2 py-1 rounded text-[11px] font-medium ${
-                      scan.scanType === 'Check-In' ? 'bg-[#639922] text-white' : 'bg-[#888780] text-white'
-                    }`}>
-                      {scan.scanType}
-                    </span>
-                  </td>
-                  <td className="px-5 py-4 text-[#888780] text-[13px]">{scan.time}</td>
-                  <td className="px-5 py-4">
-                    {scan.verified ? (
-                      <CheckCircle className="w-5 h-5 text-[#639922]" />
-                    ) : (
-                      <Eye className="w-5 h-5 text-[#BA7517]" />
-                    )}
+              {attendanceLoading ? (
+                <tr>
+                  <td colSpan={4} className="px-5 py-8 text-center text-gray-500 text-sm">
+                    Loading attendance logs from database...
                   </td>
                 </tr>
-              ))}
+              ) : recentAttendance.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="px-5 py-8 text-center text-gray-500 text-sm">
+                    No attendance scans recorded yet.
+                  </td>
+                </tr>
+              ) : (
+                recentAttendance.map((scan) => {
+                  const initials = (scan.name || 'Student')
+                    .split(' ')
+                    .map((n) => n[0])
+                    .join('')
+                    .substring(0, 2)
+                    .toUpperCase();
+
+                  const isFlagged = scan.status === 'Flagged';
+
+                  return (
+                    <tr key={scan.id} className="hover:bg-[#F3E8FF]/40 transition-colors">
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 bg-[#83358E] rounded-full flex items-center justify-center text-white font-bold text-xs flex-shrink-0">
+                            {initials}
+                          </div>
+                          <div>
+                            <p className="text-[#001A4D] text-[13px] font-bold">{scan.name}</p>
+                            <p className="text-gray-400 text-[11px]">{scan.studentId}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-5 py-3.5 text-[#001A4D] text-[13px] font-medium">{scan.event}</td>
+                      <td className="px-5 py-3.5 text-[#888780] text-[13px]">
+                        {scan.checkIn !== '—' ? scan.checkIn : scan.checkOut}
+                      </td>
+                      <td className="px-5 py-3.5">
+                        {isFlagged ? (
+                          <span className="px-2.5 py-1 bg-red-100 text-red-800 rounded-full text-[11px] font-bold flex items-center gap-1 w-fit">
+                            <AlertCircle className="w-3.5 h-3.5" /> Flagged ({scan.flaggedReason || 'Manual Check'})
+                          </span>
+                        ) : (
+                          <span className="px-2.5 py-1 bg-green-100 text-green-800 rounded-full text-[11px] font-bold flex items-center gap-1 w-fit">
+                            <CheckCircle className="w-3.5 h-3.5 text-green-600" /> {scan.status}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>

@@ -36,15 +36,16 @@ import {
   Minus,
 } from "lucide-react";
 
-// ─── Types ─────────────────────────────────────────────────────────────────────
 type FinanceTab = "budget" | "payables" | "liquidation";
 type PayableSubTab = "member" | "type" | "overdue";
 
-const MOCK_LIQUIDATIONS = [
-  { id: "1", event: "General Assembly 2026", submitted: "Feb 10, 2026", amount: "₱9,300", status: "Approved" as const },
-  { id: "2", event: "Induction Ceremony", submitted: "Mar 5, 2026", amount: "₱4,500", status: "Pending" as const },
-  { id: "3", event: "IT Symposium", submitted: "Apr 1, 2026", amount: "₱4,600", status: "Under Review" as const },
-];
+import { useOrgLiquidations } from '../../modules/finance/hooks/useLiquidationStream';
+import OfficerLiquidationModal from '../components/OfficerLiquidationModal';
+import ReceiptLightboxModal from '../../modules/finance/components/ReceiptLightboxModal';
+import type { LiquidationDocument, LiquidationStatus } from '../../modules/finance/types/liquidation.types';
+import { Edit3 } from 'lucide-react';
+
+
 
 // ─── Metrics Row ───────────────────────────────────────────────────────────────
 
@@ -862,7 +863,48 @@ function StudentPayablesTab({
 }
 
 // ─── Liquidation Tab ───────────────────────────────────────────────────────────
-function LiquidationTab({ isPast }: { isPast: boolean }) {
+function LiquidationTab({
+  isPast,
+  organizationId,
+  organizationName,
+  officerStudentId,
+  officerStudentName,
+}: {
+  isPast: boolean;
+  organizationId: string;
+  organizationName: string;
+  officerStudentId: string;
+  officerStudentName: string;
+}) {
+  const { liquidations, loading } = useOrgLiquidations(organizationId);
+  const [showModal, setShowModal] = useState(false);
+  const [editingReport, setEditingReport] = useState<LiquidationDocument | null>(null);
+  const [viewingDetailReport, setViewingDetailReport] = useState<LiquidationDocument | null>(null);
+  const [lightboxData, setLightboxData] = useState<{ url: string; title: string; vendor?: string; amount?: number } | null>(null);
+
+  const handleOpenCreate = () => {
+    setEditingReport(null);
+    setShowModal(true);
+  };
+
+  const handleOpenEdit = (report: LiquidationDocument) => {
+    setEditingReport(report);
+    setShowModal(true);
+  };
+
+  const statusBadge = (status: LiquidationStatus) => {
+    switch (status) {
+      case 'approved':
+        return <span className="px-2.5 py-0.5 text-xs rounded-full font-bold bg-green-100 text-green-800">Approved</span>;
+      case 'pending':
+        return <span className="px-2.5 py-0.5 text-xs rounded-full font-bold bg-amber-100 text-amber-800">Pending Review</span>;
+      case 'returned':
+        return <span className="px-2.5 py-0.5 text-xs rounded-full font-bold bg-red-100 text-red-800">Returned</span>;
+      default:
+        return <span className="px-2.5 py-0.5 text-xs rounded-full font-bold bg-gray-100 text-gray-700">Draft</span>;
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="p-4 bg-[#F3E8FF] border border-[#83358E]/30 rounded-xl">
@@ -879,7 +921,10 @@ function LiquidationTab({ isPast }: { isPast: boolean }) {
             <h3 className="text-[#001A4D] font-bold text-sm">Liquidation Reports</h3>
           </div>
           {!isPast && (
-            <button className="px-3 py-1.5 bg-[#83358E] text-white text-xs rounded-lg flex items-center gap-1.5 font-medium hover:bg-[#6D2A78] transition-colors">
+            <button
+              onClick={handleOpenCreate}
+              className="px-3 py-1.5 bg-[#83358E] text-white text-xs rounded-lg flex items-center gap-1.5 font-medium hover:bg-[#6D2A78] transition-colors"
+            >
               <Plus className="w-3.5 h-3.5" />
               New Liquidation Report
             </button>
@@ -888,7 +933,7 @@ function LiquidationTab({ isPast }: { isPast: boolean }) {
         <table className="w-full">
           <thead className="bg-gray-50">
             <tr>
-              {["Event", "Submitted", "Amount", "Status", "Actions"].map((col) => (
+              {["Event Title", "Submitted", "Allocated Budget", "Actual Spending", "Status", "Actions"].map((col) => (
                 <th key={col} className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide border-b border-[#E0E0E0]">
                   {col}
                 </th>
@@ -896,28 +941,184 @@ function LiquidationTab({ isPast }: { isPast: boolean }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {MOCK_LIQUIDATIONS.map((l) => (
-              <tr key={l.id} className="hover:bg-gray-50 transition-colors">
-                <td className="px-4 py-3 text-[#001A4D] font-medium text-sm">{l.event}</td>
-                <td className="px-4 py-3 text-gray-500 text-sm">{l.submitted}</td>
-                <td className="px-4 py-3 text-gray-700 font-medium text-sm">{l.amount}</td>
-                <td className="px-4 py-3">
-                  <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${
-                    l.status === "Approved" ? "bg-green-100 text-green-700" :
-                    l.status === "Pending" ? "bg-amber-100 text-amber-700" :
-                    "bg-blue-100 text-blue-700"
-                  }`}>{l.status}</span>
-                </td>
-                <td className="px-4 py-3">
-                  <button className="text-blue-600 hover:underline text-xs flex items-center gap-1">
-                    <Eye className="w-3 h-3" /> View
-                  </button>
+            {loading ? (
+              <tr>
+                <td colSpan={6} className="px-4 py-8 text-center text-gray-500 text-sm">
+                  Loading liquidation reports from database...
                 </td>
               </tr>
-            ))}
+            ) : liquidations.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="px-4 py-8 text-center text-gray-500 text-sm">
+                  No liquidation reports found. Click <strong>New Liquidation Report</strong> to submit expenses.
+                </td>
+              </tr>
+            ) : (
+              liquidations.map((l) => {
+                const submittedDate = l.submittedAt?.toDate
+                  ? l.submittedAt.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                  : l.createdAt?.toDate
+                  ? l.createdAt.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                  : 'Draft';
+
+                return (
+                  <tr key={l.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-4 py-3 text-[#001A4D] font-bold text-sm">{l.eventTitle}</td>
+                    <td className="px-4 py-3 text-gray-500 text-sm">{submittedDate}</td>
+                    <td className="px-4 py-3 text-gray-700 font-semibold text-sm">₱{(l.allocatedBudget || 0).toLocaleString()}</td>
+                    <td className="px-4 py-3 text-[#83358E] font-bold text-sm">₱{(l.totalActualSpending || 0).toLocaleString()}</td>
+                    <td className="px-4 py-3">{statusBadge(l.status)}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => setViewingDetailReport(l)}
+                          className="text-blue-600 hover:underline text-xs flex items-center gap-1 font-medium"
+                        >
+                          <Eye className="w-3.5 h-3.5" /> View Details
+                        </button>
+                        {!isPast && (l.status === 'draft' || l.status === 'returned') && (
+                          <button
+                            onClick={() => handleOpenEdit(l)}
+                            className="text-[#83358E] hover:underline text-xs flex items-center gap-1 font-bold"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" /> Edit
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
           </tbody>
         </table>
       </div>
+
+      {showModal && (
+        <OfficerLiquidationModal
+          isOpen={showModal}
+          onClose={() => setShowModal(false)}
+          orgId={organizationId}
+          orgName={organizationName}
+          userUid={officerStudentId}
+          userName={officerStudentName}
+          userRole="officer"
+          editingReport={editingReport}
+        />
+      )}
+
+      {viewingDetailReport && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden border border-gray-100">
+            <div className="px-6 py-4 bg-[#001A4D] text-white flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-lg">{viewingDetailReport.eventTitle}</h3>
+                <div className="text-xs text-white/70">Liquidation Detail & Receipts</div>
+              </div>
+              <button
+                onClick={() => setViewingDetailReport(null)}
+                className="p-1 hover:bg-white/10 rounded-lg text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto space-y-4 flex-1">
+              <div className="grid grid-cols-3 gap-3 bg-gray-50 p-3 rounded-lg text-center">
+                <div>
+                  <div className="text-xs text-gray-500">Allocated Budget</div>
+                  <div className="font-bold text-sm text-[#001A4D]">
+                    ₱{viewingDetailReport.allocatedBudget.toLocaleString()}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500">Actual Spending</div>
+                  <div className="font-bold text-sm text-[#83358E]">
+                    ₱{viewingDetailReport.totalActualSpending.toLocaleString()}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500">Surplus / Deficit</div>
+                  <div className={`font-bold text-sm ${viewingDetailReport.surplusOrDeficit < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                    ₱{viewingDetailReport.surplusOrDeficit.toLocaleString()}
+                  </div>
+                </div>
+              </div>
+
+              <h4 className="font-bold text-sm text-gray-900 pt-2">Line Items</h4>
+              <div className="space-y-2">
+                {viewingDetailReport.lineItems?.map((item, idx) => (
+                  <div key={idx} className="p-3 border border-gray-200 rounded-lg text-xs space-y-1.5 bg-gray-50/50">
+                    <div className="flex items-center justify-between font-bold text-gray-900">
+                      <span>{item.description} ({item.category})</span>
+                      <span className="text-[#83358E]">Actual Cost: ₱{item.totalCost.toLocaleString()}</span>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between text-gray-600 gap-2">
+                      <span>
+                        <strong>Actual:</strong> {item.quantity} Qty × ₱{item.unitCost.toLocaleString()}
+                      </span>
+                    </div>
+
+                    {item.vendorName && <div className="text-gray-500 text-[11px]">Vendor: <strong>{item.vendorName}</strong></div>}
+
+                    {item.receiptUrl && (
+                      <div className="pt-1">
+                        <button
+                          onClick={() => setLightboxData({
+                            url: item.receiptUrl,
+                            title: item.description,
+                            vendor: item.vendorName,
+                            amount: item.totalCost,
+                          })}
+                          className="text-[#1E70E8] hover:underline font-semibold text-xs flex items-center gap-1"
+                        >
+                          <Eye className="w-3.5 h-3.5" /> View Uploaded Receipt Image ↗
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {viewingDetailReport.remarksHistory && viewingDetailReport.remarksHistory.length > 0 && (
+                <div className="pt-3 border-t border-gray-200">
+                  <h4 className="font-bold text-sm text-[#001A4D] mb-2">Remarks & Revision History</h4>
+                  <div className="space-y-2">
+                    {viewingDetailReport.remarksHistory.map((rem, rIdx) => (
+                      <div key={rIdx} className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-xs space-y-1">
+                        <div className="flex items-center justify-between text-gray-700 font-semibold">
+                          <span>{rem.authorName} ({rem.authorRole === 'admin' ? 'SAO Adviser' : 'Officer'})</span>
+                          <span className="text-[10px] text-gray-500">{new Date(rem.timestamp).toLocaleString()}</span>
+                        </div>
+                        <p className="text-gray-800">{rem.comment}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="px-6 py-3 bg-gray-50 border-t border-gray-200 text-right">
+              <button
+                onClick={() => setViewingDetailReport(null)}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-xs font-bold hover:bg-gray-300"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <ReceiptLightboxModal
+        isOpen={!!lightboxData}
+        onClose={() => setLightboxData(null)}
+        imageUrl={lightboxData?.url || ''}
+        itemTitle={lightboxData?.title}
+        vendorName={lightboxData?.vendor}
+        amount={lightboxData?.amount}
+      />
     </div>
   );
 }
@@ -1202,7 +1403,15 @@ export default function FinanceCenter() {
           />
         )}
 
-        {activeTab === "liquidation" && <LiquidationTab isPast={isPast} />}
+        {activeTab === "liquidation" && (
+          <LiquidationTab
+            isPast={isPast}
+            organizationId={activeOrgId}
+            organizationName={activeOrgName}
+            officerStudentId={officerStudentId}
+            officerStudentName={profile?.studentName || 'Officer'}
+          />
+        )}
       </div>
     </div>
   );
