@@ -12,10 +12,11 @@ import {
   serverTimestamp,
   writeBatch,
   Timestamp,
+  arrayUnion,
 } from 'firebase/firestore';
 
 import { db } from '../../../../services/firebase';
-import type { EventDocument, EventFormData } from '../types/event.types';
+import type { EventDocument, EventFormData, EventProposalHistoryLog } from '../types/event.types';
 import { STUDENTS_COLLECTION } from '../../students/services/student.service';
 
 export const EVENTS_COLLECTION = 'events';
@@ -158,6 +159,30 @@ export const createEvent = async (
         .filter((id): id is string => id !== null && id !== undefined)
     : [];
 
+  let isResubmission = false;
+  if (draftId) {
+    const existingSnap = await getDoc(doc(db, EVENTS_COLLECTION, draftId));
+    if (existingSnap.exists()) {
+      const prevStatus = existingSnap.data()?.proposalStatus;
+      if (prevStatus === 'rejected' || prevStatus === 'returned') {
+        isResubmission = true;
+      }
+    }
+  }
+
+  const actionType: EventProposalHistoryLog['action'] = isResubmission
+    ? 'resubmitted'
+    : isOfficerProposal
+    ? 'submitted'
+    : 'approved';
+
+  const historyEntry: EventProposalHistoryLog = {
+    id: `log-${Date.now()}`,
+    action: actionType,
+    performedBy: uid,
+    performedAt: Timestamp.now(),
+  };
+
   const eventPayload: Partial<EventDocument> = {
     ...data,
     referenceId: refId,
@@ -171,9 +196,13 @@ export const createEvent = async (
 
   if (draftId) {
     const docRef = doc(db, EVENTS_COLLECTION, draftId);
-    await updateDoc(docRef, eventPayload);
+    await updateDoc(docRef, {
+      ...eventPayload,
+      proposalHistory: arrayUnion(historyEntry),
+    });
   } else {
     eventPayload.createdAt = serverTimestamp() as any;
+    eventPayload.proposalHistory = [historyEntry];
     const docRef = await addDoc(collection(db, EVENTS_COLLECTION), eventPayload);
     docId = docRef.id;
   }
@@ -228,11 +257,20 @@ export const approveEvent = async (
   const snap = await getDoc(ref);
   const eventData = snap.exists() ? snap.data() : null;
 
+  const historyEntry: EventProposalHistoryLog = {
+    id: `log-${Date.now()}`,
+    action: 'approved',
+    performedBy: adminUserId,
+    performedAt: Timestamp.now(),
+    remarks: remarks || undefined,
+  };
+
   await updateDoc(ref, {
     proposalStatus: 'approved',
     approvedBy: adminUserId,
     approvedAt: serverTimestamp(),
     adviserRemarks: remarks || null,
+    proposalHistory: arrayUnion(historyEntry),
     updatedAt: serverTimestamp(),
   });
 
@@ -249,15 +287,28 @@ export const rejectEvent = async (
   eventId: string,
   adminUserId: string,
   reason: string,
-  remarks: string
+  remarks: string,
+  allowResubmission: boolean = true
 ): Promise<void> => {
   const ref = doc(db, EVENTS_COLLECTION, eventId);
+
+  const historyEntry: EventProposalHistoryLog = {
+    id: `log-${Date.now()}`,
+    action: 'rejected',
+    performedBy: adminUserId,
+    performedAt: Timestamp.now(),
+    reason: reason || undefined,
+    remarks: remarks || undefined,
+  };
+
   await updateDoc(ref, {
     proposalStatus: 'rejected',
     rejectedBy: adminUserId,
     rejectedAt: serverTimestamp(),
     rejectionReason: reason,
     adviserRemarks: remarks || null,
+    allowResubmission,
+    proposalHistory: arrayUnion(historyEntry),
     updatedAt: serverTimestamp(),
   });
 };
@@ -270,6 +321,16 @@ export const returnEvent = async (
   remarks: string
 ): Promise<void> => {
   const ref = doc(db, EVENTS_COLLECTION, eventId);
+
+  const historyEntry: EventProposalHistoryLog = {
+    id: `log-${Date.now()}`,
+    action: 'returned',
+    performedBy: adminUserId,
+    performedAt: Timestamp.now(),
+    returnFlags: flags || [],
+    remarks: remarks || undefined,
+  };
+
   await updateDoc(ref, {
     proposalStatus: 'returned',
     returnedBy: adminUserId,
@@ -277,6 +338,7 @@ export const returnEvent = async (
     returnFlags: flags,
     returnDeadline: deadline || null,
     adviserRemarks: remarks || null,
+    proposalHistory: arrayUnion(historyEntry),
     updatedAt: serverTimestamp(),
   });
 };

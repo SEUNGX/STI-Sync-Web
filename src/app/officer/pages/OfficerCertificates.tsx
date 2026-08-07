@@ -1,9 +1,7 @@
 import { useState } from "react";
 import { Award, Plus, ChevronRight } from "lucide-react";
-import CertificateDashboard from "../../admin/components/certificates/CertificateDashboard";
-import TemplateLibrary from "../../admin/components/certificates/TemplateLibrary";
-import TemplateEditor from "../../admin/components/certificates/TemplateEditor";
-import GenerateCertificates from "../../admin/components/certificates/GenerateCertificates";
+import { CertificateDashboard, TemplateLibrary, TemplateEditor, GenerateCertificates } from "../../modules/certificates";
+import { useOfficerProfile } from "../../auth/hooks/useOfficerProfile";
 
 type Screen = "dashboard" | "template-library" | "template-editor" | "generate";
 
@@ -11,6 +9,9 @@ export default function OfficerCertificates() {
   const [screen, setScreen] = useState<Screen>("dashboard");
   const [activeEventId, setActiveEventId] = useState<string>("");
   const [editTemplateId, setEditTemplateId] = useState<string>("");
+
+  const { profile } = useOfficerProfile();
+  const activeOrgId = profile?.activeOrganizationId || profile?.organizationId || "";
 
   const handleGenerate = (eventId: string) => {
     setActiveEventId(eventId);
@@ -59,19 +60,22 @@ export default function OfficerCertificates() {
             ))}
           </nav>
         </div>
-        <button
-          onClick={() => { setEditTemplateId(""); setScreen("template-editor"); }}
-          className="flex items-center gap-2 px-4 py-2.5 bg-[#83358E] text-white font-semibold text-sm rounded-xl hover:bg-[#5B1F6B] transition-colors"
-        >
-          <Award className="w-4 h-4" />
-          <Plus className="w-3.5 h-3.5" />
-          Create Certificate
-        </button>
+        {screen !== "template-editor" && (
+          <button
+            onClick={() => { setEditTemplateId(""); setScreen("template-editor"); }}
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#83358E] text-white font-semibold text-sm rounded-xl hover:bg-[#5B1F6B] transition-colors"
+          >
+            <Award className="w-4 h-4" />
+            <Plus className="w-3.5 h-3.5" />
+            Create Certificate
+          </button>
+        )}
       </div>
 
       {screen === "dashboard" && (
         <CertificateDashboard
           isAdmin={false}
+          organizationId={activeOrgId}
           onGenerate={handleGenerate}
           onOpenTemplateLibrary={() => setScreen("template-library")}
           onOpenEditor={() => { setEditTemplateId(""); setScreen("template-editor"); }}
@@ -80,6 +84,7 @@ export default function OfficerCertificates() {
       {screen === "template-library" && (
         <TemplateLibrary
           isAdmin={false}
+          organizationId={activeOrgId}
           onEditTemplate={handleEditTemplate}
           onUploadNew={() => { setEditTemplateId(""); setScreen("template-editor"); }}
         />
@@ -87,6 +92,7 @@ export default function OfficerCertificates() {
       {screen === "template-editor" && (
         <TemplateEditor
           isAdmin={false}
+          organizationId={activeOrgId}
           templateId={editTemplateId}
           onSave={() => setScreen("template-library")}
         />
@@ -94,6 +100,7 @@ export default function OfficerCertificates() {
       {screen === "generate" && (
         <GenerateCertificates
           isAdmin={false}
+          organizationId={activeOrgId}
           eventId={activeEventId}
           onBack={() => setScreen("dashboard")}
         />

@@ -289,3 +289,35 @@ export async function updatePayableDueDate(payableId: string, newDueDate: Date |
     updatedAt: serverTimestamp(),
   });
 }
+
+/**
+ * Bulk mark all event fee payables for an event as transferred to the SAO school budget
+ */
+export async function markEventPayablesTransferred(eventId: string): Promise<void> {
+  const payablesRef = collection(db, PAYABLES_COLLECTION);
+  const q = query(
+    payablesRef,
+    where('eventId', '==', eventId)
+  );
+  const snapshot = await getDocs(q);
+
+  if (snapshot.empty) return;
+
+  const chunks = [];
+  const docs = snapshot.docs;
+  for (let i = 0; i < docs.length; i += 500) {
+    chunks.push(docs.slice(i, i + 500));
+  }
+
+  for (const chunk of chunks) {
+    const batch = writeBatch(db);
+    for (const d of chunk) {
+      batch.update(d.ref, {
+        transferredToBudget: true,
+        transferredAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    }
+    await batch.commit();
+  }
+}

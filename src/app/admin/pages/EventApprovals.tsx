@@ -316,16 +316,8 @@ export function EventApprovals() {
     }
   };
 
-  const handleQuickReject = async (event: EventDocument) => {
-    if (!profile?.uid) return;
-    setSubmittingId(event.id);
-    try {
-      await rejectEvent(event.id, profile.uid, "Rejected from dashboard", "Quick rejected from dashboard.");
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setSubmittingId(null);
-    }
+  const handleQuickReject = (event: EventDocument) => {
+    setSelectedEvent(event);
   };
 
   const handleResumeDraft = (draft: EventDocument) => {

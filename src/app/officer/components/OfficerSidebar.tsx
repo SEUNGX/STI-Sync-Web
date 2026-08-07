@@ -13,7 +13,6 @@ import {
   ChevronDown,
   Wallet,
   Files,
-  Building2,
 } from 'lucide-react';
 import { useOfficerProfile } from '../../auth/hooks/useOfficerProfile';
 import { useOrganizationStream } from '../../modules/organizations/hooks/useOrganizationStream';
@@ -24,7 +23,6 @@ const navGroups = [
     items: [
       { icon: LayoutDashboard, label: 'Dashboard', path: '/officer/dashboard', badge: null },
       { icon: Users, label: 'Member Directory', path: '/officer/members', badge: null },
-      { icon: Building2, label: 'Organization Profile', path: '/officer/organization', badge: null },
     ]
   },
   {
@@ -86,7 +84,7 @@ export function OfficerSidebar() {
           <span className="text-[#7F77DD] text-sm font-medium truncate pr-2" title={activeOrg?.name || ''}>
             {activeOrg ? activeOrg.name : (profile?.activeOrganizationId ? 'Managing Organization...' : 'Select Organization')}
           </span>
-          <ChevronDown className="w-4 h-4 text-[#7F77DD] flex-shrink-0" />
+          <ChevronDown className="w-[#7F77DD] flex-shrink-0 w-4 h-4" />
         </button>
       </div>
 
@@ -100,7 +98,10 @@ export function OfficerSidebar() {
             <div className="space-y-1">
               {group.items.map((item) => {
                 const Icon = item.icon;
-                const isActive = location.pathname === item.path;
+                const currentFull = location.pathname + location.search;
+                const isActive = item.path.includes('?') 
+                  ? currentFull === item.path 
+                  : (location.pathname === item.path && !location.search.includes('tab=organization'));
 
                 return (
                   <Link

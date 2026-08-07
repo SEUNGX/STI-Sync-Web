@@ -4,7 +4,7 @@ import { db } from '../../../../services/firebase';
 import type { CertificateTemplate, IssuedCertificateRecord } from '../types/certificate.types';
 import { TEMPLATES_COLLECTION, ISSUED_COLLECTION } from '../services/certificate.service';
 
-export function useCertificateTemplatesStream() {
+export function useCertificateTemplatesStream(organizationId?: string, isAdmin?: boolean) {
   const [templates, setTemplates] = useState<CertificateTemplate[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -16,7 +16,17 @@ export function useCertificateTemplatesStream() {
         const fetched = snapshot.docs.map(
           doc => ({ id: doc.id, ...doc.data() } as CertificateTemplate)
         );
-        setTemplates(fetched);
+
+        let filtered = fetched;
+        if (isAdmin) {
+          // Admin only sees admin templates (where organizationId is 'admin' or not set)
+          filtered = fetched.filter(t => !t.organizationId || t.organizationId === 'admin');
+        } else if (organizationId) {
+          // Officers only see templates for their specific organization
+          filtered = fetched.filter(t => t.organizationId === organizationId);
+        }
+
+        setTemplates(filtered);
         setLoading(false);
       },
       (err) => {
@@ -25,7 +35,7 @@ export function useCertificateTemplatesStream() {
       }
     );
     return () => unsubscribe();
-  }, []);
+  }, [organizationId, isAdmin]);
 
   return { templates, loading };
 }

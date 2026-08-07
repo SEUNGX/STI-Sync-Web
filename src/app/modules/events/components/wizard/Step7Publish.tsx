@@ -6,9 +6,10 @@ interface Step7Props {
   onUpdate: (data: Partial<EventFormData>) => void;
   onPublish: () => void;
   isPublishing: boolean;
+  isOfficer?: boolean;
 }
 
-export default function Step7Publish({ data, onUpdate, onPublish, isPublishing }: Step7Props) {
+export default function Step7Publish({ data, onUpdate, onPublish, isPublishing, isOfficer }: Step7Props) {
   // Validate steps based on real data
   const isDetailsComplete = !!data.title && !!data.description && !!data.eventTypeId && !!data.hostingOrgId;
   const isScheduleComplete = !!data.semesterId && !!data.venueId && (data.sessions?.length ?? 0) > 0;
@@ -18,10 +19,10 @@ export default function Step7Publish({ data, onUpdate, onPublish, isPublishing }
   const validationItems = [
     { id: 1, label: 'Event details complete', desc: 'title, description, type, org', status: isDetailsComplete ? 'valid' : 'invalid' },
     { id: 2, label: 'Schedule and venue assigned', desc: 'dates, sessions, venue', status: isScheduleComplete ? 'valid' : 'invalid' },
-    { id: 3, label: 'Participant settings configured', desc: 'limits, audience, attendance rules', status: 'valid' }, // Assume valid by default since we set initial values
+    { id: 3, label: 'Participant settings configured', desc: 'limits, audience, attendance rules', status: 'valid' },
     { id: 4, label: 'Staff fully assigned', desc: 'Event Head, Officer-in-Charge, scanners', status: isStaffComplete ? 'valid' : 'invalid' },
-    { id: 5, label: 'Budget authorized', desc: 'amounts set, disbursement', status: isBudgetValid ? 'valid' : 'invalid' },
-    { id: 6, label: 'Required documents uploaded', desc: 'compliance verified', status: 'warning' }, // Set to warning intentionally for UI testing purposes
+    { id: 5, label: 'Budget requested', desc: 'amounts set, line items', status: isBudgetValid ? 'valid' : 'invalid' },
+    { id: 6, label: 'Required documents uploaded', desc: 'compliance verified', status: 'warning' },
   ];
 
   const allValid = validationItems.filter(item => item.status === 'valid' || item.status === 'warning').length === validationItems.length;
@@ -30,7 +31,7 @@ export default function Step7Publish({ data, onUpdate, onPublish, isPublishing }
     <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
       <div className="space-y-6">
 
-        {/* Admin Event Summary Card */}
+        {/* Admin / Officer Event Summary Card */}
         <div className="border border-gray-200 rounded-lg overflow-hidden shadow-sm">
           <div className="p-6 bg-gradient-to-r from-[#001A4D] to-[#83358E] relative">
             <div className="flex gap-4">
@@ -47,14 +48,18 @@ export default function Step7Publish({ data, onUpdate, onPublish, isPublishing }
                 </p>
                 <div className="flex items-center gap-2 text-white text-sm">
                   <div className="w-6 h-6 rounded-full bg-white/20"></div>
-                  <span className="px-2 py-0.5 bg-blue-500 rounded text-xs">Admin Draft</span>
+                  <span className="px-2 py-0.5 bg-purple-500 rounded text-xs font-semibold">
+                    {isOfficer ? 'Officer Proposal' : 'Admin Draft'}
+                  </span>
                 </div>
               </div>
 
               <div className="absolute top-4 right-4">
-                <div className="px-3 py-1.5 bg-green-500 text-white rounded-lg flex items-center gap-1.5 font-medium text-sm">
+                <div className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-medium text-sm ${
+                  isOfficer ? 'bg-amber-400 text-[#001A4D]' : 'bg-green-500 text-white'
+                }`}>
                   <Shield className="w-4 h-4" />
-                  SAO APPROVED
+                  {isOfficer ? 'REQUIRES SAO REVIEW' : 'SAO APPROVED'}
                 </div>
               </div>
             </div>
@@ -222,14 +227,22 @@ export default function Step7Publish({ data, onUpdate, onPublish, isPublishing }
               </div>
             </div>
 
-            {/* Large Publish Button */}
+            {/* Large Submit / Publish Button */}
             <button
               onClick={onPublish}
               disabled={!allValid || isPublishing}
-              className="w-full py-3 bg-gradient-to-r from-green-600 to-green-500 text-white rounded-lg font-bold text-base hover:from-green-700 hover:to-green-600 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className={`w-full py-3 text-white rounded-lg font-bold text-base transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${
+                isOfficer
+                  ? 'bg-[#83358E] hover:bg-[#6D2A78]'
+                  : 'bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600'
+              }`}
             >
               <Rocket className="w-5 h-5" />
-              {isPublishing ? 'Publishing...' : 'Create & Publish Event'}
+              {isPublishing
+                ? 'Submitting...'
+                : isOfficer
+                ? (data.proposalStatus === 'rejected' ? 'Revise & Resubmit Proposal' : 'Submit Proposal for SAO Approval')
+                : 'Create & Publish Event'}
             </button>
 
             {!allValid && (

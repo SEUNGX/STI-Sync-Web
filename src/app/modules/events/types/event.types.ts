@@ -80,10 +80,23 @@ export interface EventDocument {
   rejectedAt?: Timestamp | null;
   rejectionReason?: string | null;
   adviserRemarks?: string | null;
+  allowResubmission?: boolean;
   returnedAt?: Timestamp | null;
   returnedBy?: string | null;
   returnFlags?: string[];
   returnDeadline?: string | null;
+  proposalHistory?: EventProposalHistoryLog[];
+}
+
+export interface EventProposalHistoryLog {
+  id: string;
+  action: 'created' | 'submitted' | 'approved' | 'returned' | 'rejected' | 'resubmitted';
+  performedBy: string;
+  performedByName?: string;
+  performedAt: Timestamp;
+  reason?: string;
+  remarks?: string;
+  returnFlags?: string[];
 }
 
 export interface EventSession {

@@ -722,3 +722,25 @@ useEffect(() => {
 
 All read hooks return `{ data/payables/liquidations, loading, error }`. All include `useEffect` cleanup. All enforce `organizationId` scoping.
 
+---
+
+<!-- AGENT-UPDATED: 2026-08-07 — Documented Certificate Module org-scoping contract for student officers -->
+## 11. Officer Certificate Module — Org-Scoped
+
+### Hook: `useCertificateTemplatesStream(organizationId, isAdmin)`
+
+**Location:** `src/app/modules/certificates/hooks/useCertificateStream.ts`
+
+```typescript
+export function useCertificateTemplatesStream(organizationId?: string, isAdmin?: boolean) {
+  // Subscribes to /certificate_templates
+  // When isAdmin === false and organizationId is provided:
+  // Filters templates strictly to doc.organizationId === organizationId
+}
+```
+
+### Event & Template Isolation Rules
+- **Events**: Officers only see events where `hostingOrgId === activeOrgId` AND `attendedCount > 0`.
+- **Templates**: Officers only see templates saved with their `activeOrgId`. SAO Admin templates (`organizationId === 'admin'`) are isolated from officer views and vice versa.
+
+

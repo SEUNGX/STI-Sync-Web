@@ -160,7 +160,7 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
     if (!profile?.uid) return;
     setSubmitting(true);
     try {
-      await rejectEvent(event.id, profile.uid, rejectionReason, remarks);
+      await rejectEvent(event.id, profile.uid, rejectionReason, remarks, allowResubmit);
       setDecision('rejected');
       setActiveModal('none');
       setUndoVisible(true);
@@ -580,22 +580,85 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
             {/* SECTION 7 — HISTORY */}
             <div ref={el => { sectionRefs.current['history'] = el; }}
               onMouseEnter={() => { setActiveSection('history'); setVisitedSections(p => new Set([...p, 'history'])); }}>
-              <SectionHeader title="Submission History" status="complete" subtitle="Complete proposal lifecycle and audit trail" />
+              <SectionHeader title="Submission History" status="complete" subtitle="Complete proposal lifecycle, admin decisions, and resubmission audit trail" />
               <div className="bg-white border border-[#E0E0E0] rounded-xl p-5">
-                <div className="relative">
-                  <div className="absolute left-[11px] top-0 bottom-0 w-0.5 bg-[#E0E0E0]" />
-                  <div className="space-y-6">
-                    <div className="flex gap-4 relative">
-                      <div className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center z-10 bg-[#1E70E8]">
-                        <Send className="w-3 h-3 text-white" />
-                      </div>
-                      <div>
-                        <p className="text-[#001A4D] font-bold text-sm">Created</p>
-                        <p className="text-gray-400 text-xs mt-0.5">{createdDate}</p>
+                {event.proposalHistory && event.proposalHistory.length > 0 ? (
+                  <div className="relative pl-6 space-y-6 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-gray-200">
+                    {event.proposalHistory.map((item, idx) => {
+                      const itemDate = item.performedAt && typeof item.performedAt.toDate === 'function'
+                        ? item.performedAt.toDate().toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                        : '—';
+
+                      const isRejected = item.action === 'rejected';
+                      const isApproved = item.action === 'approved';
+                      const isReturned = item.action === 'returned';
+                      const isResubmitted = item.action === 'resubmitted';
+
+                      const dotBg = isApproved ? 'bg-green-500'
+                        : isRejected ? 'bg-red-500'
+                        : isReturned ? 'bg-amber-500'
+                        : isResubmitted ? 'bg-purple-600'
+                        : 'bg-blue-500';
+
+                      return (
+                        <div key={item.id || idx} className="relative flex items-start gap-3">
+                          <div className={`absolute -left-[19px] top-1 w-3.5 h-3.5 rounded-full ${dotBg} ring-4 ring-white`} />
+                          <div className="flex-1 bg-gray-50/70 border border-gray-200 rounded-xl p-3.5 space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className="font-bold text-xs uppercase tracking-wide text-[#001A4D]">
+                                {item.action === 'created' ? 'Proposal Created' :
+                                 item.action === 'submitted' ? 'Submitted for SAO Review' :
+                                 item.action === 'approved' ? 'Proposal Approved' :
+                                 item.action === 'rejected' ? 'Proposal Rejected' :
+                                 item.action === 'returned' ? 'Returned for Revision' :
+                                 item.action === 'resubmitted' ? 'Proposal Resubmitted by Officer' :
+                                 item.action}
+                              </span>
+                              <span className="text-gray-400 text-xs">{itemDate}</span>
+                            </div>
+
+                            {item.reason && (
+                              <p className="text-xs text-red-600 font-semibold mt-1">
+                                Reason: {item.reason}
+                              </p>
+                            )}
+
+                            {item.remarks && (
+                              <p className="text-xs text-gray-700 bg-white p-2 rounded border border-gray-200 mt-1 italic">
+                                "{item.remarks}"
+                              </p>
+                            )}
+
+                            {item.returnFlags && item.returnFlags.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-1.5">
+                                {item.returnFlags.map((flag, fIdx) => (
+                                  <span key={fIdx} className="px-2 py-0.5 bg-amber-100 text-amber-800 text-[11px] rounded-full font-medium">
+                                    ⚠ {flag}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <div className="absolute left-[11px] top-0 bottom-0 w-0.5 bg-[#E0E0E0]" />
+                    <div className="space-y-6">
+                      <div className="flex gap-4 relative">
+                        <div className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center z-10 bg-[#1E70E8]">
+                          <Send className="w-3 h-3 text-white" />
+                        </div>
+                        <div>
+                          <p className="text-[#001A4D] font-bold text-sm">Created</p>
+                          <p className="text-gray-400 text-xs mt-0.5">{createdDate}</p>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
+                )}
               </div>
             </div>
 
@@ -810,16 +873,43 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
                 <p className="text-[#FFD41C] text-sm">{event.title}</p>
               </div>
             </div>
-            <div className="p-6">
-              <div className="mb-5">
-                <p className="text-[#001A4D] font-bold text-sm mb-1.5">Rejection Reason <span className="text-red-500">*</span></p>
+            <div className="p-6 space-y-4">
+              <div>
+                <p className="text-[#001A4D] font-bold text-sm mb-1.5">Rejection Reason Category <span className="text-red-500">*</span></p>
                 <select value={rejectionReason} onChange={e => setRejectionReason(e.target.value)}
                   className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-400 focus:border-transparent">
                   <option value="">Select rejection reason category...</option>
                   {REJECTION_REASONS.map(r => <option key={r}>{r}</option>)}
                 </select>
               </div>
-              <div className="flex gap-3">
+
+              <div>
+                <p className="text-[#001A4D] font-bold text-sm mb-1.5">Adviser Remarks / Feedback for Officer</p>
+                <textarea
+                  value={remarks}
+                  onChange={e => setRemarks(e.target.value)}
+                  rows={4}
+                  placeholder="Provide details explaining the rejection and what needs to be changed..."
+                  className="w-full text-sm border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-red-400 focus:border-transparent outline-none resize-none"
+                />
+              </div>
+
+              <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl">
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={allowResubmit}
+                    onChange={e => setAllowResubmit(e.target.checked)}
+                    className="accent-red-600 w-4 h-4 rounded"
+                  />
+                  <div>
+                    <span className="text-sm font-bold text-[#001A4D]">Allow Officer to revise & resubmit</span>
+                    <p className="text-xs text-gray-500">If enabled, officer can edit and resubmit this proposal after fixing issues.</p>
+                  </div>
+                </label>
+              </div>
+
+              <div className="flex gap-3 pt-2">
                 <button onClick={() => setActiveModal('none')} disabled={submitting} className="flex-1 py-3 border border-gray-300 text-gray-700 rounded-xl text-sm font-semibold hover:bg-gray-50">Cancel</button>
                 <button onClick={confirmReject} disabled={!rejectionReason || submitting}
                   className="flex-1 py-3 bg-gradient-to-r from-[#EF4444] to-[#F97316] text-white rounded-xl text-sm font-bold disabled:opacity-40 flex items-center justify-center gap-2">

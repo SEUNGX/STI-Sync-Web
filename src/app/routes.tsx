@@ -94,7 +94,7 @@ export const router = createBrowserRouter([
       { path: "finance", Component: FinanceCenter },
       { path: "documents", Component: OfficerDocuments },
       { path: "members", Component: MemberDirectory },
-      { path: "organization", Component: OrganizationProfile },
+      { path: "organization", Component: () => <OfficerSettings defaultTab="organization" /> },
       { path: "announcements", Component: OfficerAnnouncements },
       { path: "settings", Component: OfficerSettings },
     ],

@@ -214,14 +214,14 @@ export default function EventManagement() {
                       </button>
 
                       <div className="flex items-center gap-1">
-                        {(event.proposalStatus === 'draft' || event.proposalStatus === 'returned') && (
+                        {(event.proposalStatus === 'draft' || event.proposalStatus === 'returned' || (event.proposalStatus === 'rejected' && event.allowResubmission !== false)) && (
                           <button
                             onClick={() => {
                               setEditingEvent(event);
                               setShowCreateModal(true);
                             }}
                             className="p-1.5 rounded hover:bg-gray-100 text-[#83358E]"
-                            title="Edit Proposal"
+                            title={event.proposalStatus === 'rejected' ? "Revise & Resubmit Proposal" : "Edit Proposal"}
                           >
                             <Edit className="w-4 h-4" />
                           </button>
@@ -284,7 +284,10 @@ function EventDetailModal({
   onClose: () => void;
   onEdit: () => void;
 }) {
-  const isEditable = event.proposalStatus === 'draft' || event.proposalStatus === 'returned';
+  const isEditable =
+    event.proposalStatus === 'draft' ||
+    event.proposalStatus === 'returned' ||
+    (event.proposalStatus === 'rejected' && event.allowResubmission !== false);
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-6 overflow-y-auto">
@@ -325,14 +328,38 @@ function EventDetailModal({
           )}
 
           {event.proposalStatus === 'rejected' && (
-            <div className="p-4 bg-red-50 border border-red-200 rounded-xl space-y-1">
-              <div className="flex items-center gap-2 text-red-700 font-bold text-sm">
-                <X className="w-5 h-5" />
-                <span>Proposal Rejected</span>
+            <div className="p-4 bg-red-50 border border-red-200 rounded-xl space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-red-700 font-bold text-sm">
+                  <X className="w-5 h-5" />
+                  <span>Proposal Rejected</span>
+                </div>
+                {event.allowResubmission !== false ? (
+                  <span className="px-2.5 py-0.5 bg-green-100 text-green-800 text-xs rounded-full font-bold">
+                    Re-editing Allowed
+                  </span>
+                ) : (
+                  <span className="px-2.5 py-0.5 bg-red-200 text-red-900 text-xs rounded-full font-bold">
+                    Resubmission Locked
+                  </span>
+                )}
               </div>
+
               {event.rejectionReason && (
                 <p className="text-sm text-red-900">
-                  <strong>Reason:</strong> {event.rejectionReason}
+                  <strong>Reason Category:</strong> {event.rejectionReason}
+                </p>
+              )}
+
+              {event.adviserRemarks && (
+                <p className="text-sm text-gray-800 bg-white p-3 rounded-lg border border-red-100">
+                  <strong>Adviser Remarks:</strong> {event.adviserRemarks}
+                </p>
+              )}
+
+              {event.allowResubmission !== false && (
+                <p className="text-xs text-red-700 italic">
+                  Tip: You can edit this proposal to fix the issues mentioned by SAO, then click <strong>"Revise & Resubmit Proposal"</strong> below to send it back for review.
                 </p>
               )}
             </div>

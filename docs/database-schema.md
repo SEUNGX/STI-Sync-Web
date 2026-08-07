@@ -1473,20 +1473,17 @@ interface LiquidationExpenseItem {
 
 Stores certificate layout designs created using the visual drag-and-drop template editor.
 
-```typescript
+<!-- AGENT-UPDATED: 2026-08-07 — Documented organizationId field on certificate_templates for role/org isolation -->
 interface CertificateTemplate {
   id: string;
-  title: string;                           // e.g. "Certificate of Attendance Layout"
-  eventId?: string;                        // FK → /events (if associated with specific event)
-  eventName?: string;
-  organizationId?: string;                 // FK → /organizations
-  orientation: 'landscape' | 'portrait';
-  dimensions: { width: number; height: number };
-  elements: any[];                         // Array of text/image elements with canvas coordinates
-  bgImageUrl?: string;                     // Optional background template image URL
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+  name: string;                            // e.g. "Official Tech Summit Certificate 2026"
+  imageUrl: string;                        // Background template image URL
+  isDefault: boolean;
+  namePosition: CertificatePosition;       // Position and styling details for recipient name
   createdBy: string;                       // SAO Adviser / Officer UID
+  organizationId?: string | null;          // 'admin' for SAO Admin templates; activeOrgId for Officer templates
+  createdAt?: Timestamp;
+  updatedAt?: Timestamp;
 }
 ```
 

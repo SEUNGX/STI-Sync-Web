@@ -11,11 +11,13 @@ export const ISSUED_COLLECTION = 'certificates_issued';
 export const saveCertificateTemplate = async (
   template: Partial<CertificateTemplate>,
   uid: string,
-  existingId?: string
+  existingId?: string,
+  organizationId?: string | null
 ): Promise<string> => {
   const payload = {
     ...template,
     createdBy: uid,
+    organizationId: organizationId !== undefined ? organizationId : (template.organizationId || 'admin'),
     updatedAt: serverTimestamp(),
   };
 

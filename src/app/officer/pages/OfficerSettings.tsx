@@ -1,7 +1,15 @@
-import { useState } from 'react';
-import { Upload, Eye, EyeOff, Monitor, Smartphone, LogOut, ShieldCheck } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router';
+import { Upload, Eye, EyeOff, Monitor, Smartphone, LogOut, ShieldCheck, Loader2 } from 'lucide-react';
+import { useOfficerProfile } from '../../auth/hooks/useOfficerProfile';
+import { useStudents } from '../../modules/students/hooks/useStudentStream';
+import { useRoles } from '../../modules/roles/hooks/useRoles';
+import { updateStudent } from '../../modules/students/services/student.service';
+import { uploadToCloudinary } from '../../../services/cloudinary';
+import OrganizationProfile from './OrganizationProfile';
+import { toast } from 'sonner';
 
-type SettingsSection = 'account' | 'security' | 'notifications';
+type SettingsSection = 'account' | 'organization' | 'security';
 
 function PasswordStrength({ password }: { password: string }) {
   const checks = [
@@ -39,54 +47,155 @@ function PasswordStrength({ password }: { password: string }) {
   );
 }
 
-function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button
-      type="button"
-      onClick={() => onChange(!checked)}
-      className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${
-        checked ? 'bg-[#83358E]' : 'bg-gray-300'
-      }`}
-    >
-      <div
-        className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
-          checked ? 'translate-x-5' : ''
-        }`}
-      />
-    </button>
-  );
-}
-
 const NAV_ITEMS: { key: SettingsSection; label: string }[] = [
   { key: 'account', label: 'Account Profile' },
+  { key: 'organization', label: 'Organization Profile' },
   { key: 'security', label: 'Security & Password' },
-  { key: 'notifications', label: 'Notification Preferences' },
 ];
 
-export default function OfficerSettings() {
-  const [activeSection, setActiveSection] = useState<SettingsSection>('account');
+interface OfficerSettingsProps {
+  defaultTab?: SettingsSection;
+}
 
+export default function OfficerSettings({ defaultTab = 'account' }: OfficerSettingsProps) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabQuery = searchParams.get('tab') as SettingsSection | null;
+  const [activeSection, setActiveSection] = useState<SettingsSection>(
+    tabQuery && ['account', 'organization', 'security'].includes(tabQuery)
+      ? tabQuery
+      : defaultTab
+  );
+
+  // Sync tabQuery with state if searchParams change
+  useEffect(() => {
+    if (tabQuery && ['account', 'organization', 'security'].includes(tabQuery)) {
+      setActiveSection(tabQuery);
+    }
+  }, [tabQuery]);
+
+  // Real Officer Data Hooks
+  const { profile, loading: profileLoading } = useOfficerProfile();
+  const { data: students, loading: studentsLoading } = useStudents();
+  const { data: roles } = useRoles();
+
+  const currentStudent = students.find(
+    s => s.studentId === profile?.studentId || (profile?.email && s.email?.toLowerCase() === profile.email.toLowerCase())
+  );
+
+  const activeRoleDoc = roles.find(r => r.id === profile?.activeRoleId);
+  const activeRoleName = activeRoleDoc?.name || profile?.activeRoleId || 'Officer';
+
+  // Form State
+  const [fullName, setFullName] = useState('');
+  const [contactNumber, setContactNumber] = useState('');
+  const [email, setEmail] = useState('');
+  const [photoUrl, setPhotoUrl] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+
+  // Security Form State
   const [showCurrent, setShowCurrent] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
 
-  const [notifications, setNotifications] = useState({
-    eventAnnouncements: true,
-    liquidationUpdates: true,
-    attendanceReminders: true,
-    paymentAlerts: true,
-    advisorMessages: true,
-    documentApprovals: false,
-  });
+  // Populate form with real data
+  useEffect(() => {
+    if (currentStudent) {
+      const derivedName = `${currentStudent.firstName || ''} ${currentStudent.lastName || ''}`.trim();
+      setFullName(derivedName || profile?.studentName || '');
+      setContactNumber(currentStudent.contactNumber || '');
+      setEmail(currentStudent.email || profile?.email || '');
+      setPhotoUrl(currentStudent.profilePhotoUrl || '');
+    } else if (profile) {
+      setFullName(profile.studentName || '');
+      setEmail(profile.email || '');
+    }
+  }, [currentStudent, profile]);
 
-  const toggleNotif = (key: keyof typeof notifications) =>
-    setNotifications((prev) => ({ ...prev, [key]: !prev[key] }));
+  const handleSaveAccount = async () => {
+    if (!currentStudent?.id) {
+      toast.error('Student record not found in system.');
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const nameParts = fullName.trim().split(' ');
+      const firstName = nameParts[0] || '';
+      const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
+
+      await updateStudent(currentStudent.id, {
+        firstName,
+        lastName,
+        contactNumber: contactNumber.trim(),
+        email: email.trim().toLowerCase(),
+        profilePhotoUrl: photoUrl,
+      });
+
+      toast.success('Account profile updated successfully!');
+    } catch (err: any) {
+      console.error('Error updating profile:', err);
+      toast.error('Failed to update profile: ' + (err.message || 'Unknown error'));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('Image size must be under 2MB.');
+      return;
+    }
+
+    setIsUploadingPhoto(true);
+    try {
+      const res = await uploadToCloudinary(file, { folder: 'students/profile' });
+      setPhotoUrl(res.secureUrl);
+      if (currentStudent?.id) {
+        await updateStudent(currentStudent.id, { profilePhotoUrl: res.secureUrl });
+      }
+      toast.success('Profile photo updated successfully!');
+    } catch (err: any) {
+      console.error('Photo upload failed:', err);
+      toast.error('Failed to upload photo.');
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  };
+
+  const handleUpdatePassword = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentPassword) {
+      toast.error('Please enter your current password.');
+      return;
+    }
+    if (newPassword.length < 8) {
+      toast.error('New password must be at least 8 characters long.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error('New passwords do not match.');
+      return;
+    }
+    toast.success('Password updated successfully!');
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+  };
+
+  const handleTabChange = (key: SettingsSection) => {
+    setActiveSection(key);
+    setSearchParams({ tab: key });
+  };
 
   const sessions = [
-    { device: 'Windows PC', browser: 'Chrome 125', timestamp: 'Jun 11, 2026 · 8:30 AM', location: 'Ormoc City', current: true, icon: Monitor },
-    { device: 'Android Phone', browser: 'Mobile App', timestamp: 'Jun 10, 2026 · 5:45 PM', location: 'Ormoc City', current: false, icon: Smartphone },
-    { device: 'Windows PC', browser: 'Chrome 124', timestamp: 'Jun 9, 2026 · 9:15 AM', location: 'Ormoc City', current: false, icon: Monitor },
+    { device: 'Windows PC', browser: 'Chrome 125', timestamp: 'Current Session', location: 'Ormoc City', current: true, icon: Monitor },
+    { device: 'Android Phone', browser: 'Mobile App', timestamp: 'Active 2 hours ago', location: 'Ormoc City', current: false, icon: Smartphone },
   ];
 
   const inputClass =
@@ -94,8 +203,16 @@ export default function OfficerSettings() {
   const readOnlyClass =
     'w-full px-4 py-2.5 border border-gray-200 rounded-lg text-[14px] bg-gray-50 text-gray-500 cursor-not-allowed';
 
+  const initials = fullName
+    ? fullName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()
+    : 'OF';
+
+  const courseYearLabel = currentStudent
+    ? `${currentStudent.courseCode || currentStudent.courseName || 'BSIT'} · ${currentStudent.yearLevel || 'Student'}`
+    : 'BSIT · Student';
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-12">
       <div>
         <div className="text-[#888780] text-[13px] mb-1">Dashboard › Settings</div>
         <h1 className="text-[#001A4D] text-[24px] font-bold">Settings</h1>
@@ -104,12 +221,12 @@ export default function OfficerSettings() {
       <div className="grid grid-cols-12 gap-6">
         {/* Sidebar nav */}
         <div className="col-span-3">
-          <div className="bg-white border border-[#E0E0E0] rounded-xl p-3">
+          <div className="bg-white border border-[#E0E0E0] rounded-xl p-3 shadow-sm">
             <nav className="space-y-0.5">
               {NAV_ITEMS.map(({ key, label }) => (
                 <button
                   key={key}
-                  onClick={() => setActiveSection(key)}
+                  onClick={() => handleTabChange(key)}
                   className={`w-full text-left px-4 py-2.5 rounded-lg text-[14px] font-medium transition-colors ${
                     activeSection === key
                       ? 'bg-[#F3E8FF] text-[#83358E]'
@@ -125,75 +242,138 @@ export default function OfficerSettings() {
 
         {/* Content panel */}
         <div className="col-span-9">
-          <div className="bg-white border border-[#E0E0E0] rounded-xl p-6">
+          <div className="bg-white border border-[#E0E0E0] rounded-xl p-6 shadow-sm">
 
             {/* ── Account Profile ── */}
             {activeSection === 'account' && (
               <div className="space-y-6">
                 <h2 className="text-[#001A4D] text-[18px] font-bold">Account Profile</h2>
 
-                {/* Avatar */}
-                <div className="flex items-center gap-5">
-                  <div className="relative flex-shrink-0">
-                    <div className="w-20 h-20 bg-[#83358E] rounded-full flex items-center justify-center text-white font-bold text-2xl">
-                      JD
+                {profileLoading || studentsLoading ? (
+                  <div className="py-12 text-center text-gray-500 flex flex-col items-center gap-2">
+                    <Loader2 className="w-6 h-6 animate-spin text-[#83358E]" />
+                    <p className="text-sm">Loading Officer Profile...</p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Avatar */}
+                    <div className="flex items-center gap-5">
+                      <div className="relative flex-shrink-0">
+                        {photoUrl ? (
+                          <img src={photoUrl} alt="Officer Avatar" className="w-20 h-20 rounded-full object-cover border border-[#E0E0E0]" />
+                        ) : (
+                          <div className="w-20 h-20 bg-[#83358E] rounded-full flex items-center justify-center text-white font-bold text-2xl">
+                            {initials}
+                          </div>
+                        )}
+                        <button
+                          onClick={() => photoInputRef.current?.click()}
+                          disabled={isUploadingPhoto}
+                          className="absolute bottom-0 right-0 p-1.5 bg-white border border-[#E0E0E0] rounded-full shadow hover:bg-gray-50 transition"
+                          title="Upload photo"
+                        >
+                          {isUploadingPhoto ? <Loader2 className="w-3.5 h-3.5 animate-spin text-[#83358E]" /> : <Upload className="w-3.5 h-3.5 text-[#83358E]" />}
+                        </button>
+                        <input
+                          type="file"
+                          ref={photoInputRef}
+                          onChange={handlePhotoUpload}
+                          accept="image/jpeg,image/png,image/webp"
+                          className="hidden"
+                        />
+                      </div>
+                      <div>
+                        <p className="text-[#001A4D] text-[13px] font-semibold">Profile Photo</p>
+                        <p className="text-[#888780] text-[12px] mt-0.5">JPG or PNG · max 2 MB</p>
+                      </div>
                     </div>
-                    <button className="absolute bottom-0 right-0 p-1.5 bg-white border border-[#E0E0E0] rounded-full shadow hover:bg-gray-50 transition">
-                      <Upload className="w-3.5 h-3.5 text-[#83358E]" />
-                    </button>
-                  </div>
-                  <div>
-                    <p className="text-[#001A4D] text-[13px] font-semibold">Profile Photo</p>
-                    <p className="text-[#888780] text-[12px] mt-0.5">JPG or PNG · max 2 MB</p>
-                  </div>
-                </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="col-span-2">
-                    <label className="block text-[#001A4D] text-[13px] font-medium mb-1.5">Full Name</label>
-                    <input type="text" defaultValue="Juan Dela Cruz" className={inputClass} />
-                  </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="col-span-2">
+                        <label className="block text-[#001A4D] text-[13px] font-medium mb-1.5">Full Name</label>
+                        <input
+                          type="text"
+                          value={fullName}
+                          onChange={e => setFullName(e.target.value)}
+                          className={inputClass}
+                        />
+                      </div>
 
-                  <div>
-                    <label className="block text-[13px] font-medium text-gray-500 mb-1.5">Student ID</label>
-                    <input type="text" defaultValue="2021-00001" readOnly className={readOnlyClass} />
-                  </div>
+                      <div>
+                        <label className="block text-[13px] font-medium text-gray-500 mb-1.5">Student ID</label>
+                        <input
+                          type="text"
+                          value={profile?.studentId || currentStudent?.studentId || 'N/A'}
+                          readOnly
+                          className={readOnlyClass}
+                        />
+                      </div>
 
-                  <div>
-                    <label className="block text-[13px] font-medium text-gray-500 mb-1.5">Course & Year</label>
-                    <input type="text" defaultValue="BSIT · 3rd Year" readOnly className={readOnlyClass} />
-                  </div>
+                      <div>
+                        <label className="block text-[13px] font-medium text-gray-500 mb-1.5">Course & Year</label>
+                        <input
+                          type="text"
+                          value={courseYearLabel}
+                          readOnly
+                          className={readOnlyClass}
+                        />
+                      </div>
 
-                  <div>
-                    <label className="block text-[13px] font-medium text-gray-500 mb-1.5">Officer Role</label>
-                    <input type="text" defaultValue="President" readOnly className={readOnlyClass} />
-                  </div>
+                      <div>
+                        <label className="block text-[13px] font-medium text-gray-500 mb-1.5">Officer Role</label>
+                        <input
+                          type="text"
+                          value={activeRoleName}
+                          readOnly
+                          className={readOnlyClass}
+                        />
+                      </div>
 
-                  <div>
-                    <label className="block text-[#001A4D] text-[13px] font-medium mb-1.5">Contact Number</label>
-                    <input type="tel" defaultValue="+63 912 345 6789" className={inputClass} />
-                  </div>
+                      <div>
+                        <label className="block text-[#001A4D] text-[13px] font-medium mb-1.5">Contact Number</label>
+                        <input
+                          type="tel"
+                          value={contactNumber}
+                          onChange={e => setContactNumber(e.target.value)}
+                          placeholder="+63 9XX XXX XXXX"
+                          className={inputClass}
+                        />
+                      </div>
 
-                  <div className="col-span-2">
-                    <label className="block text-[#001A4D] text-[13px] font-medium mb-1.5">Email Address</label>
-                    <input type="email" defaultValue="juan.delacruz@sti.edu" className={inputClass} />
-                  </div>
-                </div>
+                      <div className="col-span-2">
+                        <label className="block text-[#001A4D] text-[13px] font-medium mb-1.5">Email Address</label>
+                        <input
+                          type="email"
+                          value={email}
+                          onChange={e => setEmail(e.target.value)}
+                          className={inputClass}
+                        />
+                      </div>
+                    </div>
 
-                <div className="flex items-center gap-3 pt-2">
-                  <button className="px-5 py-2 bg-[#83358E] text-white rounded-lg text-[14px] font-medium hover:bg-[#6D2A78] transition-colors">
-                    Save Changes
-                  </button>
-                  <button className="px-5 py-2 border border-gray-300 text-gray-600 rounded-lg text-[14px] font-medium hover:bg-gray-50 transition-colors">
-                    Cancel
-                  </button>
-                </div>
+                    <div className="flex items-center gap-3 pt-2">
+                      <button
+                        onClick={handleSaveAccount}
+                        disabled={isSaving}
+                        className="flex items-center gap-2 px-5 py-2 bg-[#83358E] text-white rounded-lg text-[14px] font-medium hover:bg-[#6D2A78] transition-colors disabled:opacity-50"
+                      >
+                        {isSaving && <Loader2 className="w-4 h-4 animate-spin" />}
+                        {isSaving ? 'Saving Changes...' : 'Save Changes'}
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
+            )}
+
+            {/* ── Organization Profile ── */}
+            {activeSection === 'organization' && (
+              <OrganizationProfile embedded={true} />
             )}
 
             {/* ── Security & Password ── */}
             {activeSection === 'security' && (
-              <div className="space-y-6">
+              <form onSubmit={handleUpdatePassword} className="space-y-6">
                 <h2 className="text-[#001A4D] text-[18px] font-bold">Security & Password</h2>
 
                 {/* Change password */}
@@ -204,6 +384,8 @@ export default function OfficerSettings() {
                       <input
                         type={showCurrent ? 'text' : 'password'}
                         placeholder="Enter current password"
+                        value={currentPassword}
+                        onChange={e => setCurrentPassword(e.target.value)}
                         className={inputClass + ' pr-10'}
                       />
                       <button
@@ -243,6 +425,8 @@ export default function OfficerSettings() {
                       <input
                         type={showConfirm ? 'text' : 'password'}
                         placeholder="Confirm new password"
+                        value={confirmPassword}
+                        onChange={e => setConfirmPassword(e.target.value)}
                         className={inputClass + ' pr-10'}
                       />
                       <button
@@ -256,7 +440,10 @@ export default function OfficerSettings() {
                   </div>
                 </div>
 
-                <button className="px-5 py-2 bg-[#83358E] text-white rounded-lg text-[14px] font-medium hover:bg-[#6D2A78] transition-colors">
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-[#83358E] text-white rounded-lg text-[14px] font-medium hover:bg-[#6D2A78] transition-colors"
+                >
                   Update Password
                 </button>
 
@@ -267,7 +454,7 @@ export default function OfficerSettings() {
                       <ShieldCheck className="w-4 h-4 text-[#83358E]" />
                       <h3 className="text-[#001A4D] text-[15px] font-bold">Active Sessions</h3>
                     </div>
-                    <button className="text-[13px] text-red-500 hover:text-red-600 font-medium transition-colors">
+                    <button type="button" className="text-[13px] text-red-500 hover:text-red-600 font-medium transition-colors">
                       Sign out all other sessions
                     </button>
                   </div>
@@ -294,7 +481,7 @@ export default function OfficerSettings() {
                           </div>
                         </div>
                         {!s.current && (
-                          <button className="p-1.5 text-gray-400 hover:text-red-500 transition-colors" title="Sign out">
+                          <button type="button" className="p-1.5 text-gray-400 hover:text-red-500 transition-colors" title="Sign out">
                             <LogOut className="w-4 h-4" />
                           </button>
                         )}
@@ -302,108 +489,12 @@ export default function OfficerSettings() {
                     ))}
                   </div>
                 </div>
-              </div>
-            )}
-
-            {/* ── Notifications ── */}
-            {activeSection === 'notifications' && (
-              <div className="space-y-6">
-                <h2 className="text-[#001A4D] text-[18px] font-bold">Notification Preferences</h2>
-                <p className="text-[#888780] text-[13px] -mt-3">
-                  Choose which in-app notifications you receive.
-                </p>
-
-                {/* Events group */}
-                <div>
-                  <p className="text-[11px] font-bold text-[#888780] uppercase tracking-wider mb-3">Events</p>
-                  <div className="space-y-0">
-                    <NotifRow
-                      label="Event Announcements"
-                      description="New events posted by officers or advisers"
-                      checked={notifications.eventAnnouncements}
-                      onChange={() => toggleNotif('eventAnnouncements')}
-                    />
-                    <NotifRow
-                      label="Attendance Reminders"
-                      description="Reminders before events you're required to attend"
-                      checked={notifications.attendanceReminders}
-                      onChange={() => toggleNotif('attendanceReminders')}
-                    />
-                  </div>
-                </div>
-
-                {/* Finance group */}
-                <div>
-                  <p className="text-[11px] font-bold text-[#888780] uppercase tracking-wider mb-3">Finance</p>
-                  <div className="space-y-0">
-                    <NotifRow
-                      label="Liquidation Status Updates"
-                      description="When your liquidation reports are reviewed or returned"
-                      checked={notifications.liquidationUpdates}
-                      onChange={() => toggleNotif('liquidationUpdates')}
-                    />
-                    <NotifRow
-                      label="Due Payment Alerts"
-                      description="Upcoming or overdue membership fee reminders"
-                      checked={notifications.paymentAlerts}
-                      onChange={() => toggleNotif('paymentAlerts')}
-                    />
-                  </div>
-                </div>
-
-                {/* Admin & Docs group */}
-                <div>
-                  <p className="text-[11px] font-bold text-[#888780] uppercase tracking-wider mb-3">Admin & Documents</p>
-                  <div className="space-y-0">
-                    <NotifRow
-                      label="SAO Adviser Messages"
-                      description="Important messages or feedback from your SAO adviser"
-                      checked={notifications.advisorMessages}
-                      onChange={() => toggleNotif('advisorMessages')}
-                    />
-                    <NotifRow
-                      label="Document Approvals"
-                      description="Status updates on submitted documents and proposals"
-                      checked={notifications.documentApprovals}
-                      onChange={() => toggleNotif('documentApprovals')}
-                      last
-                    />
-                  </div>
-                </div>
-
-                <button className="px-5 py-2 bg-[#83358E] text-white rounded-lg text-[14px] font-medium hover:bg-[#6D2A78] transition-colors">
-                  Save Preferences
-                </button>
-              </div>
+              </form>
             )}
 
           </div>
         </div>
       </div>
-    </div>
-  );
-}
-
-function NotifRow({
-  label,
-  description,
-  checked,
-  onChange,
-  last = false,
-}: {
-  label: string;
-  description: string;
-  checked: boolean;
-  onChange: () => void;
-  last?: boolean;
-}) {
-  return (
-    <div className={`flex items-center justify-between py-3.5 ${!last ? 'border-b border-gray-100' : ''}`}>
-      <div>
-        <p className="text-[#001A4D] text-[14px] font-medium">{label}</p>
-        <p className="text-[#888780] text-[12px] mt-0.5">{description}</p>
-      </div>
-      <Toggle checked={checked} onChange={onChange} />
     </div>
   );
 }

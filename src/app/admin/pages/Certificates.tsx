@@ -1,9 +1,6 @@
 import { useState } from "react";
 import { Award, Plus, ChevronRight } from "lucide-react";
-import CertificateDashboard from "../components/certificates/CertificateDashboard";
-import TemplateLibrary from "../components/certificates/TemplateLibrary";
-import TemplateEditor from "../components/certificates/TemplateEditor";
-import GenerateCertificates from "../components/certificates/GenerateCertificates";
+import { CertificateDashboard, TemplateLibrary, TemplateEditor, GenerateCertificates } from "../../modules/certificates";
 
 type Screen = "dashboard" | "template-library" | "template-editor" | "generate";
 
@@ -59,14 +56,16 @@ export function Certificates() {
             ))}
           </nav>
         </div>
-        <button
-          onClick={() => { setEditTemplateId(""); setScreen("template-editor"); }}
-          className="flex items-center gap-2 px-4 py-2.5 bg-[#001A4D] text-[#FFD41C] font-semibold text-sm rounded-xl hover:bg-[#0E4EBD] transition-colors"
-        >
-          <Award className="w-4 h-4" />
-          <Plus className="w-3.5 h-3.5" />
-          Create Certificate
-        </button>
+        {screen !== "template-editor" && (
+          <button
+            onClick={() => { setEditTemplateId(""); setScreen("template-editor"); }}
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#001A4D] text-[#FFD41C] font-semibold text-sm rounded-xl hover:bg-[#0E4EBD] transition-colors"
+          >
+            <Award className="w-4 h-4" />
+            <Plus className="w-3.5 h-3.5" />
+            Create Certificate
+          </button>
+        )}
       </div>
 
       {/* Screen Switcher */}

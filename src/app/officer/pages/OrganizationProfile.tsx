@@ -10,7 +10,7 @@ import { useOrgOfficers } from '../../modules/organizations/hooks/useOrgOfficers
 import { updateOrganization } from '../../modules/organizations/services/organization.service';
 import type { OrganizationDocument } from '../../modules/organizations/types/organization.types';
 
-export default function OrganizationProfile() {
+export default function OrganizationProfile({ embedded = false }: { embedded?: boolean }) {
   const { profile } = useOfficerProfile();
   const activeOrgId = profile?.activeOrganizationId || '';
 
@@ -107,17 +107,17 @@ export default function OrganizationProfile() {
     ? activeOrg.createdAt.toDate().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
     : 'Unknown';
 
-  const inputClass = `w-full px-4 py-2 border border-[#E0E0E0] rounded-lg text-sm transition-colors focus:ring-2 focus:ring-[#1E70E8] focus:border-transparent outline-none ${
+  const inputClass = `w-full px-4 py-2 border border-[#E0E0E0] rounded-lg text-sm transition-colors focus:ring-2 focus:ring-[#83358E] focus:border-transparent outline-none ${
     !canEdit ? 'bg-gray-50 text-gray-600 cursor-not-allowed' : 'bg-white'
   }`;
 
   return (
-    <div className="space-y-6 pb-12 max-w-5xl mx-auto">
+    <div className={`space-y-6 ${embedded ? '' : 'pb-12 max-w-5xl mx-auto'}`}>
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <div className="text-[#888780] text-[13px] mb-1">Dashboard &gt; Organization Profile</div>
-          <h1 className="text-[#001A4D] text-[24px] font-bold flex items-center gap-3">
+          {!embedded && <div className="text-[#888780] text-[13px] mb-1">Dashboard &gt; Organization Profile</div>}
+          <h1 className="text-[#001A4D] text-[20px] font-bold flex items-center gap-3">
             Organization Profile
             {!canEdit && (
               <span className="flex items-center gap-1.5 px-2.5 py-1 bg-gray-100 text-gray-600 rounded-md text-xs font-medium border border-gray-200">
@@ -131,7 +131,7 @@ export default function OrganizationProfile() {
           <button 
             onClick={handleSave}
             disabled={isSubmitting}
-            className="flex items-center gap-2 px-5 py-2.5 bg-[#0E4EBD] text-white rounded-lg text-[14px] font-bold hover:bg-[#0E4EBD]/90 transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 px-5 py-2 bg-[#83358E] text-white rounded-lg text-[14px] font-bold hover:bg-[#6D2A78] transition-colors disabled:opacity-50"
           >
             {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             {isSubmitting ? 'Saving...' : 'Save Changes'}

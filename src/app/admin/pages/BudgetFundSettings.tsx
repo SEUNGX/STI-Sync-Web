@@ -21,77 +21,12 @@ import {
 } from "lucide-react";
 import { useSemesters } from "../../modules/academic/hooks/useAcademicStream";
 import { useSaoLedger } from "../../modules/finance/hooks/useFinanceStream";
+import { useAllEventPayablesStream } from "../../modules/finance/hooks/usePayableStream";
 import { addLedgerTransaction } from "../../modules/finance/services/finance.service";
+import { markEventPayablesTransferred } from "../../modules/finance/services/payable.service";
 import type { SaoLedgerDocument, TransactionSource, TransactionType } from "../../modules/finance/types/finance.types";
+import type { StudentEventCollectionGroup } from "../../modules/finance/types/payable.types";
 import { Timestamp } from "firebase/firestore";
-
-interface StudentPayment {
-  id: string;
-  name: string;
-  studentId: string;
-  amount: number;
-  paidDate: string;
-  status: "Paid" | "Pending";
-}
-
-interface StudentCollection {
-  id: string;
-  eventName: string;
-  eventDate: string;
-  payablePerStudent: number;
-  totalStudents: number;
-  payments: StudentPayment[];
-  transferredToBudget: boolean;
-  transferredDate?: string;
-}
-
-// ─── Mock Data ─────────────────────────────────────────────────────────────────
-const MOCK_COLLECTIONS: StudentCollection[] = [
-  {
-    id: "sc1",
-    eventName: "Sportsfest 2026",
-    eventDate: "Jun 8, 2026",
-    payablePerStudent: 250,
-    totalStudents: 130,
-    transferredToBudget: true,
-    transferredDate: "Jun 10, 2026",
-    payments: [
-      { id: "p1", name: "Juan Dela Cruz", studentId: "2021-00123", amount: 250, paidDate: "Jun 5, 2026", status: "Paid" },
-      { id: "p2", name: "Maria Santos", studentId: "2021-00124", amount: 250, paidDate: "Jun 5, 2026", status: "Paid" },
-      { id: "p3", name: "Jose Reyes", studentId: "2021-00125", amount: 250, paidDate: "Jun 6, 2026", status: "Paid" },
-      { id: "p4", name: "Ana Lopez", studentId: "2021-00126", amount: 250, paidDate: "Jun 7, 2026", status: "Paid" },
-      { id: "p5", name: "Carlo Mendoza", studentId: "2021-00127", amount: 250, paidDate: "Jun 7, 2026", status: "Paid" },
-    ],
-  },
-  {
-    id: "sc2",
-    eventName: "Leadership Summit 2026",
-    eventDate: "Jun 16, 2026",
-    payablePerStudent: 500,
-    totalStudents: 80,
-    transferredToBudget: false,
-    payments: [
-      { id: "p6", name: "Juan Dela Cruz", studentId: "2021-00123", amount: 500, paidDate: "Jun 12, 2026", status: "Paid" },
-      { id: "p7", name: "Maria Santos", studentId: "2021-00124", amount: 500, paidDate: "Jun 13, 2026", status: "Paid" },
-      { id: "p8", name: "Jose Reyes", studentId: "2021-00125", amount: 0, paidDate: "—", status: "Pending" },
-      { id: "p9", name: "Ana Lopez", studentId: "2021-00126", amount: 500, paidDate: "Jun 14, 2026", status: "Paid" },
-      { id: "p10", name: "Carlo Mendoza", studentId: "2021-00127", amount: 0, paidDate: "—", status: "Pending" },
-    ],
-  },
-  {
-    id: "sc3",
-    eventName: "Foundation Day Celebration",
-    eventDate: "Jun 18, 2026",
-    payablePerStudent: 150,
-    totalStudents: 200,
-    transferredToBudget: false,
-    payments: [
-      { id: "p11", name: "Juan Dela Cruz", studentId: "2021-00123", amount: 150, paidDate: "Jun 15, 2026", status: "Paid" },
-      { id: "p12", name: "Maria Santos", studentId: "2021-00124", amount: 150, paidDate: "Jun 15, 2026", status: "Paid" },
-      { id: "p13", name: "Jose Reyes", studentId: "2021-00125", amount: 0, paidDate: "—", status: "Pending" },
-    ],
-  },
-];
 
 // ─── Add School Budget Allocation Modal (original) ────────────────────────────
 function AddBudgetModal({ currentBalance, onClose, onSave }: {
@@ -247,7 +182,7 @@ function CollectionDetailModal({
   onClose,
   onTransfer,
 }: {
-  collection: StudentCollection;
+  collection: StudentEventCollectionGroup;
   alreadyTransferred: boolean;
   onClose: () => void;
   onTransfer: () => void;
@@ -255,7 +190,9 @@ function CollectionDetailModal({
   const paid = collection.payments.filter((p) => p.status === "Paid");
   const pending = collection.payments.filter((p) => p.status === "Pending");
   const totalCollected = paid.reduce((s, p) => s + p.amount, 0);
-  const collectionPct = Math.round((paid.length / collection.totalStudents) * 100);
+  const collectionPct = collection.totalStudents > 0 
+    ? Math.round((paid.length / collection.totalStudents) * 100) 
+    : 0;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -289,7 +226,7 @@ function CollectionDetailModal({
           {/* Progress */}
           <div>
             <div className="flex justify-between text-xs text-gray-500 mb-1.5">
-              <span>{collectionPct}% collected from sample list shown</span>
+              <span>{collectionPct}% collected</span>
               <span>₱{collection.payablePerStudent} per student</span>
             </div>
             <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
@@ -483,17 +420,19 @@ const sourceLabel: Record<TransactionSource, string> = {
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 export function BudgetFundSettings() {
   const [tab, setTab] = useState<MainTab>("ledger");
-  const { data: rawTransactions, loading } = useSaoLedger();
+  const { data: rawTransactions, loading: ledgerLoading } = useSaoLedger();
+  const { data: collections, loading: collectionsLoading } = useAllEventPayablesStream();
   const { data: semesters } = useSemesters();
   const activeSemester = semesters.find(s => s.status === 'ACTIVE') || null;
   
-  const [collections, setCollections] = useState<StudentCollection[]>(MOCK_COLLECTIONS);
   const [showAddBudget, setShowAddBudget] = useState(false);
   const [showAddExpense, setShowAddExpense] = useState(false);
-  const [viewCollection, setViewCollection] = useState<StudentCollection | null>(null);
+  const [viewCollection, setViewCollection] = useState<StudentEventCollectionGroup | null>(null);
   
   const [txFilter, setTxFilter] = useState<"all" | "income" | "expense">("all");
   const [semesterFilter, setSemesterFilter] = useState<string>("all");
+
+  const loading = ledgerLoading || collectionsLoading;
 
   // Calculate dynamic balances for the ledger
   const transactions = rawTransactions.map((tx, idx, arr) => {
@@ -528,22 +467,26 @@ export function BudgetFundSettings() {
     }
   };
 
-  const handleTransferCollection = async (collection: StudentCollection) => {
-    const totalCollected = collection.payments.filter((p) => p.status === "Paid").reduce((s, p) => s + p.amount, 0);
-    setCollections((prev) => prev.map((c) =>
-      c.id === collection.id ? { ...c, transferredToBudget: true, transferredDate: "Today" } : c
-    ));
+  const handleTransferCollection = async (collectionItem: StudentEventCollectionGroup) => {
+    const totalCollected = collectionItem.payments
+      .filter((p) => p.status === "Paid")
+      .reduce((s, p) => s + p.amount, 0);
+
     await handleSaveTransaction({
       semesterId: activeSemester?.id || null,
       date: Timestamp.fromDate(new Date()),
-      description: `Student Collections – ${collection.eventName}`,
-      eventId: collection.id, // we might store collection event id
+      description: `Student Collections – ${collectionItem.eventName}`,
+      eventId: collectionItem.eventId !== 'unassigned' ? collectionItem.eventId : null,
       type: "income",
       source: "student_collection",
       amount: totalCollected,
       addedBy: "Admin SAO",
-      collectionId: collection.id,
+      collectionId: collectionItem.id,
     });
+
+    if (collectionItem.eventId && collectionItem.eventId !== 'unassigned') {
+      await markEventPayablesTransferred(collectionItem.eventId);
+    }
   };
 
   if (loading) return <div className="p-8 text-center text-gray-500">Loading ledger...</div>;
@@ -773,56 +716,64 @@ export function BudgetFundSettings() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {collections.map((c) => {
-                    const paid = c.payments.filter((p) => p.status === "Paid");
-                    const totalCollected = paid.reduce((s, p) => s + p.amount, 0);
-                    const pct = Math.round((paid.length / c.totalStudents) * 100);
+                  {collections.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="px-4 py-8 text-center text-gray-500 text-sm">
+                        No event payables collections found.
+                      </td>
+                    </tr>
+                  ) : (
+                    collections.map((c) => {
+                      const paid = c.payments.filter((p) => p.status === "Paid");
+                      const totalCollected = paid.reduce((s, p) => s + p.amount, 0);
+                      const pct = c.totalStudents > 0 ? Math.round((paid.length / c.totalStudents) * 100) : 0;
 
-                    return (
-                      <tr key={c.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-4 py-3">
-                          <p className="text-[#001A4D] font-medium text-sm">{c.eventName}</p>
-                        </td>
-                        <td className="px-4 py-3 text-gray-500 text-sm whitespace-nowrap">{c.eventDate}</td>
-                        <td className="px-4 py-3 text-gray-700 text-sm font-medium">₱{c.payablePerStudent.toLocaleString()}</td>
-                        <td className="px-4 py-3 text-gray-600 text-sm">{c.totalStudents}</td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <div className="h-1.5 w-16 bg-gray-100 rounded-full overflow-hidden">
-                              <div className="h-full bg-green-500 rounded-full" style={{ width: `${pct}%` }} />
+                      return (
+                        <tr key={c.id} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-4 py-3">
+                            <p className="text-[#001A4D] font-medium text-sm">{c.eventName}</p>
+                          </td>
+                          <td className="px-4 py-3 text-gray-500 text-sm whitespace-nowrap">{c.eventDate}</td>
+                          <td className="px-4 py-3 text-gray-700 text-sm font-medium">₱{c.payablePerStudent.toLocaleString()}</td>
+                          <td className="px-4 py-3 text-gray-600 text-sm">{c.totalStudents}</td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <div className="h-1.5 w-16 bg-gray-100 rounded-full overflow-hidden">
+                                <div className="h-full bg-green-500 rounded-full" style={{ width: `${pct}%` }} />
+                              </div>
+                              <span className="text-green-600 text-sm font-medium">{paid.length}</span>
                             </div>
-                            <span className="text-green-600 text-sm font-medium">{paid.length}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="text-green-700 font-bold text-sm">₱{totalCollected.toLocaleString()}</span>
-                        </td>
-                        <td className="px-4 py-3">
-                          {c.transferredToBudget ? (
-                            <span className="flex items-center gap-1 text-xs text-green-700 bg-green-100 px-2 py-1 rounded-full font-medium w-fit whitespace-nowrap">
-                              <CheckCircle className="w-3 h-3" />
-                              Transferred {c.transferredDate}
-                            </span>
-                          ) : (
-                            <span className="flex items-center gap-1 text-xs text-amber-700 bg-amber-100 px-2 py-1 rounded-full font-medium w-fit">
-                              <Clock className="w-3 h-3" />
-                              Pending
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3">
-                          <button
-                            onClick={() => setViewCollection(c)}
-                            className="flex items-center gap-1.5 px-3 py-1.5 border border-blue-300 text-blue-600 text-xs rounded-lg font-medium hover:bg-blue-50 transition-colors whitespace-nowrap"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                            View Details
-                            <ChevronRight className="w-3 h-3" />
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-green-700 font-bold text-sm">₱{totalCollected.toLocaleString()}</span>
+                          </td>
+                          <td className="px-4 py-3">
+                            {c.transferredToBudget ? (
+                              <span className="flex items-center gap-1 text-xs text-green-700 bg-green-100 px-2 py-1 rounded-full font-medium w-fit whitespace-nowrap">
+                                <CheckCircle className="w-3 h-3" />
+                                Transferred {c.transferredDate}
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-1 text-xs text-amber-700 bg-amber-100 px-2 py-1 rounded-full font-medium w-fit">
+                                <Clock className="w-3 h-3" />
+                                Pending
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <button
+                              onClick={() => setViewCollection(c)}
+                              className="flex items-center gap-1.5 px-3 py-1.5 border border-blue-300 text-blue-600 text-xs rounded-lg font-medium hover:bg-blue-50 transition-colors whitespace-nowrap"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              View Details
+                              <ChevronRight className="w-3 h-3" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>

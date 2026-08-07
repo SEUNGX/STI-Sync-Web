@@ -1,12 +1,15 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Users } from 'lucide-react';
+import { Users, Lock } from 'lucide-react';
 import { useDepartments } from '../../../academic';
 import { useStudents } from '../../../students/hooks/useStudentStream';
+import { useOrgMembers } from '../../../organizations/hooks/useOrgMembers';
+import { useOrganizationStream } from '../../../organizations';
 import type { EventFormData, EventSession } from '../../types/event.types';
 
 interface Step3Props {
   data: EventFormData;
   onUpdate: (data: Partial<EventFormData>) => void;
+  isOfficer?: boolean;
 }
 
 const YEAR_LEVELS = ['All', '1st Year', '2nd Year', '3rd Year', '4th Year', 'G11', 'G12'];
@@ -39,10 +42,14 @@ function addMinutesToTime(timeStr: string, minutesToAdd: number): string {
   return `${newH.toString().padStart(2, '0')}:${newM.toString().padStart(2, '0')}`;
 }
 
-export default function Step3Participants({ data, onUpdate }: Step3Props) {
+export default function Step3Participants({ data, onUpdate, isOfficer }: Step3Props) {
   const { data: departments, loading: deptsLoading } = useDepartments();
   const { data: students, loading: studentsLoading } = useStudents();
+  const { data: orgs } = useOrganizationStream();
+  const { members: orgMembers, loading: membersLoading } = useOrgMembers(data.hostingOrgId || '');
+
   const activeDepartments = departments.filter(d => !d.archived);
+  const currentOrg = orgs.find(o => o.id === data.hostingOrgId);
 
   // Initialize defaults if undefined
   useEffect(() => {
@@ -84,11 +91,34 @@ export default function Step3Participants({ data, onUpdate }: Step3Props) {
   const selectedYears = data.targetYearLevels || [];
   const selectedDepts = data.targetDepartmentIds || [];
 
+  // Build member ID sets for fast lookup
+  const memberStudentIds = useMemo(() => {
+    const set = new Set<string>();
+    orgMembers.forEach(m => {
+      if (m.studentId) set.add(m.studentId);
+      if (m.studentSchoolId) set.add(m.studentSchoolId);
+      if (m.authUid) set.add(m.authUid);
+    });
+    return set;
+  }, [orgMembers]);
+
   // Calculate actual matching students based on selected Departments and Year Levels
   const matchingStudents = useMemo(() => {
     return students.filter(s => {
       const active = !s.status || s.status.toUpperCase() === 'ACTIVE';
       if (!active) return false;
+
+      // If officer mode, constrain to org members (or org department if members list is empty)
+      if (isOfficer) {
+        const isOrgMember =
+          memberStudentIds.size > 0
+            ? memberStudentIds.has(s.studentId) || memberStudentIds.has(s.id) || (s.authUid && memberStudentIds.has(s.authUid))
+            : currentOrg?.departmentId && currentOrg.departmentId !== 'cross-departmental'
+            ? s.departmentId === currentOrg.departmentId
+            : true;
+
+        if (!isOrgMember) return false;
+      }
 
       const matchesDept = selectedDepts.length === 0 || selectedDepts.some(dId => {
         const dObj = activeDepartments.find(ad => ad.id === dId);
@@ -99,7 +129,7 @@ export default function Step3Participants({ data, onUpdate }: Step3Props) {
 
       return matchesDept && matchesYear;
     });
-  }, [students, selectedDepts, selectedYears, activeDepartments]);
+  }, [students, selectedDepts, selectedYears, activeDepartments, isOfficer, memberStudentIds, currentOrg]);
 
   // Sync expectedParticipantCount to data if changed
   useEffect(() => {
@@ -121,6 +151,15 @@ export default function Step3Participants({ data, onUpdate }: Step3Props) {
               * Required Audience Selection
             </span>
           </div>
+
+          {isOfficer && (
+            <div className="p-3 bg-[#F3E8FF] border border-[#83358E]/30 rounded-xl mb-4 flex items-center gap-2 text-xs text-[#83358E]">
+              <Lock className="w-4 h-4 flex-shrink-0" />
+              <span>
+                <strong>Organization Scope:</strong> Reach is automatically scoped to designated members of <strong>{currentOrg?.acronym || currentOrg?.name || 'your organization'}</strong>. You can filter by year level below.
+              </span>
+            </div>
+          )}
 
           <div className="space-y-4">
             <div>

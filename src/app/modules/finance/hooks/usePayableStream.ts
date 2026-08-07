@@ -177,3 +177,82 @@ export function useEventPayablesStream(eventId: string | null) {
 
   return { data, loading, error };
 }
+
+export function useAllEventPayablesStream() {
+  const [data, setData] = useState<import('../types/payable.types').StudentEventCollectionGroup[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    const q = query(
+      collection(db, 'payables'),
+      where('type', '==', 'event_fee')
+    );
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const rawDocs = snapshot.docs.map((d) => ({
+          id: d.id,
+          ...d.data(),
+        })) as PayableDocument[];
+
+        const groupsMap = new Map<string, import('../types/payable.types').StudentEventCollectionGroup>();
+
+        for (const doc of rawDocs) {
+          const eId = doc.eventId || 'unassigned';
+          if (!groupsMap.has(eId)) {
+            groupsMap.set(eId, {
+              id: eId,
+              eventId: eId,
+              eventName: doc.label || doc.description || 'Event Payable',
+              eventDate: doc.createdAt?.toDate 
+                ? doc.createdAt.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                : '—',
+              payablePerStudent: doc.assignedAmount || 0,
+              totalStudents: 0,
+              transferredToBudget: Boolean(doc.transferredToBudget),
+              transferredDate: doc.transferredAt?.toDate 
+                ? doc.transferredAt.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                : undefined,
+              payments: [],
+            });
+          }
+
+          const group = groupsMap.get(eId)!;
+          group.totalStudents += 1;
+          if (doc.transferredToBudget) {
+            group.transferredToBudget = true;
+            if (doc.transferredAt?.toDate && !group.transferredDate) {
+              group.transferredDate = doc.transferredAt.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            }
+          }
+
+          const isPaid = doc.status === 'paid' || (doc.paidAmount || 0) >= (doc.assignedAmount || 0);
+          group.payments.push({
+            id: doc.id,
+            name: doc.studentName || 'Student',
+            studentId: doc.studentSchoolId || doc.studentId,
+            amount: doc.paidAmount || 0,
+            paidDate: doc.paidAt?.toDate 
+              ? doc.paidAt.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+              : '—',
+            status: isPaid ? 'Paid' : 'Pending',
+          });
+        }
+
+        setData(Array.from(groupsMap.values()));
+        setLoading(false);
+      },
+      (err) => {
+        console.error('Error fetching all event payables stream:', err);
+        setError(err);
+        setLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, []);
+
+  return { data, loading, error };
+}

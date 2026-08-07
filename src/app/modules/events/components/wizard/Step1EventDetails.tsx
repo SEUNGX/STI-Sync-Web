@@ -9,9 +9,10 @@ import { uploadToCloudinary } from '../../../../../services/cloudinary';
 interface Step1Props {
   data: EventFormData;
   onUpdate: (data: Partial<EventFormData>) => void;
+  isOfficer?: boolean;
 }
 
-export default function Step1EventDetails({ data, onUpdate }: Step1Props) {
+export default function Step1EventDetails({ data, onUpdate, isOfficer }: Step1Props) {
   // Streams
   const { data: orgs, loading: orgsLoading } = useOrganizationStream();
   const { eventTypes, loading: typesLoading } = useEventTypesStream();
@@ -118,14 +119,19 @@ export default function Step1EventDetails({ data, onUpdate }: Step1Props) {
             <select
               value={data.hostingOrgId || ''}
               onChange={(e) => updateField('hostingOrgId', e.target.value)}
-              disabled={orgsLoading}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent disabled:opacity-50"
+              disabled={orgsLoading || isOfficer}
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent disabled:opacity-75 disabled:bg-gray-100"
             >
               <option value="">{orgsLoading ? 'Loading organizations...' : 'Select organization...'}</option>
               {activeOrgs.map(org => (
                 <option key={org.id} value={org.id}>{org.name}</option>
               ))}
             </select>
+            {isOfficer && (
+              <p className="text-xs text-[#83358E] font-medium mt-1">
+                🔒 Locked to your active organization.
+              </p>
+            )}
           </div>
         </div>
 

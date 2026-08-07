@@ -39,11 +39,32 @@ export interface PayableDocument {
   recordedBy: string | null;
   paymentMethod: string | null;
   qrTicketUnlocked?: boolean;              // Explicit toggle: true = student event QR ticket unlocked for gate scan
+  transferredToBudget?: boolean;           // True if event fee collection transferred to SAO budget
+  transferredAt?: Timestamp | null;
 
   // ─── Audit ───
   createdBy: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
+}
+
+export interface StudentEventCollectionGroup {
+  id: string;
+  eventId: string;
+  eventName: string;
+  eventDate: string;
+  payablePerStudent: number;
+  totalStudents: number;
+  transferredToBudget: boolean;
+  transferredDate?: string;
+  payments: Array<{
+    id: string;
+    name: string;
+    studentId: string;
+    amount: number;
+    paidDate: string;
+    status: "Paid" | "Pending";
+  }>;
 }
 
 export interface CreatePayablePayload {

@@ -18,6 +18,7 @@ export interface CertificateTemplate {
   isDefault: boolean;
   namePosition: CertificatePosition;
   createdBy: string;
+  organizationId?: string | null;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
 }

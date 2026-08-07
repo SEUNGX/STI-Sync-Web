@@ -672,10 +672,12 @@ const transactions = rawTransactions.map((tx, idx, arr) => {
 - Hook: `useLiquidationStream()`
 - Enables SAO Advisers to review officer-submitted liquidation reports, verify receipt documents lightbox previews, inspect variances against approved event budgets, and execute `approveLiquidation()`, `rejectLiquidation()`, or `returnLiquidation()` actions.
 
-### Certificate Management & PDF Export (`src/app/admin/components/certificates/`)
-- Services & Hooks: `certificate.service.ts`, `useCertificateStream.ts`
-- **Template Editor (`TemplateEditor.tsx`)**: Visual drag-and-drop canvas supporting landscape and portrait orientation, dynamic placeholder tokens (`{student_name}`, `{event_name}`, `{date}`, etc.), image overlays, and signatory canvas positioning.
-- **Certificate Issuance & Export (`ExportModal.tsx`, `GenerateCertificates.tsx`)**: Bulk PDF rendering via `jspdf` & `html2canvas` for landscape certificate generation and automatic issuance to student profiles.
+<!-- AGENT-UPDATED: 2026-08-07 — Updated path to src/app/modules/certificates/ and documented admin template isolation contract -->
+### Certificate Management & PDF Export (`src/app/modules/certificates/`)
+- Services & Hooks: `certificate.service.ts`, `useCertificateStream.ts` (`useCertificateTemplatesStream(undefined, true)`)
+- **Admin Template Isolation**: Admin certificate management view is strictly scoped to SAO Admin templates (`organizationId === 'admin'` or unassigned). Officer organization templates are hidden from the SAO Admin view.
+- **Template Editor (`TemplateEditor.tsx`)**: Visual drag-and-drop canvas supporting landscape A4 orientation, typography customization, color presets, alignment, and live name overlay positioning.
+- **Certificate Issuance & Export (`ExportModal.tsx`, `GenerateCertificates.tsx`)**: Bulk PDF rendering via `jspdf` for landscape A4 certificate generation and automatic record keeping in `/certificates_issued`.
 
 ---
 
