@@ -1,5 +1,7 @@
 import { CheckCircle, Calendar, Users, DollarSign, Shield, Rocket, Clock, MapPin, Award, Bell } from 'lucide-react';
 import type { EventFormData } from '../../types/event.types';
+import { useOfficerProfile } from '../../../../auth/hooks/useOfficerProfile';
+import { useAdviserProfile } from '../../../auth/hooks/useAdviserProfile';
 
 interface Step7Props {
   data: EventFormData;
@@ -10,6 +12,14 @@ interface Step7Props {
 }
 
 export default function Step7Publish({ data, onUpdate, onPublish, isPublishing, isOfficer }: Step7Props) {
+  const { profile: officerProfile } = useOfficerProfile();
+  const { profile: adviserProfile } = useAdviserProfile();
+
+  const showOfficerMode = isOfficer || !!officerProfile;
+  const creatorName = showOfficerMode
+    ? (officerProfile?.studentName || data.createdByName || 'Student Officer')
+    : (adviserProfile?.displayName || 'SAO Adviser');
+
   // Validate steps based on real data
   const isDetailsComplete = !!data.title && !!data.description && !!data.eventTypeId && !!data.hostingOrgId;
   const isScheduleComplete = !!data.semesterId && !!data.venueId && (data.sessions?.length ?? 0) > 0;
@@ -77,7 +87,7 @@ export default function Step7Publish({ data, onUpdate, onPublish, isPublishing, 
                   </div>
                   <div>
                     <span className="text-gray-600">Created By:</span>
-                    <span className="ml-2 font-medium text-gray-900">SAO Adviser</span>
+                    <span className="ml-2 font-medium text-gray-900">{creatorName}</span>
                   </div>
                   <div>
                     <span className="text-gray-600">Visibility:</span>

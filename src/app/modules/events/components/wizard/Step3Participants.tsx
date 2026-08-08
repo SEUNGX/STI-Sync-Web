@@ -51,12 +51,14 @@ export default function Step3Participants({ data, onUpdate, isOfficer }: Step3Pr
   const activeDepartments = departments.filter(d => !d.archived);
   const currentOrg = orgs.find(o => o.id === data.hostingOrgId);
 
-  // Initialize defaults if undefined
+  // Initialize defaults if undefined without triggering redundant state updates
   useEffect(() => {
-    if (data.attendanceEnabled === undefined) onUpdate({ attendanceEnabled: true });
-    if (data.certificatesEnabled === undefined) onUpdate({ certificatesEnabled: true });
-    if (!data.targetYearLevels) onUpdate({ targetYearLevels: [] });
-    if (!data.targetDepartmentIds) onUpdate({ targetDepartmentIds: [] });
+    const updates: Partial<EventFormData> = {};
+    if (data.attendanceEnabled === undefined) updates.attendanceEnabled = true;
+    if (data.certificatesEnabled === undefined) updates.certificatesEnabled = true;
+    if (Object.keys(updates).length > 0) {
+      onUpdate(updates);
+    }
   }, []);
 
   const updateField = (field: keyof EventFormData, value: any) => {
@@ -131,10 +133,10 @@ export default function Step3Participants({ data, onUpdate, isOfficer }: Step3Pr
     });
   }, [students, selectedDepts, selectedYears, activeDepartments, isOfficer, memberStudentIds, currentOrg]);
 
-  // Sync expectedParticipantCount to data if changed
+  // Sync expectedParticipantCount to data if uninitialized
   useEffect(() => {
     const count = matchingStudents.length;
-    if (data.expectedParticipantCount !== count && count > 0) {
+    if (data.expectedParticipantCount === undefined && count > 0) {
       onUpdate({ expectedParticipantCount: count });
     }
   }, [matchingStudents.length]);
@@ -218,118 +220,45 @@ export default function Step3Participants({ data, onUpdate, isOfficer }: Step3Pr
             <p className="text-xs text-gray-500 mt-0.5">Configure check-in and check-out scanning windows for each event session</p>
           </div>
 
-          <div className="space-y-4">
-            {sessions.map((session, index) => {
-              const graceMins = data.gracePeriodMinutes ?? 15;
-              const lateMins = data.lateThresholdMinutes ?? 60;
-              const graceCutoff = session.startTime ? addMinutesToTime(session.startTime, graceMins) : '';
-              const lateCutoff = session.startTime ? addMinutesToTime(session.startTime, lateMins) : '';
+          {data.enableQRTickets === true || (data as any).enableQR === true ? (
+            <div className="space-y-4">
+              {sessions.map((session, index) => {
+                const graceMins = data.gracePeriodMinutes ?? 15;
+                const lateMins = data.lateThresholdMinutes ?? 60;
+                const graceCutoff = session.startTime ? addMinutesToTime(session.startTime, graceMins) : '';
+                const lateCutoff = session.startTime ? addMinutesToTime(session.startTime, lateMins) : '';
 
-              const timeInOpenInvalid = session.timeInOpen && session.startTime && session.timeInOpen > session.startTime;
-              const timeInOrderInvalid = session.timeInOpen && session.timeInClose && session.timeInOpen >= session.timeInClose;
-              const timeOutOrderInvalid = session.timeOutOpen && session.timeOutClose && session.timeOutOpen >= session.timeOutClose;
-              const timeOutBeforeInInvalid = session.hasTimeOut && session.timeOutOpen && session.timeInClose && session.timeOutOpen <= session.timeInClose;
+                const timeInOpenInvalid = session.timeInOpen && session.startTime && session.timeInOpen > session.startTime;
+                const timeInOrderInvalid = session.timeInOpen && session.timeInClose && session.timeInOpen >= session.timeInClose;
+                const timeOutOrderInvalid = session.timeOutOpen && session.timeOutClose && session.timeOutOpen >= session.timeOutClose;
+                const timeOutBeforeInInvalid = session.hasTimeOut && session.timeOutOpen && session.timeInClose && session.timeOutOpen <= session.timeInClose;
 
-              return (
-                <div key={session.id} className="border border-gray-200 rounded-xl overflow-hidden shadow-sm bg-white">
-                  {/* Session header banner */}
-                  <div className="bg-[#001A4D] px-4 py-3 text-white">
-                    <div className="flex items-center justify-between">
-                      <p className="font-bold text-sm">{session.title || `Session ${index + 1}`}</p>
-                      <span className="px-2.5 py-0.5 bg-[#83358E] rounded-full text-xs font-semibold text-white">
-                        {session.date || 'No Date'}
-                      </span>
-                    </div>
-                    {session.startTime && (
-                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-white/80 mt-1.5 pt-1.5 border-t border-white/10">
-                        <span>Start: <strong className="text-white">{formatTime12Hour(session.startTime)}</strong></span>
-                        <span>Grace (On-Time): <strong className="text-green-300">{formatTime12Hour(graceCutoff)} (+{graceMins}m)</strong></span>
-                        <span>Late Cutoff: <strong className="text-amber-300">{formatTime12Hour(lateCutoff)} (+{lateMins}m)</strong></span>
+                return (
+                  <div key={session.id} className="border border-gray-200 rounded-xl overflow-hidden shadow-sm bg-white">
+                    {/* Session header banner */}
+                    <div className="bg-[#001A4D] px-4 py-3 text-white">
+                      <div className="flex items-center justify-between">
+                        <p className="font-bold text-sm">{session.title || `Session ${index + 1}`}</p>
+                        <span className="px-2.5 py-0.5 bg-[#83358E] rounded-full text-xs font-semibold text-white">
+                          {session.date || 'No Date'}
+                        </span>
                       </div>
-                    )}
-                  </div>
-
-                  {/* Time-in settings */}
-                  <div className="p-4 space-y-4">
-                    <div>
-                      <div className="flex items-center gap-1.5 mb-2">
-                        <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Time-In Window</p>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-xs text-gray-600 mb-1 flex items-center">
-                            Opens
-                            <span className="relative group inline-block ml-1 cursor-pointer">
-                              <span className="w-3.5 h-3.5 bg-gray-200 text-gray-600 rounded-full flex items-center justify-center text-[9px] font-bold">?</span>
-                              <span className="absolute left-0 bottom-full mb-1.5 hidden group-hover:block w-48 p-2 bg-gray-900 text-white text-[11px] rounded shadow-xl z-30 pointer-events-none text-left">
-                                Recommended 15–30 mins before session start so early arrivals can scan.
-                              </span>
-                            </span>
-                          </label>
-                          <input
-                            type="time"
-                            step="600"
-                            value={session.timeInOpen || ''}
-                            onChange={(e) => updateSession(session.id, 'timeInOpen', e.target.value)}
-                            className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] focus:border-transparent ${
-                              timeInOpenInvalid || timeInOrderInvalid ? 'border-red-400 bg-red-50/30' : 'border-gray-300'
-                            }`}
-                          />
+                      {session.startTime && (
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-white/80 mt-1.5 pt-1.5 border-t border-white/10">
+                          <span>Start: <strong className="text-white">{formatTime12Hour(session.startTime)}</strong></span>
+                          <span>Grace (On-Time): <strong className="text-green-300">{formatTime12Hour(graceCutoff)} (+{graceMins}m)</strong></span>
+                          <span>Late Cutoff: <strong className="text-amber-300">{formatTime12Hour(lateCutoff)} (+{lateMins}m)</strong></span>
                         </div>
-
-                        <div>
-                          <label className="block text-xs text-gray-600 mb-1 flex items-center">
-                            Closes
-                            <span className="relative group inline-block ml-1 cursor-pointer">
-                              <span className="w-3.5 h-3.5 bg-gray-200 text-gray-600 rounded-full flex items-center justify-center text-[9px] font-bold">?</span>
-                              <span className="absolute right-0 bottom-full mb-1.5 hidden group-hover:block w-48 p-2 bg-gray-900 text-white text-[11px] rounded shadow-xl z-30 pointer-events-none text-left">
-                                Cutoff for check-in. Auto-synced with Session Start + Late Threshold.
-                              </span>
-                            </span>
-                          </label>
-                          <input
-                            type="time"
-                            step="600"
-                            value={session.timeInClose || ''}
-                            onChange={(e) => updateSession(session.id, 'timeInClose', e.target.value)}
-                            className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] focus:border-transparent ${
-                              timeInOrderInvalid ? 'border-red-400 bg-red-50/30' : 'border-gray-300'
-                            }`}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Validation messages for Time-In */}
-                      {timeInOpenInvalid && (
-                        <p className="text-[11px] text-amber-600 font-medium mt-1.5 flex items-center gap-1">
-                          ⚠️ Time-In Opens ({formatTime12Hour(session.timeInOpen)}) is after session start ({formatTime12Hour(session.startTime)}). Early arrivals cannot scan.
-                        </p>
-                      )}
-                      {timeInOrderInvalid && (
-                        <p className="text-[11px] text-red-600 font-medium mt-1.5">
-                          ❌ Time-In Opens must be earlier than Time-In Closes.
-                        </p>
                       )}
                     </div>
 
-                    {/* Timeout toggle */}
-                    <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
-                      <input
-                        type="checkbox"
-                        id={`timeout-${session.id}`}
-                        checked={session.hasTimeOut || false}
-                        onChange={() => toggleHasTimeOut(session.id)}
-                        className="w-4 h-4 rounded accent-[#83358E]"
-                      />
-                      <label htmlFor={`timeout-${session.id}`} className="text-sm font-medium text-gray-700 cursor-pointer">
-                        Enable Time-Out for this session
-                      </label>
-                    </div>
+                    {/* Time-in settings */}
+                    <div className="p-4 space-y-4">
+                      <div>
+                        <div className="flex items-center gap-1.5 mb-2">
+                          <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Time-In Window</p>
+                        </div>
 
-                    {session.hasTimeOut && (
-                      <div className="space-y-2 pt-1">
-                        <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Time-Out Window</p>
                         <div className="grid grid-cols-2 gap-3">
                           <div>
                             <label className="block text-xs text-gray-600 mb-1 flex items-center">
@@ -337,17 +266,17 @@ export default function Step3Participants({ data, onUpdate, isOfficer }: Step3Pr
                               <span className="relative group inline-block ml-1 cursor-pointer">
                                 <span className="w-3.5 h-3.5 bg-gray-200 text-gray-600 rounded-full flex items-center justify-center text-[9px] font-bold">?</span>
                                 <span className="absolute left-0 bottom-full mb-1.5 hidden group-hover:block w-48 p-2 bg-gray-900 text-white text-[11px] rounded shadow-xl z-30 pointer-events-none text-left">
-                                  Earliest time attendees can scan out before session completion.
+                                  Recommended 15–30 mins before session start so early arrivals can scan.
                                 </span>
                               </span>
                             </label>
                             <input
                               type="time"
                               step="600"
-                              value={session.timeOutOpen || ''}
-                              onChange={(e) => updateSession(session.id, 'timeOutOpen', e.target.value)}
+                              value={session.timeInOpen || ''}
+                              onChange={(e) => updateSession(session.id, 'timeInOpen', e.target.value)}
                               className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] focus:border-transparent ${
-                                timeOutOrderInvalid || timeOutBeforeInInvalid ? 'border-red-400 bg-red-50/30' : 'border-gray-300'
+                                timeInOpenInvalid || timeInOrderInvalid ? 'border-red-400 bg-red-50/30' : 'border-gray-300'
                               }`}
                             />
                           </div>
@@ -358,40 +287,110 @@ export default function Step3Participants({ data, onUpdate, isOfficer }: Step3Pr
                               <span className="relative group inline-block ml-1 cursor-pointer">
                                 <span className="w-3.5 h-3.5 bg-gray-200 text-gray-600 rounded-full flex items-center justify-center text-[9px] font-bold">?</span>
                                 <span className="absolute right-0 bottom-full mb-1.5 hidden group-hover:block w-48 p-2 bg-gray-900 text-white text-[11px] rounded shadow-xl z-30 pointer-events-none text-left">
-                                  Final cutoff time for session check-out scans.
+                                  Cutoff for check-in. Auto-synced with Session Start + Late Threshold.
                                 </span>
                               </span>
                             </label>
                             <input
                               type="time"
                               step="600"
-                              value={session.timeOutClose || ''}
-                              onChange={(e) => updateSession(session.id, 'timeOutClose', e.target.value)}
+                              value={session.timeInClose || ''}
+                              onChange={(e) => updateSession(session.id, 'timeInClose', e.target.value)}
                               className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] focus:border-transparent ${
-                                timeOutOrderInvalid ? 'border-red-400 bg-red-50/30' : 'border-gray-300'
+                                timeInOrderInvalid ? 'border-red-400 bg-red-50/30' : 'border-gray-300'
                               }`}
                             />
                           </div>
                         </div>
 
-                        {/* Validation messages for Time-Out */}
-                        {timeOutBeforeInInvalid && (
-                          <p className="text-[11px] text-red-600 font-medium mt-1">
-                            ❌ Time-Out Opens must be after Time-In Closes.
+                        {/* Validation messages for Time-In */}
+                        {timeInOpenInvalid && (
+                          <p className="text-[11px] text-amber-600 font-medium mt-1.5 flex items-center gap-1">
+                            ⚠️ Time-In Opens ({formatTime12Hour(session.timeInOpen)}) is after session start ({formatTime12Hour(session.startTime)}). Early arrivals cannot scan.
                           </p>
                         )}
-                        {timeOutOrderInvalid && (
-                          <p className="text-[11px] text-red-600 font-medium mt-1">
-                            ❌ Time-Out Opens must be earlier than Time-Out Closes.
+                        {timeInOrderInvalid && (
+                          <p className="text-[11px] text-red-600 font-medium mt-1.5">
+                            ❌ Time-In Opens must be earlier than Time-In Closes.
                           </p>
                         )}
                       </div>
-                    )}
+
+                      {/* Time-out toggle & settings */}
+                      <div className="pt-3 border-t border-gray-100">
+                        <div className="flex items-center justify-between mb-3">
+                          <div>
+                            <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Time-Out Window</p>
+                            <p className="text-[11px] text-gray-500">Enable check-out scanning for attendance verification at end of session</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => updateSession(session.id, 'hasTimeOut', !session.hasTimeOut)}
+                            className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${
+                              session.hasTimeOut ? 'bg-[#83358E]' : 'bg-gray-300'
+                            }`}
+                          >
+                            <div
+                              className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
+                                session.hasTimeOut ? 'translate-x-5' : ''
+                              }`}
+                            />
+                          </button>
+                        </div>
+
+                        {session.hasTimeOut && (
+                          <div className="space-y-2 bg-purple-50/40 p-3 rounded-lg border border-purple-100">
+                            <div className="grid grid-cols-2 gap-3">
+                              <div>
+                                <label className="block text-xs text-gray-600 mb-1">Opens</label>
+                                <input
+                                  type="time"
+                                  step="600"
+                                  value={session.timeOutOpen || ''}
+                                  onChange={(e) => updateSession(session.id, 'timeOutOpen', e.target.value)}
+                                  className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] focus:border-transparent ${
+                                    timeOutBeforeInInvalid || timeOutOrderInvalid ? 'border-red-400 bg-red-50/30' : 'border-gray-300'
+                                  }`}
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs text-gray-600 mb-1">Closes</label>
+                                <input
+                                  type="time"
+                                  step="600"
+                                  value={session.timeOutClose || ''}
+                                  onChange={(e) => updateSession(session.id, 'timeOutClose', e.target.value)}
+                                  className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] focus:border-transparent ${
+                                    timeOutOrderInvalid ? 'border-red-400 bg-red-50/30' : 'border-gray-300'
+                                  }`}
+                                />
+                              </div>
+                            </div>
+
+                            {timeOutBeforeInInvalid && (
+                              <p className="text-[11px] text-red-600 font-medium mt-1">
+                                ❌ Time-Out Opens must be after Time-In Closes.
+                              </p>
+                            )}
+                            {timeOutOrderInvalid && (
+                              <p className="text-[11px] text-red-600 font-medium mt-1">
+                                ❌ Time-Out Opens must be earlier than Time-Out Closes.
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-600 font-medium flex items-center gap-2.5">
+              <span className="px-2 py-0.5 bg-gray-200 text-gray-700 rounded font-bold text-[10px] uppercase">QR Disabled</span>
+              <span>Attendance Rules & Session Scanning Windows are disabled because QR Code Tickets & Attendance Scanning is turned off in Event Details.</span>
+            </div>
+          )}
         </div>
       </div>
 

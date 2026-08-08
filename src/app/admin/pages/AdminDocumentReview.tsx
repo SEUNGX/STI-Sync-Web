@@ -74,8 +74,10 @@ function ApproveModal({ doc, remarks, onClose, onConfirm, submitting }: { doc: D
 }
 
 // ─── Reject Confirmation Modal ─────────────────────────────────────────────────
-function RejectModal({ doc, remarks, onClose, onConfirm, submitting }: { doc: DocumentDocument; remarks: string; onClose: () => void; onConfirm: () => void; submitting: boolean }) {
+function RejectModal({ doc, remarks, onClose, onConfirm, submitting }: { doc: DocumentDocument; remarks: string; onClose: () => void; onConfirm: (finalRemarks: string) => void; submitting: boolean }) {
   const [allowResubmit, setAllowResubmit] = useState(true);
+  const [localRemarks, setLocalRemarks] = useState(remarks);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
@@ -123,14 +125,20 @@ function RejectModal({ doc, remarks, onClose, onConfirm, submitting }: { doc: Do
               <p className="text-amber-700 text-xs">Officer will not be able to resubmit this document.</p>
             </div>
           )}
-          <div className="p-4 bg-red-50/50 border border-red-100 rounded-xl">
-            <p className="text-gray-500 text-xs mb-1 font-medium">Your Rejection Remarks:</p>
-            <p className="text-[#001A4D] text-sm italic">"{remarks || "No remarks provided."}"</p>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Rejection Remarks / Feedback for Officer</label>
+            <textarea
+              rows={4}
+              placeholder="Provide specific feedback or reason for rejecting this document..."
+              value={localRemarks}
+              onChange={(e) => setLocalRemarks(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-red-400 focus:border-transparent resize-none text-[#001A4D]"
+            />
           </div>
         </div>
         <div className="px-6 py-4 border-t border-gray-200 flex justify-between">
           <button onClick={onClose} disabled={submitting} className="px-4 py-2 border border-gray-300 text-gray-600 rounded-lg text-sm hover:bg-gray-50 transition-colors disabled:opacity-50">Cancel</button>
-          <button onClick={onConfirm} disabled={submitting} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-red-500 to-orange-500 text-white rounded-lg text-sm font-bold hover:opacity-90 transition-opacity disabled:opacity-50">
+          <button onClick={() => onConfirm(localRemarks)} disabled={submitting} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-red-500 to-orange-500 text-white rounded-lg text-sm font-bold hover:opacity-90 transition-opacity disabled:opacity-50">
             {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
             {submitting ? "Rejecting..." : "Confirm Rejection"}
           </button>
@@ -183,10 +191,11 @@ export function AdminDocumentReview() {
     setTimeout(() => navigate("/home/documents"), 2000);
   };
 
-  const handleReject = async () => {
+  const handleReject = async (finalRemarks?: string) => {
     if (!adminProfile) return;
+    const r = finalRemarks !== undefined ? finalRemarks : remarks;
     setIsSubmitting(true);
-    await reviewDocument(doc.id, 'Rejected', adminProfile.uid, remarks);
+    await reviewDocument(doc.id, 'Rejected', adminProfile.uid, r || null);
     setIsSubmitting(false);
     setDecision("rejected");
     setShowRejectModal(false);
@@ -502,16 +511,12 @@ export function AdminDocumentReview() {
                 {/* Reject */}
                 <div>
                   <button
-                    onClick={() => canReject && setShowRejectModal(true)}
-                    disabled={!canReject}
-                    className={`w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 border-[1.5px] transition-colors ${canReject ? "border-red-500 text-red-500 hover:bg-red-50" : "border-gray-200 text-gray-300 cursor-not-allowed"}`}
+                    onClick={() => setShowRejectModal(true)}
+                    className="w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 border-[1.5px] border-red-500 text-red-500 hover:bg-red-50 transition-colors"
                   >
                     <X className="w-4 h-4" />
                     Reject Document
                   </button>
-                  {!canReject && remarks.length > 0 && (
-                    <p className="text-red-500 text-[10px] mt-1 text-center">Remarks must be at least 10 characters to reject.</p>
-                  )}
                   <p className="text-gray-400 text-[10px] italic text-center mt-1">Officer receives your remarks and can resubmit.</p>
                 </div>
 

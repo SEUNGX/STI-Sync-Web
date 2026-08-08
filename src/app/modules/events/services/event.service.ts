@@ -283,6 +283,52 @@ export const approveEvent = async (
   }
 };
 
+const buildEventSnapshot = (data: any) => {
+  if (!data) return {};
+  return {
+    title: data.title || '',
+    description: data.description || '',
+    tagline: data.tagline || '',
+    eventTypeId: data.eventTypeId || '',
+    eventCategoryId: data.eventCategoryId || '',
+    objectives: data.objectives || [],
+    bannerImageUrl: data.bannerImageUrl || '',
+    hostingOrgId: data.hostingOrgId || '',
+    enableQRTickets: data.enableQRTickets !== false && data.enableQR !== false,
+    semesterId: data.semesterId || '',
+    schoolYear: data.schoolYear || '',
+    venueId: data.venueId || '',
+    eventFormat: data.eventFormat || '',
+    gracePeriodMinutes: data.gracePeriodMinutes ?? null,
+    lateThresholdMinutes: data.lateThresholdMinutes ?? null,
+    sessions: data.sessions || [],
+    targetYearLevels: data.targetYearLevels || [],
+    targetDepartmentIds: data.targetDepartmentIds || [],
+    attendanceEnabled: data.attendanceEnabled !== false,
+    certificatesEnabled: data.certificatesEnabled !== false,
+    expectedParticipantCount: data.expectedParticipantCount || 0,
+    scope: data.scope || '',
+    maxAttendees: data.maxAttendees || 0,
+    registrationDeadline: data.registrationDeadline || '',
+    requiresRegistration: data.requiresRegistration !== false,
+    allowedCourses: data.allowedCourses || [],
+    allowedYearLevels: data.allowedYearLevels || [],
+    eventHeadUid: data.eventHeadUid || '',
+    officerInChargeUid: data.officerInChargeUid || '',
+    scanners: data.scanners || [],
+    scannerUserIds: data.scannerUserIds || [],
+    sourceOfFunds: data.sourceOfFunds || '',
+    totalRequestedBudget: data.totalRequestedBudget || 0,
+    totalApprovedBudget: data.totalApprovedBudget || 0,
+    studentPayablesEnabled: Boolean(data.studentPayablesEnabled),
+    adminFeeOverride: data.adminFeeOverride || 0,
+    budgetItems: data.budgetItems || [],
+    documents: data.documents || [],
+    attachedDocumentUrls: data.attachedDocumentUrls || [],
+    documentIds: data.documentIds || [],
+  };
+};
+
 export const rejectEvent = async (
   eventId: string,
   adminUserId: string,
@@ -291,6 +337,9 @@ export const rejectEvent = async (
   allowResubmission: boolean = true
 ): Promise<void> => {
   const ref = doc(db, EVENTS_COLLECTION, eventId);
+  const snap = await getDoc(ref);
+  const currentData = snap.exists() ? snap.data() : null;
+  const returnedSnapshot = buildEventSnapshot(currentData);
 
   const historyEntry: EventProposalHistoryLog = {
     id: `log-${Date.now()}`,
@@ -308,6 +357,7 @@ export const rejectEvent = async (
     rejectionReason: reason,
     adviserRemarks: remarks || null,
     allowResubmission,
+    returnedSnapshot,
     proposalHistory: arrayUnion(historyEntry),
     updatedAt: serverTimestamp(),
   });
@@ -321,6 +371,9 @@ export const returnEvent = async (
   remarks: string
 ): Promise<void> => {
   const ref = doc(db, EVENTS_COLLECTION, eventId);
+  const snap = await getDoc(ref);
+  const currentData = snap.exists() ? snap.data() : null;
+  const returnedSnapshot = buildEventSnapshot(currentData);
 
   const historyEntry: EventProposalHistoryLog = {
     id: `log-${Date.now()}`,
@@ -338,7 +391,19 @@ export const returnEvent = async (
     returnFlags: flags,
     returnDeadline: deadline || null,
     adviserRemarks: remarks || null,
+    returnedSnapshot,
     proposalHistory: arrayUnion(historyEntry),
+    updatedAt: serverTimestamp(),
+  });
+};
+
+export const updateAdviserRemarks = async (
+  eventId: string,
+  remarks: string
+): Promise<void> => {
+  const ref = doc(db, EVENTS_COLLECTION, eventId);
+  await updateDoc(ref, {
+    adviserRemarks: remarks || null,
     updatedAt: serverTimestamp(),
   });
 };

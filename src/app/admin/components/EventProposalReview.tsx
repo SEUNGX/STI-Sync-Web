@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { toast } from 'sonner';
 import {
   ArrowLeft, Download, Clock, CheckCircle, XCircle, RotateCcw,
   Info, Calendar, Users, Shield, Receipt, FileText, History,
@@ -7,7 +8,7 @@ import {
   FileImage, Plus, Minus, Coins
 } from 'lucide-react';
 import type { EventDocument } from '../../modules/events/types/event.types';
-import { approveEvent, rejectEvent, returnEvent } from '../../modules/events/services/event.service';
+import { approveEvent, rejectEvent, returnEvent, updateAdviserRemarks } from '../../modules/events/services/event.service';
 import { useAdviserProfile } from '../../modules/auth/hooks/useAdviserProfile';
 import { useOrganizationStream } from '../../modules/organizations/hooks/useOrganizationStream';
 import { useEventTypesStream, useVenuesStream } from '../../modules/events/hooks/useEventConfigStream';
@@ -38,7 +39,15 @@ const RETURN_FLAGS = [
   'Event Team Assignment',
   'Budget Request',
   'Submitted Documents',
-  'Other',
+];
+
+const RETURN_FLAGS_GROUPED = [
+  { flag: 'Event Information (title, description, objectives)', label: 'Step 1: Event Details (title, description, objectives)' },
+  { flag: 'Schedule or Venue', label: 'Step 2: Schedule & Venue' },
+  { flag: 'Participant Settings', label: 'Step 3: Participant Settings & Audience' },
+  { flag: 'Event Team Assignment', label: 'Step 4: Event Team & Staff Assignment' },
+  { flag: 'Budget Request', label: 'Step 5: Budget Request & Line Items' },
+  { flag: 'Submitted Documents', label: 'Step 6: Submitted Documents' },
 ];
 
 const REJECTION_REASONS = [
@@ -130,27 +139,45 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
   const allVisited = NAV_SECTIONS.every(s => visitedSections.has(s.id));
   const remarksWritten = remarks.trim().length > 0;
 
-  const handleDecision = (type: 'approve' | 'return' | 'reject') => {
-    if (isDecided) return;
-    if (type !== 'approve' && !remarksWritten) {
-      setRemarksError(true);
-      return;
+  const [savingRemarks, setSavingRemarks] = useState(false);
+
+  const handleSaveRemarks = async () => {
+    if (!event?.id) return;
+    setSavingRemarks(true);
+    try {
+      await updateAdviserRemarks(event.id, remarks);
+      toast.success('Adviser remarks updated successfully!');
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e?.message || 'Failed to save remarks.');
+    } finally {
+      setSavingRemarks(false);
     }
+  };
+
+  const handleDecision = (type: 'approve' | 'return' | 'reject') => {
     setRemarksError(false);
-    setActiveModal(type);
+    if (type === 'approve') {
+      confirmApprove();
+    } else {
+      setActiveModal(type);
+    }
   };
 
   const confirmApprove = async () => {
     if (!profile?.uid) return;
     setSubmitting(true);
     try {
-      await approveEvent(event.id, profile.uid, remarks);
+      await approveEvent(event.id, profile.uid, remarks || '');
       setDecision('approved');
       setActiveModal('none');
-      setUndoVisible(true);
-      setTimeout(() => setUndoVisible(false), 300000); // 5 min
-    } catch (e) {
+      toast.success('Proposal approved successfully!');
+      setTimeout(() => {
+        onClose();
+      }, 1000);
+    } catch (e: any) {
       console.error(e);
+      toast.error(e?.message || 'Failed to approve proposal.');
     } finally {
       setSubmitting(false);
     }
@@ -158,15 +185,27 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
 
   const confirmReject = async () => {
     if (!profile?.uid) return;
+    if (!rejectionReason) {
+      toast.error('Please select a rejection reason category.');
+      return;
+    }
+    if (!remarks.trim()) {
+      setRemarksError(true);
+      toast.error('Please provide remarks/feedback for the officer explaining the rejection.');
+      return;
+    }
     setSubmitting(true);
     try {
       await rejectEvent(event.id, profile.uid, rejectionReason, remarks, allowResubmit);
       setDecision('rejected');
       setActiveModal('none');
-      setUndoVisible(true);
-      setTimeout(() => setUndoVisible(false), 300000); // 5 min
-    } catch (e) {
+      toast.success('Proposal rejected successfully.');
+      setTimeout(() => {
+        onClose();
+      }, 1000);
+    } catch (e: any) {
       console.error(e);
+      toast.error(e?.message || 'Failed to reject proposal.');
     } finally {
       setSubmitting(false);
     }
@@ -174,15 +213,27 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
 
   const confirmReturn = async () => {
     if (!profile?.uid) return;
+    if (returnFlags.length === 0) {
+      toast.error('Please select at least one flagged item to correct.');
+      return;
+    }
+    if (!remarks.trim()) {
+      setRemarksError(true);
+      toast.error('Please provide remarks explaining what needs to be revised.');
+      return;
+    }
     setSubmitting(true);
     try {
       await returnEvent(event.id, profile.uid, returnFlags, returnDeadline, remarks);
       setDecision('returned');
       setActiveModal('none');
-      setUndoVisible(true);
-      setTimeout(() => setUndoVisible(false), 300000); // 5 min
-    } catch (e) {
+      toast.success('Proposal returned for revision.');
+      setTimeout(() => {
+        onClose();
+      }, 1000);
+    } catch (e: any) {
       console.error(e);
+      toast.error(e?.message || 'Failed to return proposal.');
     } finally {
       setSubmitting(false);
     }
@@ -482,27 +533,37 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
                 <div className="bg-white border border-[#E0E0E0] rounded-xl overflow-hidden">
                   <div className="px-5 py-3 border-b border-[#E0E0E0] flex items-center justify-between">
                     <p className="text-[#001A4D] font-bold text-sm">Scanner Officers</p>
-                    <span className="px-2 py-0.5 bg-[#83358E] text-white text-xs rounded-full font-medium">{(event.scanners || []).length} Assigned</span>
+                    {event.enableQRTickets !== false && (event as any).enableQR !== false ? (
+                      <span className="px-2 py-0.5 bg-[#83358E] text-white text-xs rounded-full font-medium">{(event.scanners || []).length} Assigned</span>
+                    ) : (
+                      <span className="px-2 py-0.5 bg-gray-200 text-gray-700 text-xs rounded-full font-medium uppercase">QR Disabled</span>
+                    )}
                   </div>
-                  {(event.scanners || []).length > 0 ? (
-                    <div className="divide-y divide-[#F0F0F0]">
-                      {(event.scanners || []).map((scanner, i) => (
-                        <div key={scanner.id || i} className="px-5 py-3 flex items-center justify-between">
-                          <div>
-                            <p className="text-[#001A4D] font-semibold text-sm">{scanner.officerName || 'Unnamed Officer'}</p>
-                            <p className="text-gray-400 text-xs mt-0.5">Student ID: {scanner.officerUserId || 'Not linked'}</p>
+                  {event.enableQRTickets !== false && (event as any).enableQR !== false ? (
+                    (event.scanners || []).length > 0 ? (
+                      <div className="divide-y divide-[#F0F0F0]">
+                        {(event.scanners || []).map((scanner, i) => (
+                          <div key={scanner.id || i} className="px-5 py-3 flex items-center justify-between">
+                            <div>
+                              <p className="text-[#001A4D] font-semibold text-sm">{scanner.officerName || 'Unnamed Officer'}</p>
+                              <p className="text-gray-400 text-xs mt-0.5">Student ID: {scanner.officerUserId || 'Not linked'}</p>
+                            </div>
+                            <div className="flex flex-wrap gap-1 justify-end">
+                              {scanner.fullAccess && <span className="px-2 py-0.5 bg-[#83358E]/10 text-[#83358E] text-xs rounded-full">Full Access</span>}
+                              {!scanner.fullAccess && scanner.canCheckIn && <span className="px-2 py-0.5 bg-blue-50 text-blue-600 text-xs rounded-full">Check-In</span>}
+                              {!scanner.fullAccess && scanner.canCheckOut && <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 text-xs rounded-full">Check-Out</span>}
+                              {!scanner.fullAccess && scanner.canViewList && <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">View List</span>}
+                            </div>
                           </div>
-                          <div className="flex flex-wrap gap-1 justify-end">
-                            {scanner.fullAccess && <span className="px-2 py-0.5 bg-[#83358E]/10 text-[#83358E] text-xs rounded-full">Full Access</span>}
-                            {!scanner.fullAccess && scanner.canCheckIn && <span className="px-2 py-0.5 bg-blue-50 text-blue-600 text-xs rounded-full">Check-In</span>}
-                            {!scanner.fullAccess && scanner.canCheckOut && <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 text-xs rounded-full">Check-Out</span>}
-                            {!scanner.fullAccess && scanner.canViewList && <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">View List</span>}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="p-4 text-sm text-gray-500">No scanner officers assigned.</div>
+                    )
                   ) : (
-                    <div className="p-4 text-sm text-gray-500">No scanner officers assigned.</div>
+                    <div className="p-4 text-sm text-gray-500 italic">
+                      QR Tickets & Attendance Scanning is disabled for this event. No scanner officers required.
+                    </div>
                   )}
                 </div>
               </div>
@@ -684,100 +745,101 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
         {/* RIGHT COLUMN — Decision Panel (300px) */}
         <div className="w-[300px] flex-shrink-0 border-l border-[#E0E0E0] flex flex-col overflow-y-auto">
           <div className="p-5 space-y-4">
-            {decision === 'none' && !isDecided ? (
-              <>
-                <div className="flex items-center gap-2">
-                  <Gavel className="w-5 h-5 text-[#001A4D]" />
-                  <div>
-                    <p className="text-[#001A4D] font-bold text-base">Adviser Decision</p>
-                    <p className="text-gray-400 text-xs">Review all sections before deciding.</p>
-                  </div>
-                </div>
+            <div className="flex items-center gap-2">
+              <Gavel className="w-5 h-5 text-[#001A4D]" />
+              <div>
+                <p className="text-[#001A4D] font-bold text-base">Adviser Decision</p>
+                <p className="text-gray-400 text-xs">Review sections & manage status.</p>
+              </div>
+            </div>
 
-                <div className={`bg-white border rounded-xl p-4 ${remarksError ? 'border-red-400' : 'border-[#E0E0E0]'}`}>
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="w-1 h-4 bg-[#83358E] rounded-full" />
-                    <p className="text-[#001A4D] font-bold text-sm">Adviser Remarks</p>
-                  </div>
-                  <textarea
-                    value={remarks}
-                    onChange={e => { setRemarks(e.target.value); if (e.target.value) setRemarksError(false); }}
-                    rows={6}
-                    disabled={isDecided}
-                    placeholder="Write your remarks, feedback, or instructions for the officer here."
-                    className="w-full text-sm resize-none border border-[#E0E0E0] rounded-lg p-3 focus:ring-2 focus:ring-[#83358E] focus:border-transparent outline-none leading-relaxed text-[#001A4D]"
-                  />
-                  <div className="flex justify-between items-center mt-2">
-                    <div className="flex items-center gap-1.5">
-                      <Eye className="w-3 h-3 text-[#83358E]" />
-                      <span className="text-[#83358E] text-xs italic">Visible to submitting officer</span>
-                    </div>
-                    <span className="text-gray-400 text-xs">{remarks.length} / 1000</span>
-                  </div>
-                  {remarksError && (
-                    <p className="text-red-500 text-xs mt-1.5 flex items-center gap-1">
-                      <AlertCircle className="w-3 h-3" />Remarks required when returning or rejecting.
-                    </p>
-                  )}
-                </div>
-
-                <div className="space-y-3">
-                  <div>
-                    <button onClick={() => handleDecision('approve')} disabled={isDecided}
-                      className="w-full h-14 flex items-center justify-center gap-2 bg-gradient-to-r from-[#22C55E] to-[#16A34A] text-white font-bold text-base rounded-xl hover:from-[#16A34A] hover:to-[#22C55E] transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
-                      <CheckCircle className="w-5 h-5" />
-                      Approve Proposal
-                    </button>
-                  </div>
-                  <div>
-                    <button onClick={() => handleDecision('return')} disabled={isDecided}
-                      className="w-full h-14 flex items-center justify-center gap-2 bg-[#FFC107] text-[#001A4D] font-bold text-base rounded-xl hover:bg-[#F59E0B] transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
-                      <RotateCcw className="w-5 h-5" />
-                      Return for Revision
-                    </button>
-                  </div>
-                  <div>
-                    <button onClick={() => handleDecision('reject')} disabled={isDecided}
-                      className="w-full h-[52px] flex items-center justify-center gap-2 bg-white border-[1.5px] border-[#EF4444] text-[#EF4444] font-bold text-sm rounded-xl hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                      <X className="w-4 h-4" />
-                      Reject Proposal
-                    </button>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className={`rounded-xl p-5 text-center ${
-                  decision === 'approved' ? 'bg-gradient-to-br from-[#22C55E] to-[#16A34A]' :
-                  decision === 'returned' ? 'bg-gradient-to-br from-[#FFC107] to-[#F59E0B]' :
-                  'bg-gradient-to-br from-[#EF4444] to-[#F97316]'
-                }`}>
-                  {decision === 'approved' ? <CheckCircle className="w-10 h-10 text-white mx-auto mb-2" /> :
-                   decision === 'returned' ? <RotateCcw className="w-10 h-10 text-[#001A4D] mx-auto mb-2" /> :
-                   <XCircle className="w-10 h-10 text-white mx-auto mb-2" />}
-                  <p className={`font-bold text-lg ${decision === 'returned' ? 'text-[#001A4D]' : 'text-white'}`}>
-                    {decision === 'approved' ? 'Proposal Approved' : decision === 'returned' ? 'Returned for Revision' : 'Proposal Rejected'}
-                  </p>
-                </div>
-
-                <div className="bg-white border border-[#E0E0E0] rounded-xl p-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="w-1 h-4 bg-[#83358E] rounded-full" />
-                    <p className="text-[#001A4D] font-bold text-sm">Adviser Remarks</p>
-                  </div>
-                  <textarea
-                    value={remarks}
-                    readOnly
-                    rows={6}
-                    className="w-full text-sm resize-none border border-[#E0E0E0] rounded-lg p-3 bg-gray-50 outline-none leading-relaxed text-gray-700"
-                  />
-                </div>
-
-                <button onClick={onClose} className="w-full text-center text-[#001A4D] text-sm hover:underline mt-4">
-                  Back to Event Approvals
-                </button>
-              </>
+            {/* Current Status Banner */}
+            {decision !== 'none' && (
+              <div className={`rounded-xl p-4 text-center ${
+                decision === 'approved' ? 'bg-gradient-to-br from-[#22C55E] to-[#16A34A]' :
+                decision === 'returned' ? 'bg-gradient-to-br from-[#FFC107] to-[#F59E0B]' :
+                'bg-gradient-to-br from-[#EF4444] to-[#F97316]'
+              }`}>
+                {decision === 'approved' ? <CheckCircle className="w-8 h-8 text-white mx-auto mb-1" /> :
+                 decision === 'returned' ? <RotateCcw className="w-8 h-8 text-[#001A4D] mx-auto mb-1" /> :
+                 <XCircle className="w-8 h-8 text-white mx-auto mb-1" />}
+                <p className={`font-bold text-base ${decision === 'returned' ? 'text-[#001A4D]' : 'text-white'}`}>
+                  {decision === 'approved' ? 'Proposal Approved' : decision === 'returned' ? 'Returned for Revision' : 'Proposal Rejected'}
+                </p>
+                <p className="text-xs text-white/80 mt-1">Status set by SAO Adviser</p>
+              </div>
             )}
+
+            {/* Adviser Remarks Field — Always Editable */}
+            <div className={`bg-white border rounded-xl p-4 ${remarksError ? 'border-red-400' : 'border-[#E0E0E0]'}`}>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-1 h-4 bg-[#83358E] rounded-full" />
+                  <p className="text-[#001A4D] font-bold text-sm">Adviser Remarks</p>
+                </div>
+              </div>
+              <textarea
+                value={remarks}
+                onChange={e => { setRemarks(e.target.value); if (e.target.value) setRemarksError(false); }}
+                rows={5}
+                placeholder="Write your remarks, feedback, or instructions for the officer here..."
+                className="w-full text-sm resize-none border border-[#E0E0E0] rounded-lg p-3 focus:ring-2 focus:ring-[#83358E] focus:border-transparent outline-none leading-relaxed text-[#001A4D]"
+              />
+              <div className="flex justify-between items-center mt-2">
+                <div className="flex items-center gap-1.5">
+                  <Eye className="w-3 h-3 text-[#83358E]" />
+                  <span className="text-[#83358E] text-xs italic">Visible to submitting officer</span>
+                </div>
+                <span className="text-gray-400 text-xs">{remarks.length} / 1000</span>
+              </div>
+              {remarksError && (
+                <p className="text-red-500 text-xs mt-1.5 flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" />Remarks required when returning or rejecting.
+                </p>
+              )}
+              {event?.id && (
+                <button
+                  onClick={handleSaveRemarks}
+                  disabled={savingRemarks}
+                  className="w-full mt-3 py-2 bg-gray-100 border border-gray-300 text-[#001A4D] rounded-lg text-xs font-semibold hover:bg-gray-200 transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  {savingRemarks ? 'Saving...' : 'Save Updated Remarks'}
+                </button>
+              )}
+            </div>
+
+            {/* Decision Action Buttons — Always Clickable */}
+            <div className="space-y-2.5 pt-1">
+              <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                {decision !== 'none' ? 'Change Decision' : 'Select Decision'}
+              </p>
+              <div>
+                <button onClick={() => handleDecision('approve')}
+                  className="w-full h-12 flex items-center justify-center gap-2 bg-gradient-to-r from-[#22C55E] to-[#16A34A] text-white font-bold text-sm rounded-xl hover:from-[#16A34A] hover:to-[#22C55E] transition-all shadow-sm">
+                  <CheckCircle className="w-4 h-4" />
+                  {decision === 'approved' ? 'Update Approval / Remarks' : 'Approve Proposal'}
+                </button>
+              </div>
+              <div>
+                <button onClick={() => handleDecision('return')}
+                  className="w-full h-12 flex items-center justify-center gap-2 bg-[#FFC107] text-[#001A4D] font-bold text-sm rounded-xl hover:bg-[#F59E0B] transition-colors shadow-sm">
+                  <RotateCcw className="w-4 h-4" />
+                  {decision === 'returned' ? 'Update Return Flags' : 'Return for Revision'}
+                </button>
+              </div>
+              <div>
+                <button onClick={() => handleDecision('reject')}
+                  className="w-full h-12 flex items-center justify-center gap-2 bg-white border-[1.5px] border-[#EF4444] text-[#EF4444] font-bold text-sm rounded-xl hover:bg-red-50 transition-colors">
+                  <X className="w-4 h-4" />
+                  {decision === 'rejected' ? 'Update Rejection / Remarks' : 'Reject Proposal'}
+                </button>
+              </div>
+            </div>
+
+            <button onClick={onClose} className="w-full text-center text-gray-500 text-xs hover:underline pt-2">
+              Close & Back to Event Approvals
+            </button>
           </div>
         </div>
       </div>
@@ -820,40 +882,57 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
       {activeModal === 'return' && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60" onClick={() => setActiveModal('none')} />
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
-            <div className="bg-gradient-to-r from-[#FFC107] to-[#F59E0B] px-6 py-5 flex items-center gap-4">
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="bg-gradient-to-r from-[#FFC107] to-[#F59E0B] px-6 py-5 flex items-center gap-4 flex-shrink-0">
               <div className="w-11 h-11 bg-[#001A4D]/20 rounded-full flex items-center justify-center">
                 <RotateCcw className="w-6 h-6 text-[#001A4D]" />
               </div>
               <div>
-                <h3 className="text-[#001A4D] font-bold text-lg">Return for Revision</h3>
-                <p className="text-[#001A4D]/70 text-sm">{event.title}</p>
+                <h3 className="text-[#001A4D] font-bold text-lg">Return Proposal for Revision</h3>
+                <p className="text-[#001A4D]/70 text-sm truncate max-w-xs">{event.title}</p>
               </div>
             </div>
-            <div className="p-6">
-              <div className="mb-5">
-                <div className="flex items-center gap-2 mb-3">
+            <div className="p-6 space-y-4 overflow-y-auto flex-1">
+              <div>
+                <div className="flex items-center gap-2 mb-2">
                   <div className="w-1 h-4 bg-[#83358E] rounded-full" />
-                  <p className="text-[#001A4D] font-bold text-sm">Flagged Items to Correct</p>
+                  <p className="text-[#001A4D] font-bold text-sm">Flagged Items to Correct (Grouped by Step) <span className="text-red-500">*</span></p>
                 </div>
-                <div className="space-y-2">
-                  {RETURN_FLAGS.map(flag => (
-                    <label key={flag} className="flex items-center gap-2 cursor-pointer">
-                      <input type="checkbox" checked={returnFlags.includes(flag)}
-                        onChange={() => setReturnFlags(p => p.includes(flag) ? p.filter(f => f !== flag) : [...p, flag])}
-                        className="accent-amber-500 w-4 h-4 rounded" />
-                      <span className="text-sm text-gray-700">{flag}</span>
+                <div className="space-y-2 bg-gray-50 p-3 rounded-xl border border-gray-200">
+                  {RETURN_FLAGS_GROUPED.map((item, idx) => (
+                    <label key={idx} className="flex items-start gap-2.5 cursor-pointer p-2 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-gray-200">
+                      <input
+                        type="checkbox"
+                        checked={returnFlags.includes(item.flag)}
+                        onChange={() => setReturnFlags(p => p.includes(item.flag) ? p.filter(f => f !== item.flag) : [...p, item.flag])}
+                        className="accent-amber-500 w-4 h-4 rounded mt-0.5"
+                      />
+                      <span className="text-xs font-semibold text-[#001A4D] mt-0.5">{item.label}</span>
                     </label>
                   ))}
                 </div>
               </div>
-              <div className="flex gap-3">
-                <button onClick={() => setActiveModal('none')} disabled={submitting} className="flex-1 py-3 border border-gray-300 text-gray-700 rounded-xl text-sm font-semibold hover:bg-gray-50">Cancel</button>
-                <button onClick={confirmReturn} disabled={submitting}
-                  className="flex-1 py-3 bg-gradient-to-r from-[#FFC107] to-[#F59E0B] text-[#001A4D] rounded-xl text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-50">
-                  <Send className="w-4 h-4" /> {submitting ? 'Returning...' : 'Return for Revision'}
-                </button>
+
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-1 h-4 bg-[#83358E] rounded-full" />
+                  <p className="text-[#001A4D] font-bold text-sm">Adviser Revision Remarks / Instructions <span className="text-red-500">*</span></p>
+                </div>
+                <textarea
+                  value={remarks}
+                  onChange={e => { setRemarks(e.target.value); if (e.target.value) setRemarksError(false); }}
+                  rows={4}
+                  placeholder="Explain what specific corrections are required for the flagged items..."
+                  className="w-full text-sm border border-gray-300 rounded-xl p-3 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none resize-none text-[#001A4D]"
+                />
               </div>
+            </div>
+            <div className="p-4 border-t border-gray-200 bg-white flex gap-3 flex-shrink-0">
+              <button onClick={() => setActiveModal('none')} disabled={submitting} className="flex-1 py-3 border border-gray-300 text-gray-700 rounded-xl text-sm font-semibold hover:bg-gray-50">Cancel</button>
+              <button onClick={confirmReturn} disabled={submitting || returnFlags.length === 0 || !remarks.trim()}
+                className="flex-1 py-3 bg-gradient-to-r from-[#FFC107] to-[#F59E0B] text-[#001A4D] rounded-xl text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-50">
+                <Send className="w-4 h-4" /> {submitting ? 'Returning...' : 'Return for Revision'}
+              </button>
             </div>
           </div>
         </div>
@@ -911,7 +990,7 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
 
               <div className="flex gap-3 pt-2">
                 <button onClick={() => setActiveModal('none')} disabled={submitting} className="flex-1 py-3 border border-gray-300 text-gray-700 rounded-xl text-sm font-semibold hover:bg-gray-50">Cancel</button>
-                <button onClick={confirmReject} disabled={!rejectionReason || submitting}
+                <button onClick={confirmReject} disabled={submitting}
                   className="flex-1 py-3 bg-gradient-to-r from-[#EF4444] to-[#F97316] text-white rounded-xl text-sm font-bold disabled:opacity-40 flex items-center justify-center gap-2">
                   <X className="w-4 h-4" /> {submitting ? 'Rejecting...' : 'Confirm Rejection'}
                 </button>

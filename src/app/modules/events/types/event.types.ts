@@ -85,6 +85,7 @@ export interface EventDocument {
   returnedBy?: string | null;
   returnFlags?: string[];
   returnDeadline?: string | null;
+  returnedSnapshot?: Record<string, any> | null;
   proposalHistory?: EventProposalHistoryLog[];
 }
 

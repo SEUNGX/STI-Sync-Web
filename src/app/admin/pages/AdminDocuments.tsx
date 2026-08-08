@@ -92,7 +92,7 @@ function QuickApprovePopover({ doc, onClose, onApprove }: { doc: DocumentDocumen
 function QuickRejectPopover({ doc, onClose, onReject }: { doc: DocumentDocument; onClose: () => void; onReject: (remarks: string) => void }) {
   const [remarks, setRemarks] = useState("");
   const [saving, setSaving] = useState(false);
-  const canReject = remarks.trim().length >= 10;
+  const canReject = remarks.trim().length > 0;
   return (
     <div className="absolute right-0 top-full mt-1 w-80 bg-white border border-[#E0E0E0] rounded-xl shadow-lg z-30 overflow-hidden">
       <div className="h-8 bg-gradient-to-r from-red-500 to-orange-500 flex items-center gap-2 px-3">
@@ -101,14 +101,13 @@ function QuickRejectPopover({ doc, onClose, onReject }: { doc: DocumentDocument;
       </div>
       <div className="p-3 space-y-3">
         <p className="text-[#001A4D] text-xs"><strong>{doc.title.slice(0, 30)}...</strong> · {doc.submittedByOrgName}</p>
-        <textarea rows={3} placeholder="Rejection reason — required..." className={`w-full px-3 py-2 border rounded-lg text-xs focus:ring-2 focus:ring-[#83358E] focus:border-transparent resize-none ${!canReject && remarks.length > 0 ? "border-red-400" : "border-gray-300"}`} value={remarks} onChange={(e) => setRemarks(e.target.value)} />
-        {remarks.length > 0 && !canReject && <p className="text-red-500 text-xs">Remarks must be at least 10 characters.</p>}
+        <textarea rows={3} placeholder="Rejection reason — required..." className="w-full px-3 py-2 border rounded-lg text-xs focus:ring-2 focus:ring-[#83358E] focus:border-transparent resize-none border-gray-300" value={remarks} onChange={(e) => setRemarks(e.target.value)} />
         <div className="flex items-center justify-between">
           <button onClick={onClose} className="text-gray-500 text-xs hover:text-gray-700">Cancel</button>
           <button
             disabled={!canReject || saving}
             onClick={async () => { setSaving(true); await onReject(remarks); setSaving(false); }}
-            className={`px-3 py-1.5 text-white text-xs font-bold rounded-lg transition-colors ${canReject ? "bg-gradient-to-r from-red-500 to-orange-500" : "bg-gray-200 text-gray-400 cursor-not-allowed"}`}
+            className={`px-3 py-1.5 text-white text-xs font-bold rounded-lg transition-colors ${canReject ? "bg-gradient-to-r from-red-500 to-orange-500 hover:opacity-90" : "bg-gray-200 text-gray-400 cursor-not-allowed"}`}
           >
             {saving ? "Rejecting..." : "Reject"}
           </button>

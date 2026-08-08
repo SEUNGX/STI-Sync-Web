@@ -213,51 +213,58 @@ export default function Step2Schedule({ data, onUpdate }: Step2Props) {
               </select>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center">
-                  Grace Period (minutes)
-                  <span className="relative group inline-block ml-1.5 cursor-pointer">
-                    <span className="w-4 h-4 bg-gray-200 text-gray-600 rounded-full flex items-center justify-center text-[10px] font-bold">?</span>
-                    <span className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 hidden group-hover:block w-48 p-2 bg-gray-900 text-white text-[11px] rounded shadow-xl z-20 pointer-events-none text-center">
-                      Buffer minutes after start time before check-in is marked Late.
+            {data.enableQRTickets === true || (data as any).enableQR === true ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center">
+                    Grace Period (minutes)
+                    <span className="relative group inline-block ml-1.5 cursor-pointer">
+                      <span className="w-4 h-4 bg-gray-200 text-gray-600 rounded-full flex items-center justify-center text-[10px] font-bold">?</span>
+                      <span className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 hidden group-hover:block w-48 p-2 bg-gray-900 text-white text-[11px] rounded shadow-xl z-20 pointer-events-none text-center">
+                        Buffer minutes after start time before check-in is marked Late.
+                      </span>
                     </span>
-                  </span>
-                </label>
-                <input
-                  type="number"
-                  placeholder="5"
-                  value={data.gracePeriodMinutes || ''}
-                  onChange={(e) => updateField('gracePeriodMinutes', e.target.value ? Number(e.target.value) : null)}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center">
-                  Late Threshold (minutes)
-                  <span className="relative group inline-block ml-1.5 cursor-pointer">
-                    <span className="w-4 h-4 bg-gray-200 text-gray-600 rounded-full flex items-center justify-center text-[10px] font-bold">?</span>
-                    <span className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 hidden group-hover:block w-48 p-2 bg-gray-900 text-white text-[11px] rounded shadow-xl z-20 pointer-events-none text-center">
-                      Cutoff minutes after start time after which check-in closes.
-                    </span>
-                  </span>
-                </label>
-                <input
-                  type="number"
-                  placeholder="15"
-                  value={data.lateThresholdMinutes || ''}
-                  onChange={(e) => updateField('lateThresholdMinutes', e.target.value ? Number(e.target.value) : null)}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
-                />
-              </div>
-
-              {graceMins >= lateMins && lateMins > 0 && (
-                <div className="col-span-1 sm:col-span-2 p-2.5 bg-red-50 border border-red-200 rounded-lg text-xs text-red-600 font-medium">
-                  ⚠️ Grace Period ({graceMins} mins) must be less than Late Threshold ({lateMins} mins).
+                  </label>
+                  <input
+                    type="number"
+                    placeholder="5"
+                    value={data.gracePeriodMinutes || ''}
+                    onChange={(e) => updateField('gracePeriodMinutes', e.target.value ? Number(e.target.value) : null)}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+                  />
                 </div>
-              )}
-            </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center">
+                    Late Threshold (minutes)
+                    <span className="relative group inline-block ml-1.5 cursor-pointer">
+                      <span className="w-4 h-4 bg-gray-200 text-gray-600 rounded-full flex items-center justify-center text-[10px] font-bold">?</span>
+                      <span className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 hidden group-hover:block w-48 p-2 bg-gray-900 text-white text-[11px] rounded shadow-xl z-20 pointer-events-none text-center">
+                        Cutoff minutes after start time after which check-in closes.
+                      </span>
+                    </span>
+                  </label>
+                  <input
+                    type="number"
+                    placeholder="15"
+                    value={data.lateThresholdMinutes || ''}
+                    onChange={(e) => updateField('lateThresholdMinutes', e.target.value ? Number(e.target.value) : null)}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+                  />
+                </div>
+
+                {graceMins >= lateMins && lateMins > 0 && (
+                  <div className="col-span-1 sm:col-span-2 p-2.5 bg-red-50 border border-red-200 rounded-lg text-xs text-red-600 font-medium">
+                    ⚠️ Grace Period ({graceMins} mins) must be less than Late Threshold ({lateMins} mins).
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="p-3.5 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-600 font-medium flex items-center gap-2.5">
+                <span className="px-2 py-0.5 bg-gray-200 text-gray-700 rounded font-bold text-[10px] uppercase">QR Disabled</span>
+                <span>Grace Period & Late Threshold settings are disabled because QR Code Tickets & Attendance Scanning is turned off in Event Details.</span>
+              </div>
+            )}
           </div>
         </div>
       </div>

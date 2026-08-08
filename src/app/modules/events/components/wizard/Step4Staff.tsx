@@ -129,7 +129,7 @@ export default function Step4Staff({ data, onUpdate }: Step4Props) {
         </div>
 
         {/* Section B — Scanner Assignment */}
-        {data.enableQRTickets !== false ? (
+        {data.enableQRTickets === true || (data as any).enableQR === true ? (
           <div>
             <div className="flex items-center justify-between mb-4">
               <div className="border-l-4 border-[#83358E] pl-3">

@@ -3,7 +3,8 @@ import { Lock, Upload } from 'lucide-react';
 import { useOrganizationStream } from '../../../organizations';
 import { useEventTypesStream, useEventCategoriesStream } from '../../hooks/useEventConfigStream';
 import type { EventFormData } from '../../types/event.types';
-import { useAuth } from '../../../auth/hooks/useAuth'; // Replace with useAdviserProfile if it exists
+import { useOfficerProfile } from '../../../../auth/hooks/useOfficerProfile';
+import { useAdviserProfile } from '../../../auth/hooks/useAdviserProfile';
 import { uploadToCloudinary } from '../../../../../services/cloudinary';
 
 interface Step1Props {
@@ -13,10 +14,32 @@ interface Step1Props {
 }
 
 export default function Step1EventDetails({ data, onUpdate, isOfficer }: Step1Props) {
+  const { profile: officerProfile } = useOfficerProfile();
+  const { profile: adviserProfile } = useAdviserProfile();
+
   // Streams
   const { data: orgs, loading: orgsLoading } = useOrganizationStream();
   const { eventTypes, loading: typesLoading } = useEventTypesStream();
   const { categories, loading: categoriesLoading } = useEventCategoriesStream();
+
+  // Determine Creator Details
+  const showOfficerMode = isOfficer || !!officerProfile;
+  const creatorName = showOfficerMode
+    ? (officerProfile?.studentName || data.createdByName || 'Student Officer')
+    : (adviserProfile?.displayName || 'SAO Adviser');
+
+  const creatorRole = showOfficerMode
+    ? (officerProfile?.activeRoleId || 'Club Officer')
+    : (adviserProfile?.jobTitle || 'System Administrator');
+
+  const getInitials = (name: string) => {
+    if (!name) return 'SO';
+    const parts = name.trim().split(' ');
+    if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    return name.slice(0, 2).toUpperCase();
+  };
+
+  const creatorAvatar = showOfficerMode ? getInitials(creatorName) : 'SAO';
 
   // Active Orgs, Types, Categories
   const activeOrgs = orgs.filter(o => !o.archived);
@@ -97,10 +120,12 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer }: Step1Pr
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Created By</label>
               <div className="flex items-center gap-3 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#0E4EBD] to-[#83358E] flex items-center justify-center text-white font-bold text-sm">SAO</div>
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#0E4EBD] to-[#83358E] flex items-center justify-center text-white font-bold text-sm">
+                  {creatorAvatar}
+                </div>
                 <div>
-                  <div className="font-medium text-gray-900">SAO Adviser</div>
-                  <div className="text-xs text-gray-500">System Administrator</div>
+                  <div className="font-medium text-gray-900">{creatorName}</div>
+                  <div className="text-xs text-gray-500">{creatorRole}</div>
                 </div>
               </div>
             </div>
@@ -223,22 +248,25 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer }: Step1Pr
           <div className="space-y-3">
             {[
               { key: 'enableQRTickets', label: 'Enable QR Tickets', desc: 'Generate scannable QR code tickets & attendance scanner option', admin: false },
-            ].map((setting) => (
-              <div key={setting.key} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium text-gray-900">{setting.label}</span>
+            ].map((setting) => {
+              const isQRActive = data.enableQRTickets === true || (data as any).enableQR === true;
+              return (
+                <div key={setting.key} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-gray-900">{setting.label}</span>
+                    </div>
+                    <p className="text-sm text-gray-600">{setting.desc}</p>
                   </div>
-                  <p className="text-sm text-gray-600">{setting.desc}</p>
+                  <button
+                    onClick={() => updateField('enableQRTickets' as keyof EventFormData, !isQRActive)}
+                    className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ml-4 ${isQRActive ? 'bg-[#83358E]' : 'bg-gray-300'}`}
+                  >
+                    <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${isQRActive ? 'translate-x-6' : ''}`} />
+                  </button>
                 </div>
-                <button
-                  onClick={() => updateField(setting.key as keyof EventFormData, data[setting.key as keyof EventFormData] === false ? true : false)}
-                  className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ml-4 ${(data[setting.key as keyof EventFormData] !== false && data[setting.key as keyof EventFormData] !== undefined) ? 'bg-[#83358E]' : 'bg-gray-300'}`}
-                >
-                  <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${(data[setting.key as keyof EventFormData] !== false && data[setting.key as keyof EventFormData] !== undefined) ? 'translate-x-6' : ''}`} />
-                </button>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 

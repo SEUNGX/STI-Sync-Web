@@ -50,8 +50,8 @@ export default function Step5Budget({ data, onUpdate }: Step5Props) {
 
   // Sync total proposed budget to data
   useEffect(() => {
-    if (data.totalApprovedBudget !== totalProposed) {
-      onUpdate({ totalApprovedBudget: totalProposed });
+    if (data.totalApprovedBudget !== totalProposed || data.totalRequestedBudget !== totalProposed) {
+      onUpdate({ totalApprovedBudget: totalProposed, totalRequestedBudget: totalProposed });
     }
   }, [totalProposed]);
 
