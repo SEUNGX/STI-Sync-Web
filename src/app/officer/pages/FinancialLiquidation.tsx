@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Plus, Receipt, AlertCircle, Edit3, CheckCircle2, Clock, RotateCcw, Eye, FileText } from 'lucide-react';
+import { Plus, Receipt, AlertCircle, Edit3, CheckCircle2, Clock, RotateCcw, Eye, FileText, FileSpreadsheet } from 'lucide-react';
 import { useOfficerProfile } from '../../auth/hooks/useOfficerProfile';
 import { useOrgLiquidations } from '../../modules/finance/hooks/useLiquidationStream';
 import ReceiptLightboxModal from '../../modules/finance/components/ReceiptLightboxModal';
 import OfficerLiquidationModal from '../components/OfficerLiquidationModal';
+import { LiquidationExportPreviewModal } from '../../modules/finance/components/LiquidationExportPreviewModal';
 import type { LiquidationDocument, LiquidationStatus } from '../../modules/finance/types/liquidation.types';
 
 type FilterTab = 'all' | 'draft' | 'pending' | 'approved' | 'returned';
@@ -13,6 +14,7 @@ export default function FinancialLiquidation() {
   const [showModal, setShowModal] = useState(false);
   const [editingReport, setEditingReport] = useState<LiquidationDocument | null>(null);
   const [viewingDetailReport, setViewingDetailReport] = useState<LiquidationDocument | null>(null);
+  const [exportReport, setExportReport] = useState<LiquidationDocument | null>(null);
   const [lightboxData, setLightboxData] = useState<{ url: string; title: string; vendor?: string; amount?: number } | null>(null);
 
   const { profile } = useOfficerProfile();
@@ -220,9 +222,18 @@ export default function FinancialLiquidation() {
                   </div>
 
                   <div className="flex items-center gap-2">
+                    {report.status === 'approved' && (
+                      <button
+                        onClick={() => setExportReport(report)}
+                        className="px-3.5 py-1.5 bg-gradient-to-r from-[#83358E] to-[#001A4D] text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm hover:opacity-90 cursor-pointer"
+                      >
+                        <FileSpreadsheet className="w-4 h-4 text-[#FFC107]" /> Export Report
+                      </button>
+                    )}
+
                     <button
                       onClick={() => setViewingDetailReport(report)}
-                      className="px-3.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                      className="px-3.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
                     >
                       <Eye className="w-4 h-4" /> View Details
                     </button>
@@ -230,7 +241,7 @@ export default function FinancialLiquidation() {
                     {(report.status === 'draft' || report.status === 'returned') && (
                       <button
                         onClick={() => handleOpenEdit(report)}
-                        className="px-4 py-1.5 bg-[#83358E] hover:bg-[#83358E]/90 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors shadow-sm"
+                        className="px-4 py-1.5 bg-[#83358E] hover:bg-[#83358E]/90 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
                       >
                         <Edit3 className="w-4 h-4" />
                         {report.status === 'returned' ? 'Edit & Resubmit' : 'Edit Draft'}
@@ -269,7 +280,7 @@ export default function FinancialLiquidation() {
               </div>
               <button
                 onClick={() => setViewingDetailReport(null)}
-                className="p-1 hover:bg-white/10 rounded-lg text-white"
+                className="p-1 hover:bg-white/10 rounded-lg text-white cursor-pointer"
               >
                 ✕
               </button>
@@ -296,6 +307,13 @@ export default function FinancialLiquidation() {
                   </div>
                 </div>
               </div>
+
+              {viewingDetailReport.status === 'returned' && viewingDetailReport.returnRemarks && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-900 font-medium space-y-1">
+                  <div className="font-bold text-[#991B1B] uppercase tracking-wider">SAO Adviser Return Remarks</div>
+                  <p>{viewingDetailReport.returnRemarks}</p>
+                </div>
+              )}
 
               <h4 className="font-bold text-sm text-gray-900 pt-2">Line Items</h4>
               <div className="space-y-2">
@@ -344,7 +362,7 @@ export default function FinancialLiquidation() {
                               vendor: item.vendorName,
                               amount: item.totalCost,
                             })}
-                            className="text-[#1E70E8] hover:underline font-semibold text-xs flex items-center gap-1"
+                            className="text-[#1E70E8] hover:underline font-semibold text-xs flex items-center gap-1 cursor-pointer"
                           >
                             <Eye className="w-3.5 h-3.5" /> View Uploaded Receipt Image ↗
                           </button>
@@ -374,10 +392,23 @@ export default function FinancialLiquidation() {
               )}
             </div>
 
-            <div className="px-6 py-3 bg-gray-50 border-t border-gray-200 text-right">
+            <div className="px-6 py-3 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
+              <div>
+                {viewingDetailReport.status === 'approved' && (
+                  <button
+                    onClick={() => {
+                      setExportReport(viewingDetailReport);
+                      setViewingDetailReport(null);
+                    }}
+                    className="px-4 py-2 bg-gradient-to-r from-[#83358E] to-[#001A4D] text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  >
+                    <FileSpreadsheet className="w-4 h-4 text-[#FFC107]" /> Export Liquidation Report
+                  </button>
+                )}
+              </div>
               <button
                 onClick={() => setViewingDetailReport(null)}
-                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-xs font-bold hover:bg-gray-300"
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-xs font-bold hover:bg-gray-300 cursor-pointer"
               >
                 Close
               </button>
@@ -394,6 +425,13 @@ export default function FinancialLiquidation() {
         itemTitle={lightboxData?.title}
         vendorName={lightboxData?.vendor}
         amount={lightboxData?.amount}
+      />
+
+      {/* Liquidation Excel Export Preview Modal */}
+      <LiquidationExportPreviewModal
+        isOpen={!!exportReport}
+        onClose={() => setExportReport(null)}
+        report={exportReport}
       />
     </div>
   );

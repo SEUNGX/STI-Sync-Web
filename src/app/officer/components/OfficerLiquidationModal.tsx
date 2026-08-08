@@ -295,6 +295,16 @@ export default function OfficerLiquidationModal({
             </div>
           )}
 
+          {editingReport?.status === 'returned' && editingReport.returnRemarks && (
+            <div className="p-4 bg-red-50 border-2 border-red-300 rounded-xl text-red-900 text-xs font-medium space-y-1">
+              <div className="flex items-center gap-2 font-bold text-red-700 text-sm uppercase tracking-wider">
+                <AlertCircle className="w-4.5 h-4.5 text-red-600" />
+                SAO Adviser Return Remarks
+              </div>
+              <p className="text-red-900 text-xs font-semibold pl-6.5">{editingReport.returnRemarks}</p>
+            </div>
+          )}
+
           {/* Event Selection & Allocated Budget */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>

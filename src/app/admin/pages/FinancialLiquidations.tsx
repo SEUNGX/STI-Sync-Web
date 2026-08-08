@@ -11,7 +11,8 @@ import {
   Loader2, 
   Check, 
   X,
-  ExternalLink
+  ExternalLink,
+  FileSpreadsheet
 } from 'lucide-react';
 import { Card, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -24,6 +25,7 @@ import {
 } from '../../modules/finance/services/liquidation.service';
 import OfficerLiquidationModal from '../../officer/components/OfficerLiquidationModal';
 import ReceiptLightboxModal from '../../modules/finance/components/ReceiptLightboxModal';
+import { LiquidationExportPreviewModal } from '../../modules/finance/components/LiquidationExportPreviewModal';
 import type { LiquidationDocument, LiquidationStatus } from '../../modules/finance/types/liquidation.types';
 
 export function FinancialLiquidations() {
@@ -32,6 +34,7 @@ export function FinancialLiquidations() {
 
   const [activeTab, setActiveTab] = useState<'pending' | 'approved' | 'returned' | 'all'>('pending');
   const [selectedReport, setSelectedReport] = useState<LiquidationDocument | null>(null);
+  const [exportReport, setExportReport] = useState<LiquidationDocument | null>(null);
   const [reviewRemarks, setReviewRemarks] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [showAdminCreateModal, setShowAdminCreateModal] = useState(false);
@@ -225,16 +228,25 @@ export function FinancialLiquidations() {
 
                       {/* Action Button */}
                       <div className="flex items-center gap-2">
+                        {liq.status === 'approved' && (
+                          <Button
+                            onClick={() => setExportReport(liq)}
+                            className="bg-gradient-to-r from-[#83358E] to-[#001A4D] text-white font-bold text-xs hover:opacity-90 cursor-pointer"
+                          >
+                            <FileSpreadsheet className="w-4 h-4 mr-1.5 text-[#FFC107]" />
+                            Export Report
+                          </Button>
+                        )}
                         <Button
                           onClick={() => {
                             setSelectedReport(liq);
                             setReviewRemarks(liq.returnRemarks || '');
                             setActionError(null);
                           }}
-                          className="bg-[#0E4EBD] hover:bg-[#0E4EBD]/90 text-white font-medium text-xs"
+                          className="bg-[#0E4EBD] hover:bg-[#0E4EBD]/90 text-white font-medium text-xs cursor-pointer"
                         >
                           <Eye className="w-4 h-4 mr-1.5" />
-                          Review & Action
+                          {liq.status === 'approved' ? 'View Details' : 'Review & Action'}
                         </Button>
                       </div>
                     </div>
@@ -254,14 +266,16 @@ export function FinancialLiquidations() {
             {/* Modal Header */}
             <div className="px-6 py-4 bg-gradient-to-r from-[#001A4D] to-[#83358E] text-white flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-bold">Review Liquidation: {selectedReport.eventTitle}</h3>
+                <h3 className="text-lg font-bold">
+                  {selectedReport.status === 'approved' ? 'Approved Liquidation Report' : 'Review Liquidation'}: {selectedReport.eventTitle}
+                </h3>
                 <div className="text-xs text-white/70">
                   Host Organization: {selectedReport.organizationName} • Submitted by {selectedReport.createdByName}
                 </div>
               </div>
               <button
                 onClick={() => setSelectedReport(null)}
-                className="p-1 hover:bg-white/10 rounded-lg text-white"
+                className="p-1 hover:bg-white/10 rounded-lg text-white cursor-pointer"
               >
                 <X className="w-6 h-6" />
               </button>
@@ -383,7 +397,7 @@ export function FinancialLiquidations() {
                                     vendor: item.vendorName,
                                     amount: item.totalCost,
                                   })}
-                                  className="text-[#1E70E8] hover:underline font-semibold text-xs flex items-center gap-1"
+                                  className="text-[#1E70E8] hover:underline font-semibold text-xs flex items-center gap-1 cursor-pointer"
                                 >
                                   View Image <ExternalLink className="w-3 h-3" />
                                 </button>
@@ -420,17 +434,19 @@ export function FinancialLiquidations() {
               )}
 
               {/* SAO Adviser Remarks */}
-              <div>
-                <label className="block text-sm font-bold text-[#001A4D] mb-1.5">
-                  SAO Adviser Remarks / Revision Notes
-                </label>
-                <textarea
-                  value={reviewRemarks}
-                  onChange={(e) => setReviewRemarks(e.target.value)}
-                  placeholder="Enter approval notes or specific instructions if returning for revision..."
-                  className="w-full p-3 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-[#83358E] focus:border-transparent h-24"
-                />
-              </div>
+              {selectedReport.status !== 'approved' && (
+                <div>
+                  <label className="block text-sm font-bold text-[#001A4D] mb-1.5">
+                    SAO Adviser Remarks / Revision Notes
+                  </label>
+                  <textarea
+                    value={reviewRemarks}
+                    onChange={(e) => setReviewRemarks(e.target.value)}
+                    placeholder="Enter approval notes or specific instructions if returning for revision..."
+                    className="w-full p-3 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-[#83358E] focus:border-transparent h-24"
+                  />
+                </div>
+              )}
             </div>
 
             {/* Modal Footer */}
@@ -439,29 +455,45 @@ export function FinancialLiquidations() {
                 variant="outline"
                 onClick={() => setSelectedReport(null)}
                 disabled={isProcessing}
+                className="cursor-pointer"
               >
                 Close
               </Button>
 
-              <div className="flex items-center gap-3">
-                <Button
-                  onClick={handleReturn}
-                  disabled={isProcessing}
-                  className="bg-red-600 hover:bg-red-700 text-white font-bold"
-                >
-                  {isProcessing && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                  Return for Revision
-                </Button>
+              {selectedReport.status === 'approved' ? (
+                <div className="flex items-center gap-3">
+                  <Badge className="bg-[#639922] text-white font-bold py-1.5 px-3 flex items-center gap-1">
+                    <CheckCircle2 className="w-4 h-4" /> Approved by SAO Adviser
+                  </Badge>
+                  <Button
+                    onClick={() => setExportReport(selectedReport)}
+                    className="bg-gradient-to-r from-[#83358E] to-[#001A4D] text-white font-bold text-xs hover:opacity-90 cursor-pointer"
+                  >
+                    <FileSpreadsheet className="w-4 h-4 mr-1.5 text-[#FFC107]" />
+                    Export Liquidation Report
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3">
+                  <Button
+                    onClick={handleReturn}
+                    disabled={isProcessing}
+                    className="bg-red-600 hover:bg-red-700 text-white font-bold cursor-pointer"
+                  >
+                    {isProcessing && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                    Return for Revision
+                  </Button>
 
-                <Button
-                  onClick={handleApprove}
-                  disabled={isProcessing}
-                  className="bg-green-600 hover:bg-green-700 text-white font-bold"
-                >
-                  {isProcessing && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                  Approve Liquidation
-                </Button>
-              </div>
+                  <Button
+                    onClick={handleApprove}
+                    disabled={isProcessing}
+                    className="bg-green-600 hover:bg-green-700 text-white font-bold cursor-pointer"
+                  >
+                    {isProcessing && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                    Approve Liquidation
+                  </Button>
+                </div>
+              )}
             </div>
 
           </div>
@@ -489,6 +521,13 @@ export function FinancialLiquidations() {
         itemTitle={lightboxData?.title}
         vendorName={lightboxData?.vendor}
         amount={lightboxData?.amount}
+      />
+
+      {/* Liquidation Excel Export Preview Modal */}
+      <LiquidationExportPreviewModal
+        isOpen={!!exportReport}
+        onClose={() => setExportReport(null)}
+        report={exportReport}
       />
     </div>
   );

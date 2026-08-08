@@ -34,6 +34,13 @@ import {
   RefreshCw,
   Info,
   Minus,
+  ChevronRight,
+  Receipt,
+  Search,
+  Filter,
+  DollarSign,
+  Edit3,
+  FileSpreadsheet,
 } from "lucide-react";
 
 type FinanceTab = "budget" | "payables" | "liquidation";
@@ -42,8 +49,8 @@ type PayableSubTab = "member" | "type" | "overdue";
 import { useOrgLiquidations } from '../../modules/finance/hooks/useLiquidationStream';
 import OfficerLiquidationModal from '../components/OfficerLiquidationModal';
 import ReceiptLightboxModal from '../../modules/finance/components/ReceiptLightboxModal';
+import { LiquidationExportPreviewModal } from '../../modules/finance/components/LiquidationExportPreviewModal';
 import type { LiquidationDocument, LiquidationStatus } from '../../modules/finance/types/liquidation.types';
-import { Edit3 } from 'lucide-react';
 
 
 
@@ -880,6 +887,7 @@ function LiquidationTab({
   const [showModal, setShowModal] = useState(false);
   const [editingReport, setEditingReport] = useState<LiquidationDocument | null>(null);
   const [viewingDetailReport, setViewingDetailReport] = useState<LiquidationDocument | null>(null);
+  const [exportReport, setExportReport] = useState<LiquidationDocument | null>(null);
   const [lightboxData, setLightboxData] = useState<{ url: string; title: string; vendor?: string; amount?: number } | null>(null);
 
   const handleOpenCreate = () => {
@@ -970,16 +978,24 @@ function LiquidationTab({
                     <td className="px-4 py-3">{statusBadge(l.status)}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
+                        {l.status === 'approved' && (
+                          <button
+                            onClick={() => setExportReport(l)}
+                            className="text-[#83358E] hover:underline text-xs flex items-center gap-1 font-bold cursor-pointer"
+                          >
+                            <FileSpreadsheet className="w-3.5 h-3.5 text-[#FFC107]" /> Export
+                          </button>
+                        )}
                         <button
                           onClick={() => setViewingDetailReport(l)}
-                          className="text-blue-600 hover:underline text-xs flex items-center gap-1 font-medium"
+                          className="text-blue-600 hover:underline text-xs flex items-center gap-1 font-medium cursor-pointer"
                         >
                           <Eye className="w-3.5 h-3.5" /> View Details
                         </button>
                         {!isPast && (l.status === 'draft' || l.status === 'returned') && (
                           <button
                             onClick={() => handleOpenEdit(l)}
-                            className="text-[#83358E] hover:underline text-xs flex items-center gap-1 font-bold"
+                            className="text-[#83358E] hover:underline text-xs flex items-center gap-1 font-bold cursor-pointer"
                           >
                             <Edit3 className="w-3.5 h-3.5" /> Edit
                           </button>
@@ -1017,7 +1033,7 @@ function LiquidationTab({
               </div>
               <button
                 onClick={() => setViewingDetailReport(null)}
-                className="p-1 hover:bg-white/10 rounded-lg text-white"
+                className="p-1 hover:bg-white/10 rounded-lg text-white cursor-pointer"
               >
                 ✕
               </button>
@@ -1045,6 +1061,13 @@ function LiquidationTab({
                 </div>
               </div>
 
+              {viewingDetailReport.status === 'returned' && viewingDetailReport.returnRemarks && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-900 font-medium space-y-1">
+                  <div className="font-bold text-[#991B1B] uppercase tracking-wider">SAO Adviser Return Remarks</div>
+                  <p>{viewingDetailReport.returnRemarks}</p>
+                </div>
+              )}
+
               <h4 className="font-bold text-sm text-gray-900 pt-2">Line Items</h4>
               <div className="space-y-2">
                 {viewingDetailReport.lineItems?.map((item, idx) => (
@@ -1071,7 +1094,7 @@ function LiquidationTab({
                             vendor: item.vendorName,
                             amount: item.totalCost,
                           })}
-                          className="text-[#1E70E8] hover:underline font-semibold text-xs flex items-center gap-1"
+                          className="text-[#1E70E8] hover:underline font-semibold text-xs flex items-center gap-1 cursor-pointer"
                         >
                           <Eye className="w-3.5 h-3.5" /> View Uploaded Receipt Image ↗
                         </button>
@@ -1099,10 +1122,23 @@ function LiquidationTab({
               )}
             </div>
 
-            <div className="px-6 py-3 bg-gray-50 border-t border-gray-200 text-right">
+            <div className="px-6 py-3 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
+              <div>
+                {viewingDetailReport.status === 'approved' && (
+                  <button
+                    onClick={() => {
+                      setExportReport(viewingDetailReport);
+                      setViewingDetailReport(null);
+                    }}
+                    className="px-4 py-2 bg-gradient-to-r from-[#83358E] to-[#001A4D] text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  >
+                    <FileSpreadsheet className="w-4 h-4 text-[#FFC107]" /> Export Liquidation Report
+                  </button>
+                )}
+              </div>
               <button
                 onClick={() => setViewingDetailReport(null)}
-                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-xs font-bold hover:bg-gray-300"
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-xs font-bold hover:bg-gray-300 cursor-pointer"
               >
                 Close
               </button>
@@ -1110,6 +1146,13 @@ function LiquidationTab({
           </div>
         </div>
       )}
+
+      {/* Liquidation Excel Export Preview Modal */}
+      <LiquidationExportPreviewModal
+        isOpen={!!exportReport}
+        onClose={() => setExportReport(null)}
+        report={exportReport}
+      />
 
       <ReceiptLightboxModal
         isOpen={!!lightboxData}
