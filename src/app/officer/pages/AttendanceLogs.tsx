@@ -1,24 +1,15 @@
 import { useState, useMemo } from 'react';
-import { Download, Users, UserCheck, UserMinus, UserX, ChevronDown, AlertCircle, Search, QrCode, Loader2, Calendar } from 'lucide-react';
+import { Download, Users, UserCheck, UserMinus, UserX, ChevronDown, AlertCircle, QrCode, Loader2, Calendar, FileSpreadsheet } from 'lucide-react';
 import { useOfficerProfile } from '../../auth/hooks/useOfficerProfile';
 import { useAllEvents } from '../../modules/events/hooks/useEventStream';
 import { useAttendanceStream } from '../../modules/attendance/hooks/useAttendanceStream';
 import { useOrganizationStream } from '../../modules/organizations/hooks/useOrganizationStream';
+import { useStudents } from '../../modules/students/hooks/useStudentStream';
+import { useDepartments, useCourses, useSections } from '../../modules/academic/hooks/useAcademicStream';
 
-interface FormattedRecord {
-  id: string;
-  studentName: string;
-  studentId: string;
-  course: string;
-  year: string;
-  checkInTime: string | null;
-  checkOutTime: string | null;
-  duration: string | null;
-  status: 'checked-in' | 'checked-out' | 'absent' | 'flagged';
-  avatar: string;
-  flaggedReason?: string;
-  createdAtRaw?: any;
-}
+import { AttendanceFilterToolbar } from '../../modules/attendance/components/AttendanceFilterToolbar';
+import { AttendanceExportPreviewModal } from '../../modules/attendance/components/AttendanceExportPreviewModal';
+import type { AttendanceFilterState, EnrichedAttendanceRecord } from '../../modules/attendance/types/attendance.types';
 
 interface OfficerMappedEvent {
   id: string;
@@ -35,8 +26,19 @@ interface OfficerMappedEvent {
   absent: number;
   flagged: number;
   status: string;
-  records: FormattedRecord[];
+  sessions: { id: string; title: string }[];
+  records: EnrichedAttendanceRecord[];
 }
+
+const INITIAL_FILTERS: AttendanceFilterState = {
+  searchQuery: '',
+  departmentId: 'all',
+  courseId: 'all',
+  section: 'all',
+  yearLevel: 'all',
+  sessionId: 'all',
+  status: 'all',
+};
 
 export default function AttendanceLogs() {
   const { profile, loading: profileLoading } = useOfficerProfile();
@@ -44,13 +46,38 @@ export default function AttendanceLogs() {
   const { attendance: dbAttendance, loading: attendanceLoading } = useAttendanceStream();
   const { data: orgs, loading: orgsLoading } = useOrganizationStream();
 
+  // Academic streams
+  const { data: students, loading: studentsLoading } = useStudents();
+  const { data: departments } = useDepartments();
+  const { data: courses } = useCourses();
+  const { data: dbSections } = useSections();
+
   const [selectedEventId, setSelectedEventId] = useState<string>('');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [filterState, setFilterState] = useState<AttendanceFilterState>(INITIAL_FILTERS);
   const [showFlagged, setShowFlagged] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
 
   const activeOrgId = profile?.activeOrganizationId;
   const currentStudentId = profile?.studentId;
+
+  // Student lookup map
+  const studentMap = useMemo(() => {
+    const map = new Map<string, any>();
+    (students || []).forEach(s => {
+      if (s.studentId) map.set(s.studentId.trim().toLowerCase(), s);
+      if (s.authUid) map.set(s.authUid.trim().toLowerCase(), s);
+      if (s.id) map.set(s.id.trim().toLowerCase(), s);
+    });
+    return map;
+  }, [students]);
+
+  // Unique sections list from students + registry
+  const availableSections = useMemo(() => {
+    const set = new Set<string>();
+    (dbSections || []).forEach(s => { if (s.name) set.add(s.name.trim()); });
+    (students || []).forEach(s => { if (s.section) set.add(s.section.trim()); });
+    return Array.from(set).sort();
+  }, [dbSections, students]);
 
   // Filter & Map Events hosted by or created by me / this particular org, with attendance
   const officerEvents: OfficerMappedEvent[] = useMemo(() => {
@@ -58,20 +85,16 @@ export default function AttendanceLogs() {
 
     return dbEvents
       .filter((evt) => {
-        // Must belong to this org OR created by this officer
         const isMyOrg = activeOrgId ? evt.hostingOrgId === activeOrgId : false;
         const isCreatedByMe = currentStudentId ? evt.createdBy === currentStudentId : false;
         const isMyScope = isMyOrg || isCreatedByMe;
 
         if (!isMyScope) return false;
 
-        // Must have attendance enabled / QR tickets
         const hasAttendanceConfig = evt.enableQRTickets !== false && (evt as any).enableQR !== false && evt.attendanceEnabled !== false;
-
         return hasAttendanceConfig;
       })
       .map((evt) => {
-        // Get matching attendance records
         const evtTitle = evt.title || (evt as any).name || '';
         const evtAttendance = (dbAttendance || []).filter(
           (a) => a.eventId === evt.id || (a.event && evtTitle && String(a.event).toLowerCase() === String(evtTitle).toLowerCase())
@@ -83,41 +106,58 @@ export default function AttendanceLogs() {
 
         const firstSessionDate = evt.sessions && evt.sessions.length > 0 ? evt.sessions[0].date : 'Date TBA';
 
-        const formattedRecords: FormattedRecord[] = evtAttendance.map((rec) => {
-          const initials = rec.name
-            ? rec.name.split(' ').filter(Boolean).map((n) => n[0]).join('').substring(0, 2).toUpperCase()
-            : 'ST';
+        const sessionsList = (evt.sessions || []).map((s, idx) => ({
+          id: s.id || `sess-${idx}`,
+          title: s.title || `Session ${idx + 1}`,
+        }));
+
+        const enrichedRecords: EnrichedAttendanceRecord[] = evtAttendance.map((rec) => {
+          const matchedStudent = studentMap.get((rec.studentId || '').trim().toLowerCase());
+
+          const deptObj = (departments || []).find(d => d.id === matchedStudent?.departmentId || d.code === matchedStudent?.departmentId);
+          const courseObj = (courses || []).find(c => c.id === matchedStudent?.courseId || c.code === matchedStudent?.courseCode);
 
           const isFlagged = rec.status === 'Flagged' || !!rec.flaggedReason;
           const isCheckedOut = rec.checkOut && rec.checkOut !== '—';
           const isAbsent = rec.status === 'Absent';
+          const isLate = rec.status === 'Late';
 
-          let normStatus: 'checked-in' | 'checked-out' | 'absent' | 'flagged' = 'checked-in';
-          if (isFlagged) normStatus = 'flagged';
-          else if (isAbsent) normStatus = 'absent';
-          else if (isCheckedOut) normStatus = 'checked-out';
+          let normStatus: any = 'Checked In';
+          if (isFlagged) normStatus = 'Flagged';
+          else if (isAbsent) normStatus = 'Absent';
+          else if (isLate) normStatus = 'Late';
+          else if (isCheckedOut) normStatus = 'Checked Out';
+          else if (rec.status) normStatus = rec.status;
+
+          const sessionObj = evt.sessions?.find(s => s.id === rec.sessionId);
 
           return {
+            ...rec,
             id: rec.id,
-            studentName: rec.name || 'Unknown Student',
-            studentId: rec.studentId || 'N/A',
-            course: (rec as any).course || 'BSIT',
-            year: 'N/A',
-            checkInTime: rec.checkIn === '—' ? null : rec.checkIn,
-            checkOutTime: rec.checkOut === '—' ? null : rec.checkOut,
-            duration: null,
+            studentId: rec.studentId || matchedStudent?.studentId || 'N/A',
+            name: rec.name || (matchedStudent ? `${matchedStudent.firstName} ${matchedStudent.lastName}` : 'Unknown Student'),
+            departmentId: matchedStudent?.departmentId,
+            departmentName: matchedStudent?.departmentName || deptObj?.name || 'N/A',
+            departmentCode: deptObj?.code || matchedStudent?.departmentId || 'N/A',
+            courseId: matchedStudent?.courseId,
+            courseCode: matchedStudent?.courseCode || courseObj?.code || 'N/A',
+            courseName: matchedStudent?.courseName || courseObj?.name || 'N/A',
+            section: matchedStudent?.section || 'N/A',
+            yearLevel: matchedStudent?.yearLevel || 'N/A',
+            sessionTitle: sessionObj?.title || 'Main Session',
+            checkIn: rec.checkIn === '—' ? '' : rec.checkIn,
+            checkOut: rec.checkOut === '—' ? '' : rec.checkOut,
+            duration: rec.checkIn && rec.checkOut && rec.checkIn !== '—' && rec.checkOut !== '—' ? 'Active' : null,
             status: normStatus,
-            avatar: initials,
             flaggedReason: rec.flaggedReason,
-            createdAtRaw: rec.createdAt,
           };
         });
 
-        const registered = evt.expectedParticipantCount || formattedRecords.length || 0;
-        const checkedIn = formattedRecords.filter((r) => r.status === 'checked-in' || r.status === 'checked-out' || r.status === 'flagged').length;
-        const checkedOut = formattedRecords.filter((r) => r.status === 'checked-out').length;
-        const absent = formattedRecords.filter((r) => r.status === 'absent').length;
-        const flagged = formattedRecords.filter((r) => r.status === 'flagged').length;
+        const registered = evt.expectedParticipantCount || enrichedRecords.length || 0;
+        const checkedIn = enrichedRecords.filter((r) => r.status === 'Checked In' || r.status === 'Complete' || r.status === 'Checked Out' || r.status === 'Late').length;
+        const checkedOut = enrichedRecords.filter((r) => r.status === 'Checked Out').length;
+        const absent = enrichedRecords.filter((r) => r.status === 'Absent').length;
+        const flagged = enrichedRecords.filter((r) => r.status === 'Flagged').length;
 
         return {
           id: evt.id,
@@ -134,82 +174,122 @@ export default function AttendanceLogs() {
           absent,
           flagged,
           status: evt.proposalStatus,
-          records: formattedRecords,
+          sessions: sessionsList,
+          records: enrichedRecords,
         };
       });
-  }, [dbEvents, dbAttendance, orgs, activeOrgId, currentStudentId]);
+  }, [dbEvents, dbAttendance, orgs, activeOrgId, currentStudentId, studentMap, departments, courses]);
 
-  // Determine current active event
+  // Active Event
   const currentEvent = useMemo(() => {
     if (officerEvents.length === 0) return null;
     return officerEvents.find((e) => e.id === selectedEventId) || officerEvents[0];
   }, [officerEvents, selectedEventId]);
 
-  const loading = profileLoading || eventsLoading || attendanceLoading || orgsLoading;
+  const loading = profileLoading || eventsLoading || attendanceLoading || orgsLoading || studentsLoading;
 
-  // Filtered student records for active event
+  // Filtered student records based on AttendanceFilterState
   const filteredRecords = useMemo(() => {
     if (!currentEvent) return [];
-    const q = (searchQuery || '').toLowerCase();
-    return currentEvent.records.filter((rec) => {
-      const matchesSearch =
-        (rec.studentName || '').toLowerCase().includes(q) ||
-        (rec.studentId || '').toLowerCase().includes(q) ||
-        (rec.course || '').toLowerCase().includes(q);
 
-      const matchesStatus = statusFilter === 'all' || rec.status === statusFilter;
-      return matchesSearch && matchesStatus;
+    return currentEvent.records.filter((rec) => {
+      // 1. Search query
+      if (filterState.searchQuery.trim()) {
+        const q = filterState.searchQuery.toLowerCase();
+        const matchSearch =
+          (rec.name || '').toLowerCase().includes(q) ||
+          (rec.studentId || '').toLowerCase().includes(q) ||
+          (rec.section || '').toLowerCase().includes(q) ||
+          (rec.courseCode || rec.courseName || '').toLowerCase().includes(q) ||
+          (rec.departmentName || rec.departmentCode || '').toLowerCase().includes(q) ||
+          (rec.flaggedReason || '').toLowerCase().includes(q);
+        if (!matchSearch) return false;
+      }
+
+      // 2. Department filter
+      if (filterState.departmentId !== 'all') {
+        const matchDept =
+          rec.departmentId === filterState.departmentId ||
+          rec.departmentCode === filterState.departmentId;
+        if (!matchDept) return false;
+      }
+
+      // 3. Course filter
+      if (filterState.courseId !== 'all') {
+        const matchCourse =
+          rec.courseId === filterState.courseId ||
+          rec.courseCode === filterState.courseId;
+        if (!matchCourse) return false;
+      }
+
+      // 4. Section filter
+      if (filterState.section !== 'all') {
+        if ((rec.section || '').trim().toLowerCase() !== filterState.section.trim().toLowerCase()) {
+          return false;
+        }
+      }
+
+      // 5. Year Level filter
+      if (filterState.yearLevel !== 'all') {
+        if ((rec.yearLevel || '').trim().toLowerCase() !== filterState.yearLevel.trim().toLowerCase()) {
+          return false;
+        }
+      }
+
+      // 6. Session filter
+      if (filterState.sessionId !== 'all') {
+        if (rec.sessionId !== filterState.sessionId) return false;
+      }
+
+      // 7. Status filter
+      if (filterState.status !== 'all') {
+        if (filterState.status === 'checked-in' && rec.status !== 'Checked In' && rec.status !== 'Complete') return false;
+        if (filterState.status === 'checked-out' && rec.status !== 'Checked Out') return false;
+        if (filterState.status === 'absent' && rec.status !== 'Absent') return false;
+        if (filterState.status === 'flagged' && rec.status !== 'Flagged') return false;
+        if (filterState.status === 'Late' && rec.status !== 'Late') return false;
+        if (['Complete', 'Checked In', 'Absent', 'Flagged', 'Late'].includes(filterState.status)) {
+          if (rec.status !== filterState.status) return false;
+        }
+      }
+
+      return true;
     });
-  }, [currentEvent, searchQuery, statusFilter]);
+  }, [currentEvent, filterState]);
 
   // Flagged records for current event
   const flaggedEntries = useMemo(() => {
     if (!currentEvent) return [];
-    return currentEvent.records.filter((r) => r.status === 'flagged' || !!r.flaggedReason);
+    return currentEvent.records.filter((r) => r.status === 'Flagged' || !!r.flaggedReason);
   }, [currentEvent]);
 
-  // Scan activity feed
-  const scanActivity = useMemo(() => {
-    if (!currentEvent) return [];
-    return [...currentEvent.records]
-      .filter((r) => r.checkInTime || r.checkOutTime)
-      .slice(0, 10);
-  }, [currentEvent]);
+  // Active filters summary string
+  const activeFiltersSummary = useMemo(() => {
+    const parts: string[] = [];
+    if (filterState.departmentId !== 'all') {
+      const d = (departments || []).find(dept => dept.id === filterState.departmentId || dept.code === filterState.departmentId);
+      parts.push(`Dept: ${d?.code || filterState.departmentId}`);
+    }
+    if (filterState.section !== 'all') parts.push(`Section: ${filterState.section}`);
+    if (filterState.yearLevel !== 'all') parts.push(`Year: ${filterState.yearLevel}`);
+    if (filterState.status !== 'all') parts.push(`Status: ${filterState.status}`);
+    if (filterState.searchQuery) parts.push(`Search: "${filterState.searchQuery}"`);
+    return parts.length > 0 ? parts.join(' | ') : 'All Attendees';
+  }, [filterState, departments]);
 
-  const exportCSV = () => {
-    if (!currentEvent || currentEvent.records.length === 0) return;
-    const headers = ['Student ID', 'Student Name', 'Check-In Time', 'Check-Out Time', 'Status', 'Notes'];
-    const rows = currentEvent.records.map((r) => [
-      `"${r.studentId}"`,
-      `"${r.studentName}"`,
-      `"${r.checkInTime || ''}"`,
-      `"${r.checkOutTime || ''}"`,
-      `"${r.status}"`,
-      `"${r.flaggedReason || ''}"`,
-    ]);
-
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `${currentEvent.title.replace(/[^a-z0-9]/gi, '_')}_attendance.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const handleFilterChange = (updates: Partial<AttendanceFilterState>) => {
+    setFilterState(prev => ({ ...prev, ...updates }));
   };
 
-  const statusColors = {
-    'checked-in': 'bg-[#639922] text-white',
-    'checked-out': 'bg-[#888780] text-white',
-    'absent': 'bg-[#E24B4A] text-white',
-    'flagged': 'bg-[#BA7517] text-white',
+  const handleResetFilters = () => {
+    setFilterState(INITIAL_FILTERS);
   };
 
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px]">
-        <Loader2 className="w-8 h-8 animate-spin text-[#7F77DD] mb-3" />
-        <p className="text-gray-500 text-sm font-medium">Loading attendance logs...</p>
+        <Loader2 className="w-8 h-8 animate-spin text-[#83358E] mb-3" />
+        <p className="text-gray-500 text-sm font-medium">Loading attendance logs & student registry...</p>
       </div>
     );
   }
@@ -217,55 +297,43 @@ export default function AttendanceLogs() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="text-[#888780] text-[13px] mb-1">Dashboard &gt; Attendance Logs</div>
-          <h1 className="text-[#001A4D] text-[24px] font-bold">Attendance Logs</h1>
-          <p className="text-gray-500 text-xs mt-0.5">
-            Viewing events hosted or created by your organization with active attendance
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={exportCSV}
-            disabled={!currentEvent || currentEvent.records.length === 0}
-            className="flex items-center gap-2 px-4 py-2.5 border border-[#E0E0E0] text-[#001A4D] rounded-lg text-[14px] font-medium hover:bg-[#F8F8F8] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            <Download className="w-4 h-4" />
-            Export CSV
-          </button>
-        </div>
+      <div>
+        <div className="text-gray-400 text-xs mb-1">Dashboard &gt; Attendance Logs</div>
+        <h1 className="text-[#001A4D] text-2xl font-bold">Officer Attendance Logs</h1>
+        <p className="text-gray-500 text-xs mt-0.5">
+          Filter, monitor, and export attendance logs for events hosted or created by your organization.
+        </p>
       </div>
 
       {officerEvents.length === 0 ? (
-        <div className="bg-white border border-[#E0E0E0] rounded-xl p-12 text-center">
+        <div className="bg-white border border-[#E0E0E0] rounded-2xl p-12 text-center shadow-sm">
           <QrCode className="w-12 h-12 text-gray-300 mx-auto mb-3" />
           <h3 className="text-[#001A4D] font-bold text-lg mb-1">No Attendance Logs Found</h3>
           <p className="text-gray-500 text-sm max-w-md mx-auto">
-            There are no events hosted by or created for your active organization that have QR attendance enabled or attendance logs scanned yet.
+            There are no events hosted by or created for your active organization with QR attendance enabled yet.
           </p>
         </div>
       ) : (
         <>
-          {/* Event Selector Carousel/Tabs */}
-          <div className="bg-white border border-[#E0E0E0] rounded-xl p-4">
-            <p className="text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wide">Select Event</p>
+          {/* Event Selector Tabs */}
+          <div className="bg-white border border-[#E0E0E0] rounded-2xl p-4 shadow-sm">
+            <p className="text-xs font-bold text-gray-400 mb-2 uppercase tracking-wide">Select Event to Monitor</p>
             <div className="flex items-center gap-2 overflow-x-auto pb-1">
               {officerEvents.map((evt) => (
                 <button
                   key={evt.id}
-                  onClick={() => setSelectedEventId(evt.id)}
-                  className={`px-4 py-2.5 rounded-lg text-[13px] font-medium whitespace-nowrap transition-all flex items-center gap-2 ${
+                  onClick={() => { setSelectedEventId(evt.id); handleResetFilters(); }}
+                  className={`px-4 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-2 ${
                     currentEvent?.id === evt.id
-                      ? 'bg-[#7F77DD] text-white shadow-sm'
-                      : 'bg-[#F8F8F8] text-[#888780] hover:bg-[#EEEDFE]'
+                      ? 'bg-[#83358E] text-white shadow-sm'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                   }`}
                 >
                   <Calendar className="w-3.5 h-3.5" />
                   <span>{evt.title}</span>
                   <span
-                    className={`text-[10px] px-1.5 py-0.5 rounded-full ${
-                      currentEvent?.id === evt.id ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-600'
+                    className={`text-[10px] px-2 py-0.5 rounded-full font-mono ${
+                      currentEvent?.id === evt.id ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-700'
                     }`}
                   >
                     {evt.checkedIn} attended
@@ -276,265 +344,181 @@ export default function AttendanceLogs() {
           </div>
 
           {currentEvent && (
-            <div className="flex gap-6">
-              {/* Main Content Area */}
-              <div className="flex-1 space-y-6">
-                {/* Metric Summary Cards */}
-                <div className="grid grid-cols-4 gap-4">
-                  <div className="bg-white border border-[#E0E0E0] rounded-xl p-5">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-[#888780] text-[13px]">Total Registered</span>
-                      <Users className="w-5 h-5 text-[#888780]" />
-                    </div>
-                    <div className="text-[#001A4D] text-[24px] font-bold">{currentEvent.registered}</div>
+            <div className="space-y-6">
+              {/* Metric Summary Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-gray-500 text-xs font-semibold uppercase tracking-wider">Total Registered</span>
+                    <Users className="w-5 h-5 text-[#001A4D]" />
                   </div>
-
-                  <div className="bg-white border border-[#E0E0E0] rounded-xl p-5">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-[#888780] text-[13px]">Checked In</span>
-                      <UserCheck className="w-5 h-5 text-[#639922]" />
-                    </div>
-                    <div className="text-[#639922] text-[24px] font-bold">{currentEvent.checkedIn}</div>
-                  </div>
-
-                  <div className="bg-white border border-[#E0E0E0] rounded-xl p-5">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-[#888780] text-[13px]">Checked Out</span>
-                      <UserMinus className="w-5 h-5 text-[#888780]" />
-                    </div>
-                    <div className="text-[#888780] text-[24px] font-bold">{currentEvent.checkedOut}</div>
-                  </div>
-
-                  <div className="bg-white border border-[#E0E0E0] rounded-xl p-5">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-[#888780] text-[13px]">Absent</span>
-                      <UserX className="w-5 h-5 text-[#E24B4A]" />
-                    </div>
-                    <div className="text-[#E24B4A] text-[24px] font-bold">{currentEvent.absent}</div>
-                  </div>
+                  <div className="text-[#001A4D] text-2xl font-bold">{currentEvent.registered}</div>
                 </div>
 
-                {/* Filters & Table Container */}
-                <div className="bg-white border border-[#E0E0E0] rounded-xl overflow-hidden">
-                  {/* Table Toolbar */}
-                  <div className="p-4 border-b border-[#E0E0E0] bg-gray-50 flex items-center justify-between gap-4">
-                    <div className="relative flex-1 max-w-sm">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                      <input
-                        type="text"
-                        placeholder="Search student name, ID..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#7F77DD] focus:border-transparent bg-white"
-                      />
-                    </div>
-                    <div className="flex items-center gap-1">
-                      {[
-                        { id: 'all', label: 'All' },
-                        { id: 'checked-in', label: 'Checked In' },
-                        { id: 'checked-out', label: 'Checked Out' },
-                        { id: 'absent', label: 'Absent' },
-                        { id: 'flagged', label: 'Flagged' },
-                      ].map((tab) => (
-                        <button
-                          key={tab.id}
-                          onClick={() => setStatusFilter(tab.id)}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                            statusFilter === tab.id
-                              ? 'bg-[#001A4D] text-white'
-                              : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-100'
+                <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-gray-500 text-xs font-semibold uppercase tracking-wider">Attended / Checked In</span>
+                    <UserCheck className="w-5 h-5 text-green-600" />
+                  </div>
+                  <div className="text-green-600 text-2xl font-bold">{currentEvent.checkedIn}</div>
+                </div>
+
+                <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-gray-500 text-xs font-semibold uppercase tracking-wider">Checked Out</span>
+                    <UserMinus className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <div className="text-blue-600 text-2xl font-bold">{currentEvent.checkedOut}</div>
+                </div>
+
+                <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-gray-500 text-xs font-semibold uppercase tracking-wider">Absent</span>
+                    <UserX className="w-5 h-5 text-red-500" />
+                  </div>
+                  <div className="text-red-500 text-2xl font-bold">{currentEvent.absent}</div>
+                </div>
+              </div>
+
+              {/* Shared Attendance Filter Toolbar */}
+              <AttendanceFilterToolbar
+                filters={filterState}
+                onFilterChange={handleFilterChange}
+                onReset={handleResetFilters}
+                departments={(departments || []).map(d => ({ id: d.id, name: d.name, code: d.code }))}
+                sections={availableSections}
+                courses={(courses || []).map(c => ({ id: c.id, name: c.name, code: c.code }))}
+                sessions={currentEvent.sessions}
+                onExportClick={() => setIsExportModalOpen(true)}
+                totalCount={currentEvent.records.length}
+                filteredCount={filteredRecords.length}
+              />
+
+              {/* Attendance Table Container */}
+              <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-[#001A4D] text-white">
+                      <tr>
+                        <th className="px-4 py-3 font-bold uppercase tracking-wider w-10 text-center">#</th>
+                        <th className="px-4 py-3 font-bold uppercase tracking-wider">Student ID</th>
+                        <th className="px-4 py-3 font-bold uppercase tracking-wider">Student Name</th>
+                        <th className="px-4 py-3 font-bold uppercase tracking-wider">Department</th>
+                        <th className="px-4 py-3 font-bold uppercase tracking-wider">Course</th>
+                        <th className="px-4 py-3 font-bold uppercase tracking-wider">Section</th>
+                        <th className="px-4 py-3 font-bold uppercase tracking-wider">Year</th>
+                        <th className="px-4 py-3 font-bold uppercase tracking-wider">Check-In</th>
+                        <th className="px-4 py-3 font-bold uppercase tracking-wider">Check-Out</th>
+                        <th className="px-4 py-3 font-bold uppercase tracking-wider">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 font-medium text-gray-800">
+                      {filteredRecords.map((rec, idx) => (
+                        <tr
+                          key={rec.id || idx}
+                          className={`hover:bg-purple-50/40 transition-colors ${
+                            rec.status === 'Absent' ? 'bg-red-50/20' :
+                            rec.status === 'Flagged' ? 'bg-amber-50/30' :
+                            rec.status === 'Late' ? 'bg-orange-50/20' : ''
                           }`}
                         >
-                          {tab.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Attendance Table */}
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead className="bg-[#F8F8F8] border-b border-[#E0E0E0]">
-                        <tr>
-                          <th className="px-5 py-3 text-left text-[#888780] text-[12px] font-bold uppercase tracking-wider">
-                            Student
-                          </th>
-                          <th className="px-5 py-3 text-left text-[#888780] text-[12px] font-bold uppercase tracking-wider">
-                            Student ID
-                          </th>
-                          <th className="px-5 py-3 text-left text-[#888780] text-[12px] font-bold uppercase tracking-wider">
-                            Check-In
-                          </th>
-                          <th className="px-5 py-3 text-left text-[#888780] text-[12px] font-bold uppercase tracking-wider">
-                            Check-Out
-                          </th>
-                          <th className="px-5 py-3 text-left text-[#888780] text-[12px] font-bold uppercase tracking-wider">
-                            Status
-                          </th>
+                          <td className="px-4 py-3 text-center text-gray-400 font-mono">{idx + 1}</td>
+                          <td className="px-4 py-3 font-mono text-gray-600">{rec.studentId || 'N/A'}</td>
+                          <td className="px-4 py-3 font-bold text-[#001A4D]">{rec.name}</td>
+                          <td className="px-4 py-3">
+                            <span className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-[10px] font-bold">
+                              {rec.departmentCode || rec.departmentName || 'N/A'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 font-semibold text-purple-900">{rec.courseCode || rec.courseName || 'N/A'}</td>
+                          <td className="px-4 py-3 font-semibold text-[#83358E]">{rec.section || 'N/A'}</td>
+                          <td className="px-4 py-3 text-gray-600">{rec.yearLevel || 'N/A'}</td>
+                          <td className="px-4 py-3 font-mono text-green-700">{rec.checkIn || '—'}</td>
+                          <td className="px-4 py-3 font-mono text-blue-700">{rec.checkOut || '—'}</td>
+                          <td className="px-4 py-3">
+                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                              rec.status === 'Complete' || rec.status === 'Checked In' ? 'bg-green-100 text-green-800 border border-green-300' :
+                              rec.status === 'Checked Out' ? 'bg-blue-100 text-blue-800 border border-blue-300' :
+                              rec.status === 'Late' ? 'bg-amber-100 text-amber-800 border border-amber-300' :
+                              rec.status === 'Absent' ? 'bg-red-100 text-red-800 border border-red-300' :
+                              'bg-orange-100 text-orange-800 border border-orange-300'
+                            }`}>
+                              {rec.status}
+                            </span>
+                          </td>
                         </tr>
-                      </thead>
-                      <tbody className="divide-y divide-[#E0E0E0]">
-                        {filteredRecords.map((record) => (
-                          <tr key={record.id} className="hover:bg-[#EEEDFE] transition-colors">
-                            <td className="px-5 py-4">
-                              <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 bg-[#7F77DD] rounded-full flex items-center justify-center text-white font-semibold text-xs flex-shrink-0">
-                                  {record.avatar}
-                                </div>
-                                <div>
-                                  <span className="text-[#001A4D] text-[13px] font-medium block">
-                                    {record.studentName}
-                                  </span>
-                                  {record.flaggedReason && (
-                                    <span className="text-amber-600 text-[11px] font-medium block">
-                                      Note: {record.flaggedReason}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            </td>
-                            <td className="px-5 py-4 text-[#888780] text-[13px] font-mono">{record.studentId}</td>
-                            <td className="px-5 py-4 text-[#001A4D] text-[13px]">{record.checkInTime || '—'}</td>
-                            <td className="px-5 py-4 text-[#001A4D] text-[13px]">{record.checkOutTime || '—'}</td>
-                            <td className="px-5 py-4">
-                              <span
-                                className={`px-2.5 py-1 rounded-full text-[11px] font-medium capitalize ${
-                                  statusColors[record.status]
-                                }`}
-                              >
-                                {record.status.replace('-', ' ')}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                        {filteredRecords.length === 0 && (
-                          <tr>
-                            <td colSpan={5} className="px-5 py-10 text-center text-gray-400 text-sm">
-                              No attendance records match your search criteria.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <div className="px-5 py-4 border-t border-[#E0E0E0] flex items-center justify-between">
-                    <p className="text-[#888780] text-[13px]">
-                      Showing {filteredRecords.length} of {currentEvent.records.length} records
-                    </p>
-                  </div>
+                      ))}
+                      {filteredRecords.length === 0 && (
+                        <tr>
+                          <td colSpan={10} className="px-4 py-12 text-center text-gray-400 text-sm">
+                            No attendance records match your search or filter criteria.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
                 </div>
 
-                {/* Flagged Section Drawer */}
-                <div
-                  className={`bg-white border-2 ${
-                    showFlagged ? 'border-[#BA7517]' : 'border-[#E0E0E0]'
-                  } rounded-xl overflow-hidden`}
-                >
+                <div className="px-6 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
+                  <span>Showing <strong>{filteredRecords.length}</strong> of <strong>{currentEvent.records.length}</strong> attendance records</span>
+                  <span>Event: <strong>{currentEvent.title}</strong></span>
+                </div>
+              </div>
+
+              {/* Flagged Section Accordion */}
+              {flaggedEntries.length > 0 && (
+                <div className="bg-amber-50 border border-amber-300 rounded-2xl overflow-hidden shadow-sm">
                   <button
                     onClick={() => setShowFlagged(!showFlagged)}
-                    className="w-full px-5 py-4 flex items-center justify-between hover:bg-[#FEF3C7] transition-colors"
+                    className="w-full px-6 py-4 flex items-center justify-between hover:bg-amber-100/60 transition-colors"
                   >
                     <div className="flex items-center gap-2">
-                      <AlertCircle className="w-5 h-5 text-[#BA7517]" />
-                      <span className="text-[#BA7517] text-[14px] font-bold">
-                        ⚠ Flagged Entries ({flaggedEntries.length})
+                      <AlertCircle className="w-5 h-5 text-amber-700" />
+                      <span className="text-amber-900 text-sm font-bold">
+                        Flagged Anomaly Entries ({flaggedEntries.length})
                       </span>
                     </div>
-                    <ChevronDown
-                      className={`w-5 h-5 text-[#BA7517] transition-transform ${
-                        showFlagged ? 'rotate-180' : ''
-                      }`}
-                    />
+                    <ChevronDown className={`w-5 h-5 text-amber-700 transition-transform ${showFlagged ? 'rotate-180' : ''}`} />
                   </button>
 
                   {showFlagged && (
-                    <div className="border-t border-[#BA7517]">
-                      <table className="w-full">
-                        <thead className="bg-[#FEF3C7] border-b border-[#BA7517]">
+                    <div className="border-t border-amber-200 bg-white p-4">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-amber-100/60 text-amber-900">
                           <tr>
-                            <th className="px-5 py-3 text-left text-[#BA7517] text-[12px] font-bold uppercase">
-                              Student
-                            </th>
-                            <th className="px-5 py-3 text-left text-[#BA7517] text-[12px] font-bold uppercase">
-                              Reason
-                            </th>
-                            <th className="px-5 py-3 text-left text-[#BA7517] text-[12px] font-bold uppercase">
-                              Time
-                            </th>
+                            <th className="px-3 py-2 font-bold">Student</th>
+                            <th className="px-3 py-2 font-bold">Section</th>
+                            <th className="px-3 py-2 font-bold">Flag Reason</th>
+                            <th className="px-3 py-2 font-bold">Time</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-[#E0E0E0]">
-                          {flaggedEntries.map((entry) => (
-                            <tr key={entry.id} className="hover:bg-[#FEF3C7]/20">
-                              <td className="px-5 py-4 text-[#001A4D] text-[13px] font-medium">
-                                {entry.studentName}
-                              </td>
-                              <td className="px-5 py-4 text-[#888780] text-[13px]">
-                                {entry.flaggedReason || 'Flagged scan anomaly'}
-                              </td>
-                              <td className="px-5 py-4 text-[#888780] text-[13px]">
-                                {entry.checkInTime || entry.checkOutTime || 'N/A'}
-                              </td>
+                        <tbody className="divide-y divide-gray-100 text-gray-800">
+                          {flaggedEntries.map((rec, i) => (
+                            <tr key={rec.id || i}>
+                              <td className="px-3 py-2 font-bold">{rec.name} ({rec.studentId})</td>
+                              <td className="px-3 py-2 font-mono text-[#83358E]">{rec.section}</td>
+                              <td className="px-3 py-2 text-amber-800 italic">{rec.flaggedReason || 'Scan anomaly'}</td>
+                              <td className="px-3 py-2 font-mono">{rec.checkIn || rec.checkOut || 'N/A'}</td>
                             </tr>
                           ))}
-                          {flaggedEntries.length === 0 && (
-                            <tr>
-                              <td colSpan={3} className="px-5 py-6 text-center text-gray-400 text-sm">
-                                No flagged entries for this event.
-                              </td>
-                            </tr>
-                          )}
                         </tbody>
                       </table>
                     </div>
                   )}
                 </div>
-              </div>
+              )}
 
-              {/* Sidebar: Scan Activity Feed */}
-              <div className="w-[280px] bg-white border border-[#E0E0E0] rounded-xl p-5 h-fit sticky top-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-[#001A4D] text-[14px] font-bold">Scan Activity Feed</h3>
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-[#639922] rounded-full animate-pulse" />
-                    <span className="text-[#639922] text-[11px] font-medium">Live</span>
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  {scanActivity.map((scan) => (
-                    <div
-                      key={scan.id}
-                      className="flex items-start gap-3 pb-3 border-b border-[#E0E0E0] last:border-0"
-                    >
-                      <div className="w-8 h-8 bg-[#7F77DD] rounded-full flex items-center justify-center text-white font-semibold text-xs flex-shrink-0">
-                        {scan.avatar}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[#001A4D] text-[13px] font-medium truncate">{scan.studentName}</p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-medium ${
-                              scan.status === 'checked-out'
-                                ? 'bg-[#888780] text-white'
-                                : 'bg-[#639922] text-white'
-                            }`}
-                          >
-                            {scan.status === 'checked-out' ? 'Check-Out' : 'Check-In'}
-                          </span>
-                          <span className="text-[#888780] text-[11px]">
-                            {scan.checkInTime || scan.checkOutTime || 'Recently'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                  {scanActivity.length === 0 && (
-                    <p className="text-gray-400 text-xs text-center py-4">No recent scans recorded.</p>
-                  )}
-                </div>
-              </div>
+              {/* Excel Export Preview Modal */}
+              <AttendanceExportPreviewModal
+                isOpen={isExportModalOpen}
+                onClose={() => setIsExportModalOpen(false)}
+                records={filteredRecords}
+                eventTitle={currentEvent.title}
+                eventDate={currentEvent.date}
+                hostingOrgName={currentEvent.orgName}
+                venueName={currentEvent.venue}
+                activeFiltersSummary={activeFiltersSummary}
+              />
             </div>
           )}
         </>
@@ -542,4 +526,3 @@ export default function AttendanceLogs() {
     </div>
   );
 }
-

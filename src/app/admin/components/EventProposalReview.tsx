@@ -98,7 +98,6 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
 
   // Reject modal state
   const [rejectionReason, setRejectionReason] = useState(event.rejectionReason || '');
-  const [allowResubmit, setAllowResubmit] = useState(true);
   const [resubmitDays, setResubmitDays] = useState(7);
 
   const { data: orgs } = useOrganizationStream();
@@ -196,7 +195,7 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
     }
     setSubmitting(true);
     try {
-      await rejectEvent(event.id, profile.uid, rejectionReason, remarks, allowResubmit);
+      await rejectEvent(event.id, profile.uid, rejectionReason, remarks, false);
       setDecision('rejected');
       setActiveModal('none');
       toast.success('Proposal rejected successfully.');
@@ -973,20 +972,6 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
                 />
               </div>
 
-              <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl">
-                <label className="flex items-center gap-2.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={allowResubmit}
-                    onChange={e => setAllowResubmit(e.target.checked)}
-                    className="accent-red-600 w-4 h-4 rounded"
-                  />
-                  <div>
-                    <span className="text-sm font-bold text-[#001A4D]">Allow Officer to revise & resubmit</span>
-                    <p className="text-xs text-gray-500">If enabled, officer can edit and resubmit this proposal after fixing issues.</p>
-                  </div>
-                </label>
-              </div>
 
               <div className="flex gap-3 pt-2">
                 <button onClick={() => setActiveModal('none')} disabled={submitting} className="flex-1 py-3 border border-gray-300 text-gray-700 rounded-xl text-sm font-semibold hover:bg-gray-50">Cancel</button>
