@@ -1,6 +1,7 @@
 import { RefreshCw, Download, Clock, UserCheck, UserX, Ban, CircleCheck } from 'lucide-react';
 import { StudentDocument } from '../../../modules/students/types/student.types';
 import { SemesterDocument } from '../../../modules/academic/types/academic.types';
+import { getMillis } from '../../../modules/students/utils/date.utils';
 
 interface RegistryDashboardProps {
   onNavigate: (view: string) => void;
@@ -28,11 +29,13 @@ export default function RegistryDashboard({ onNavigate, categorizedStudents, act
   // Top 5 pending verification
   const pendingQueue = pending.slice(0, 5).map(student => {
     // elapsed time
-    const diff = Date.now() - student.createdAt.toMillis();
+    const createdAtMs = getMillis(student.createdAt);
+    const diff = createdAtMs ? Math.max(0, Date.now() - createdAtMs) : 0;
     const hours = Math.floor(diff / (1000 * 60 * 60));
     const days = Math.floor(hours / 24);
     let submitted = '';
-    if (days > 0) submitted = `${days} day${days > 1 ? 's' : ''} ago`;
+    if (!createdAtMs) submitted = 'Recently';
+    else if (days > 0) submitted = `${days} day${days > 1 ? 's' : ''} ago`;
     else if (hours > 0) submitted = `${hours} hour${hours > 1 ? 's' : ''} ago`;
     else submitted = 'Recently';
 
@@ -43,13 +46,13 @@ export default function RegistryDashboard({ onNavigate, categorizedStudents, act
       course: student.courseCode,
       year: student.yearLevel,
       submitted,
-      avatar: student.firstName.charAt(0) + student.lastName.charAt(0)
+      avatar: (student.firstName?.charAt(0) || 'S') + (student.lastName?.charAt(0) || 'T')
     };
   });
 
   // Recent activity
   const recentActivity = [...allStudents]
-    .sort((a, b) => b.updatedAt.toMillis() - a.updatedAt.toMillis())
+    .sort((a, b) => getMillis(b.updatedAt) - getMillis(a.updatedAt))
     .slice(0, 5)
     .map(student => {
       let action = '';
@@ -63,12 +66,14 @@ export default function RegistryDashboard({ onNavigate, categorizedStudents, act
         default: action = `${student.firstName} ${student.lastName} — Status Updated`; type = 'blue'; break;
       }
       
-      const diff = Date.now() - student.updatedAt.toMillis();
+      const updatedAtMs = getMillis(student.updatedAt);
+      const diff = updatedAtMs ? Math.max(0, Date.now() - updatedAtMs) : 0;
       const minutes = Math.floor(diff / 60000);
       const hours = Math.floor(minutes / 60);
       const days = Math.floor(hours / 24);
       let timeString = '';
-      if (days > 0) timeString = `${days} day${days > 1 ? 's' : ''} ago`;
+      if (!updatedAtMs) timeString = 'Just now';
+      else if (days > 0) timeString = `${days} day${days > 1 ? 's' : ''} ago`;
       else if (hours > 0) timeString = `${hours} hour${hours > 1 ? 's' : ''} ago`;
       else if (minutes > 0) timeString = `${minutes} min ago`;
       else timeString = 'Just now';

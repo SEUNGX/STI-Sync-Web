@@ -3,6 +3,7 @@ import { useState, useMemo } from 'react';
 import { useCourses } from '../../../modules/academic/hooks/useAcademicStream';
 import { updateStudentStatus, returnStudent } from '../../../modules/students/services/student.service';
 import { StudentDocument } from '../../../modules/students/types/student.types';
+import { formatTimestampDateTime } from '../../../modules/students/utils/date.utils';
 
 interface PendingVerificationProps {
   students: StudentDocument[];
@@ -201,7 +202,7 @@ export default function PendingVerification({ students }: PendingVerificationPro
                   <div className="col-span-2">
                     <div className="text-xs text-gray-500">Submission Date</div>
                     <div className="text-gray-700 italic text-sm">
-                      {student.createdAt ? new Date(student.createdAt.toMillis()).toLocaleString() : 'N/A'}
+                      {formatTimestampDateTime(student.createdAt)}
                     </div>
                   </div>
                 </div>

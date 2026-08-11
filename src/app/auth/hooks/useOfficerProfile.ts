@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc } from 'firebase/firestore';
 import { db } from '../../../services/firebase';
 
 export interface OfficerRole {
@@ -22,6 +22,8 @@ const SESSION_KEY = 'sti_sync_officer_session';
 export function useOfficerProfile() {
   const [profile, setProfile] = useState<OfficerProfile | null>(null);
   const [roles, setRoles] = useState<OfficerRole[]>([]);
+  const [activeOrgStatus, setActiveOrgStatus] = useState<string>('active');
+  const [activeOrgName, setActiveOrgName] = useState<string>('Organization');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -53,7 +55,7 @@ export function useOfficerProfile() {
       where('isActive', '==', true)
     );
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const unsubscribeRoles = onSnapshot(q, (snapshot) => {
       const activeRoles = snapshot.docs.map(doc => ({
         id: doc.id,
         organizationId: doc.data().organizationId,
@@ -76,8 +78,35 @@ export function useOfficerProfile() {
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => unsubscribeRoles();
   }, []);
+
+  // Listen to active organization status in real-time
+  useEffect(() => {
+    const activeOrgId = profile?.activeOrganizationId;
+    if (!activeOrgId) {
+      setActiveOrgStatus('active');
+      return;
+    }
+
+    const unsubOrg = onSnapshot(
+      doc(db, 'organizations', activeOrgId),
+      (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setActiveOrgStatus(data.status || 'active');
+          setActiveOrgName(data.name || 'Organization');
+        } else {
+          setActiveOrgStatus('archived');
+        }
+      },
+      (err) => {
+        console.warn('[useOfficerProfile] Error streaming org status:', err);
+      }
+    );
+
+    return () => unsubOrg();
+  }, [profile?.activeOrganizationId]);
 
   const switchOrganization = (organizationId: string, roleId: string) => {
     if (!profile) return;
@@ -92,5 +121,6 @@ export function useOfficerProfile() {
     setRoles([]);
   };
 
-  return { profile, roles, loading, switchOrganization, logout };
+  return { profile, roles, activeOrgStatus, activeOrgName, loading, switchOrganization, logout };
 }
+

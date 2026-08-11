@@ -1,5 +1,6 @@
 import { GraduationCap, Download, Eye, RotateCcw } from 'lucide-react';
 import { StudentDocument } from '../../../modules/students/types/student.types';
+import { formatTimestampDate } from '../../../modules/students/utils/date.utils';
 
 interface ArchivedGraduatesProps {
   students: StudentDocument[];
@@ -11,45 +12,33 @@ export default function ArchivedGraduates({ students: archivedStudents }: Archiv
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-[#001A4D]">Archived Accounts</h2>
-          <p className="text-sm text-gray-500">Dashboard → Student Registry → Archived / Graduates</p>
+          <h2 className="text-2xl font-bold text-[#001A4D]">Archived & Graduates</h2>
+          <p className="text-sm text-gray-500">View past students and archived records</p>
         </div>
+        <button className="px-4 py-2 bg-[#001A4D] text-white rounded-lg font-medium text-sm hover:bg-[#001A4D]/90 flex items-center gap-2">
+          <Download className="w-4 h-4" />
+          Export Archive
+        </button>
+      </div>
+
+      {/* Info Card */}
+      <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <button className="px-6 py-2.5 bg-[#83358E] text-white rounded-lg font-medium hover:bg-[#83358E]/90 flex items-center gap-2">
-            <GraduationCap className="w-4 h-4" />
-            Archive Graduates
-          </button>
-          <button className="px-6 py-2.5 bg-[#001A4D] text-white rounded-lg font-medium hover:bg-[#001A4D]/90 flex items-center gap-2">
-            <Download className="w-4 h-4" />
-            Export Archive
-          </button>
+          <GraduationCap className="w-5 h-5 text-gray-600" />
+          <p className="text-sm text-gray-700">
+            Records here are preserved for historical logs. Students cannot log in and are excluded from active calculations.
+          </p>
         </div>
       </div>
 
-      {/* Archive Batch Action Card */}
-      <div className="bg-gradient-to-r from-[#001A4D] to-[#0C3C8A] rounded-xl p-6">
-        <h3 className="text-white font-bold text-lg mb-2">End of Academic Year — Archive Graduates</h3>
-        <p className="text-white/90 text-sm mb-4">
-          Archive all students who have completed their program. Archived accounts are permanently deactivated but all records are preserved for institutional reporting.
-        </p>
-        <div className="flex items-center gap-3">
-          <button className="px-6 py-2.5 bg-[#FFD41C] text-[#001A4D] rounded-lg font-medium hover:bg-[#FFD41C]/90">
-            Select Graduates to Archive
-          </button>
-          <button className="text-white hover:underline text-sm">
-            Dismiss
-          </button>
-        </div>
-      </div>
-
-      {/* Archive Table */}
+      {/* Table */}
       <div className="bg-white border border-[#E0E0E0] rounded-xl overflow-hidden">
         <table className="w-full">
           <thead className="bg-gray-50">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-bold text-gray-700">Student</th>
               <th className="px-6 py-3 text-left text-xs font-bold text-gray-700">Course</th>
-              <th className="px-6 py-3 text-left text-xs font-bold text-gray-700">Archive Date</th>
+              <th className="px-6 py-3 text-left text-xs font-bold text-gray-700">Archived Date</th>
               <th className="px-6 py-3 text-left text-xs font-bold text-gray-700">Archive Reason</th>
               <th className="px-6 py-3 text-left text-xs font-bold text-gray-700">Status</th>
               <th className="px-6 py-3 text-left text-xs font-bold text-gray-700">Actions</th>
@@ -58,7 +47,7 @@ export default function ArchivedGraduates({ students: archivedStudents }: Archiv
           <tbody className="divide-y divide-gray-200">
             {archivedStudents.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-6 py-8 text-center text-gray-500">No archived students found.</td>
+                <td colSpan={6} className="px-6 py-8 text-center text-gray-500">No archived records found.</td>
               </tr>
             ) : archivedStudents.map((student) => (
               <tr key={student.id} className="hover:bg-gray-50">
@@ -75,7 +64,7 @@ export default function ArchivedGraduates({ students: archivedStudents }: Archiv
                 </td>
                 <td className="px-6 py-4 text-sm text-gray-700">{student.courseCode}</td>
                 <td className="px-6 py-4 text-sm text-gray-700">
-                  {student.updatedAt ? new Date(student.updatedAt.toMillis()).toLocaleDateString() : 'N/A'}
+                  {formatTimestampDate(student.updatedAt)}
                 </td>
                 <td className="px-6 py-4">
                   <span className="px-3 py-1 bg-gray-200 text-gray-700 rounded-full text-xs font-medium">

@@ -1,4 +1,4 @@
-import { X, Mail, Phone, Edit, Crown } from 'lucide-react';
+import { X, Mail, Phone, Edit, Crown, UserMinus } from 'lucide-react';
 import type { OrganizationMemberDocument } from '../../modules/organizations/types/member.types';
 import type { OrganizationOfficerDocument } from '../../modules/organizations/hooks/useOrgOfficers';
 
@@ -9,9 +9,10 @@ interface MemberProfilePanelProps {
   onEdit?: () => void;
   onAppointOfficer?: () => void;
   onChangeStatus?: () => void;
+  onRemoveMember?: () => void;
 }
 
-export function MemberProfilePanel({ member, officerRecord, onClose, onEdit, onAppointOfficer, onChangeStatus }: MemberProfilePanelProps) {
+export function MemberProfilePanel({ member, officerRecord, onClose, onEdit, onAppointOfficer, onChangeStatus, onRemoveMember }: MemberProfilePanelProps) {
   // We can calculate attendance from another collection later, for now we mock
   const eventsAttended = 0;
   const totalEvents = 0;
@@ -169,6 +170,16 @@ export function MemberProfilePanel({ member, officerRecord, onClose, onEdit, onA
             >
               Change Status
             </button>
+
+            {onRemoveMember && (
+              <button 
+                onClick={onRemoveMember}
+                className="w-full px-4 py-2.5 border border-red-200 bg-red-50 text-[#E24B4A] rounded-lg text-[14px] font-medium hover:bg-red-100 flex items-center justify-center gap-2 transition-colors"
+              >
+                <UserMinus className="w-4 h-4 text-[#E24B4A]" />
+                Remove Member
+              </button>
+            )}
           </div>
         </div>
       </div>

@@ -67,12 +67,25 @@ export default function OfficerLiquidationModal({
 
     const nonDrafts = allEvents.filter((e: any) => (e.proposalStatus || '').toString().toLowerCase() !== 'draft');
 
-    if (userRole === 'admin') return nonDrafts;
+    if (userRole === 'admin') {
+      return nonDrafts.filter((e: any) => {
+        if (e.isOfficerProposal === true || e.submittedByOfficer === true) return false;
+
+        // Exclude events that went through proposal approval workflow (have approvedBy or submitted history)
+        const hasApprovedBy = Boolean(e.approvedBy);
+        const hasSubmittedHistory = Array.isArray(e.proposalHistory) &&
+          e.proposalHistory.some((h: any) => h?.action === 'submitted' || h?.action === 'resubmitted');
+
+        if (hasApprovedBy || hasSubmittedHistory) return false;
+
+        return true;
+      });
+    }
 
     const cleanOrgId = (orgId || '').trim().toLowerCase();
     if (!cleanOrgId) return nonDrafts;
 
-    const orgEvents = nonDrafts.filter((e: any) => {
+    return nonDrafts.filter((e: any) => {
       const orgFields = [
         e.hostingOrgId,
         e.organizationId,
@@ -85,8 +98,6 @@ export default function OfficerLiquidationModal({
       ];
       return orgFields.some((f) => f && String(f).trim().toLowerCase().includes(cleanOrgId));
     });
-
-    return orgEvents.length > 0 ? orgEvents : nonDrafts;
   }, [allEvents, orgId, userRole]);
 
   const [selectedEventId, setSelectedEventId] = useState<string>('');

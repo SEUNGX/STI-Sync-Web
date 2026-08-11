@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Search, Plus, Download, Eye, MoreVertical } from 'lucide-react';
 import AddStudentManuallyModal from './AddStudentManuallyModal';
 import { StudentDocument } from '../../../modules/students/types/student.types';
+import { formatTimestampDate } from '../../../modules/students/utils/date.utils';
 
 interface ActiveStudentsProps {
   students: StudentDocument[];
@@ -167,7 +168,7 @@ export default function ActiveStudents({ students: activeStudents }: ActiveStude
                     </span>
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-500">
-                    {student.updatedAt ? new Date(student.updatedAt.toMillis()).toLocaleDateString() : 'N/A'}
+                    {formatTimestampDate(student.updatedAt)}
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">

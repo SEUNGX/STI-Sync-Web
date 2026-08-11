@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { db, auth } from '../../../services/firebase';
 
@@ -66,6 +66,25 @@ export function useOfficerAuth() {
       }
 
       if (matchedDoc) {
+        // Check organization status in Firestore
+        if (matchedDoc.organizationId) {
+          try {
+            const orgSnap = await getDoc(doc(db, 'organizations', matchedDoc.organizationId));
+            if (orgSnap.exists()) {
+              const orgData = orgSnap.data();
+              const orgStatus = orgData.status || 'active';
+              if (['suspended', 'inactive', 'archived'].includes(orgStatus)) {
+                setError(
+                  `Your organization (${orgData.name || 'Organization'}) is currently ${orgStatus}. Access to the Officer Web account is restricted by SAO Administration.`
+                );
+                return false;
+              }
+            }
+          } catch (orgCheckErr) {
+            console.warn('[useOfficerAuth] Org status check failed:', orgCheckErr);
+          }
+        }
+
         // Create session
         const session = {
           studentId: matchedDoc.studentId,

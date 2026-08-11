@@ -187,6 +187,7 @@ export const createEvent = async (
     ...data,
     referenceId: refId,
     scannerUserIds,
+    isOfficerProposal: Boolean(isOfficerProposal),
     proposalStatus: isOfficerProposal ? 'pending' : 'approved',
     createdBy: uid,
     updatedAt: serverTimestamp() as any,

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { X, Search, Loader2 } from 'lucide-react';
 import { useStudents } from '../../modules/students/hooks/useStudentStream';
+import { useSemesters } from '../../modules/academic/hooks/useAcademicStream';
 import { addMember } from '../../modules/organizations/services/member.service';
 import { createPayable, recordPayment } from '../../modules/finance/services/payable.service';
 import type { AddMemberPayload } from '../../modules/organizations/types/member.types';
@@ -14,6 +15,8 @@ interface AddMemberModalProps {
 
 export function AddMemberModal({ isOpen, onClose, organizationId, addedBy }: AddMemberModalProps) {
   const { data: allStudents, loading: loadingStudents } = useStudents();
+  const { data: semesters = [] } = useSemesters();
+  const activeSemester = semesters.find((s) => s.status === 'ACTIVE') || semesters[0];
   
   const [searchQuery, setSearchQuery] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
@@ -73,7 +76,7 @@ export function AddMemberModal({ isOpen, onClose, organizationId, addedBy }: Add
           label: 'Membership Due',
           description: 'Initial membership due upon joining',
           organizationId,
-          semesterId: 'active',
+          semesterId: activeSemester?.id || 'active',
           assignedAmount: 50,
           createdBy: addedBy,
         });

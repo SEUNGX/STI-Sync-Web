@@ -2,6 +2,7 @@ import {
   collection,
   doc,
   addDoc,
+  setDoc,
   updateDoc,
   deleteDoc,
   getDocs,
@@ -140,7 +141,7 @@ export async function createPayable(payload: CreatePayablePayload): Promise<stri
     }
   }
 
-  await addDoc(payablesRef, {
+  await setDoc(newDocRef, {
     id: newDocRef.id,
     studentId: payload.studentId,
     studentName: payload.studentName,
@@ -320,4 +321,162 @@ export async function markEventPayablesTransferred(eventId: string): Promise<voi
     }
     await batch.commit();
   }
+}
+
+/**
+ * Automatically evaluate attendance records for an event and record fines (Absent, Late, Missed Scan)
+ * based on event settings and rules configured by officers/admins.
+ */
+export async function recordEventFinePayables(
+  eventId: string,
+  createdBy: string,
+  isOfficer: boolean = true
+): Promise<{ created: number; skipped: number }> {
+  const eventRef = doc(db, 'events', eventId);
+  const eventSnap = await getDoc(eventRef);
+  if (!eventSnap.exists()) {
+    throw new Error('Event not found');
+  }
+  const eventData = eventSnap.data();
+  const fineAmount = Number(eventData.latePenaltyAmount) || 50;
+
+  const attendanceRef = collection(db, 'attendance');
+  const qAttendance = query(attendanceRef, where('eventId', '==', eventId));
+  const attendanceSnap = await getDocs(qAttendance);
+
+  let attendanceDocs = attendanceSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  if (attendanceDocs.length === 0 && eventData.title) {
+    const qByTitle = query(attendanceRef, where('event', '==', eventData.title));
+    const titleSnap = await getDocs(qByTitle);
+    attendanceDocs = titleSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  }
+
+  if (attendanceDocs.length === 0) {
+    return { created: 0, skipped: 0 };
+  }
+
+  const payablesRef = collection(db, PAYABLES_COLLECTION);
+  const qPayables = query(
+    payablesRef,
+    where('eventId', '==', eventId),
+    where('type', 'in', ['org_fine', 'admin_fine'])
+  );
+  const existingPayablesSnap = await getDocs(qPayables);
+
+  const existingFineKeys = new Set<string>();
+  existingPayablesSnap.docs.forEach((d) => {
+    const data = d.data();
+    const studentId = (data.studentId || '').toString().trim();
+    const label = (data.label || '').toString().toLowerCase();
+    let category = 'absent';
+    if (label.includes('late')) category = 'late';
+    else if (label.includes('missed scan') || label.includes('flagged')) category = 'missed_scan';
+    existingFineKeys.add(`${studentId}_${category}`);
+  });
+
+  const isSaoAdminEvent =
+    eventData.hostingOrgId === 'sao_admin' ||
+    eventData.hostingOrgId === 'sao' ||
+    !isOfficer;
+
+  const payableType: PayableType = isSaoAdminEvent ? 'admin_fine' : 'org_fine';
+  const orgId = eventData.hostingOrgId || null;
+  const orgName = eventData.hostingOrgName || eventData.org || null;
+  const semesterId = eventData.semesterId || 'current';
+
+  let createdCount = 0;
+  let skippedCount = 0;
+
+  const newPayablesToCreate: CreatePayablePayload[] = [];
+
+  for (const rec of attendanceDocs) {
+    const studentId = (rec.studentId || '').toString().trim();
+    const studentName = rec.name || 'Student';
+    const status = (rec.status || '').toString();
+
+    let violationCategory: 'absent' | 'late' | 'missed_scan' | null = null;
+    let label = '';
+    let description = '';
+
+    if (status === 'Absent') {
+      violationCategory = 'absent';
+      label = `Absent Fine — ${eventData.title}`;
+      description = `Automatic fine for unexcused absence at ${eventData.title}`;
+    } else if (status === 'Late') {
+      violationCategory = 'late';
+      label = `Late Arrival Fine — ${eventData.title}`;
+      description = `Automatic fine for late check-in at ${eventData.title}`;
+    } else if (status === 'Flagged' || (rec.checkIn && !rec.checkOut && eventData.sessions?.[0]?.hasTimeOut)) {
+      violationCategory = 'missed_scan';
+      label = `Missed Scan Fine — ${eventData.title}`;
+      description = `Automatic fine for incomplete scan-in / scan-out at ${eventData.title}`;
+    }
+
+    if (!violationCategory || !studentId) continue;
+
+    const fineKey = `${studentId}_${violationCategory}`;
+    if (existingFineKeys.has(fineKey)) {
+      skippedCount++;
+      continue;
+    }
+
+    existingFineKeys.add(fineKey);
+    newPayablesToCreate.push({
+      studentId,
+      studentName,
+      studentSchoolId: studentId,
+      type: payableType,
+      label,
+      description,
+      organizationId: orgId,
+      organizationName: orgName,
+      semesterId,
+      eventId,
+      assignedAmount: fineAmount,
+      createdBy,
+    });
+  }
+
+  if (newPayablesToCreate.length === 0) {
+    return { created: 0, skipped: skippedCount };
+  }
+
+  const chunks = [];
+  for (let i = 0; i < newPayablesToCreate.length; i += 500) {
+    chunks.push(newPayablesToCreate.slice(i, i + 500));
+  }
+
+  for (const chunk of chunks) {
+    const batch = writeBatch(db);
+    for (const payload of chunk) {
+      const newDocRef = doc(payablesRef);
+      batch.set(newDocRef, {
+        id: newDocRef.id,
+        studentId: payload.studentId,
+        studentName: payload.studentName,
+        studentSchoolId: payload.studentSchoolId,
+        type: payload.type,
+        label: payload.label,
+        description: payload.description || '',
+        organizationId: payload.organizationId || null,
+        organizationName: payload.organizationName || null,
+        semesterId: payload.semesterId,
+        eventId: payload.eventId || null,
+        assignedAmount: payload.assignedAmount,
+        paidAmount: 0,
+        status: 'pending' as PayableStatus,
+        dueDate: null,
+        paidAt: null,
+        recordedBy: null,
+        paymentMethod: null,
+        createdBy: payload.createdBy,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      createdCount++;
+    }
+    await batch.commit();
+  }
+
+  return { created: createdCount, skipped: skippedCount };
 }

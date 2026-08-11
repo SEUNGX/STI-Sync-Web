@@ -1,11 +1,13 @@
 import { useState, useMemo } from 'react';
-import { Download, Users, UserCheck, UserMinus, UserX, ChevronDown, AlertCircle, QrCode, Loader2, Calendar, FileSpreadsheet } from 'lucide-react';
+import { Download, Users, UserCheck, UserMinus, UserX, ChevronDown, AlertCircle, QrCode, Loader2, Calendar, FileSpreadsheet, DollarSign, AlertTriangle } from 'lucide-react';
+import { toast } from 'sonner';
 import { useOfficerProfile } from '../../auth/hooks/useOfficerProfile';
 import { useAllEvents } from '../../modules/events/hooks/useEventStream';
 import { useAttendanceStream } from '../../modules/attendance/hooks/useAttendanceStream';
 import { useOrganizationStream } from '../../modules/organizations/hooks/useOrganizationStream';
 import { useStudents } from '../../modules/students/hooks/useStudentStream';
 import { useDepartments, useCourses, useSections } from '../../modules/academic/hooks/useAcademicStream';
+import { recordEventFinePayables } from '../../modules/finance/services/payable.service';
 
 import { AttendanceFilterToolbar } from '../../modules/attendance/components/AttendanceFilterToolbar';
 import { AttendanceExportPreviewModal } from '../../modules/attendance/components/AttendanceExportPreviewModal';
@@ -56,9 +58,30 @@ export default function AttendanceLogs() {
   const [filterState, setFilterState] = useState<AttendanceFilterState>(INITIAL_FILTERS);
   const [showFlagged, setShowFlagged] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isRecordingFines, setIsRecordingFines] = useState(false);
 
   const activeOrgId = profile?.activeOrganizationId;
   const currentStudentId = profile?.studentId;
+
+  const handleRecordFines = async (eventId: string, eventTitle: string) => {
+    if (!eventId) return;
+    setIsRecordingFines(true);
+    try {
+      const res = await recordEventFinePayables(eventId, currentStudentId || 'officer', true);
+      if (res.created > 0) {
+        toast.success(`Recorded ${res.created} fine payable(s) for ${eventTitle}.${res.skipped > 0 ? ` (${res.skipped} already recorded)` : ''}`);
+      } else if (res.skipped > 0) {
+        toast.info(`No new fines created. All ${res.skipped} eligible fine(s) were already recorded.`);
+      } else {
+        toast.info(`No fine-eligible attendance records found for ${eventTitle}.`);
+      }
+    } catch (err: any) {
+      console.error('[AttendanceLogs] Record fines error:', err);
+      toast.error(err?.message || 'Failed to record event fines.');
+    } finally {
+      setIsRecordingFines(false);
+    }
+  };
 
   // Student lookup map
   const studentMap = useMemo(() => {
@@ -378,6 +401,27 @@ export default function AttendanceLogs() {
                   </div>
                   <div className="text-red-500 text-2xl font-bold">{currentEvent.absent}</div>
                 </div>
+              </div>
+
+              {/* Attendance Fine Control Bar */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-purple-50 border border-purple-200 rounded-2xl p-4 shadow-xs">
+                <div>
+                  <h3 className="font-bold text-[#001A4D] text-sm flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-amber-600" />
+                    Event Fine Control
+                  </h3>
+                  <p className="text-xs text-gray-600 mt-0.5">
+                    Automatically record fines for absent, late, or un-scanned students based on this event's officer settings.
+                  </p>
+                </div>
+                <button
+                  disabled={isRecordingFines}
+                  onClick={() => handleRecordFines(currentEvent.id, currentEvent.title)}
+                  className="px-4 py-2 bg-gradient-to-r from-[#001A4D] to-[#83358E] text-white rounded-xl text-xs font-bold hover:opacity-90 transition-all flex items-center gap-2 disabled:opacity-50 cursor-pointer flex-shrink-0 shadow-sm"
+                >
+                  {isRecordingFines ? <Loader2 className="w-4 h-4 animate-spin" /> : <DollarSign className="w-4 h-4 text-[#FFD41C]" />}
+                  <span>Record Event Fines</span>
+                </button>
               </div>
 
               {/* Shared Attendance Filter Toolbar */}

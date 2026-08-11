@@ -1,4 +1,4 @@
-import { useState, type ElementType } from "react";
+import { useState, useMemo, type ElementType } from "react";
 import {
   Plus,
   Building2,
@@ -22,6 +22,7 @@ import {
 import { useSemesters } from "../../modules/academic/hooks/useAcademicStream";
 import { useSaoLedger } from "../../modules/finance/hooks/useFinanceStream";
 import { useAllEventPayablesStream } from "../../modules/finance/hooks/usePayableStream";
+import { useAllEvents } from "../../modules/events/hooks/useEventStream";
 import { addLedgerTransaction } from "../../modules/finance/services/finance.service";
 import { markEventPayablesTransferred } from "../../modules/finance/services/payable.service";
 import type { SaoLedgerDocument, TransactionSource, TransactionType } from "../../modules/finance/types/finance.types";
@@ -320,8 +321,9 @@ function CollectionDetailModal({
 }
 
 // ─── Add Manual Expense Modal ──────────────────────────────────────────────────
-function AddExpenseModal({ activeSemesterId, onClose, onSave }: {
+function AddExpenseModal({ activeSemesterId, events, onClose, onSave }: {
   activeSemesterId: string | null;
+  events: any[];
   onClose: () => void;
   onSave: (tx: Omit<SaoLedgerDocument, "id" | "createdAt">) => void;
 }) {
@@ -365,11 +367,9 @@ function AddExpenseModal({ activeSemesterId, onClose, onSave }: {
             <select value={form.event} onChange={(e) => setForm({ ...form, event: e.target.value })}
               className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent">
               <option value="">— No specific event —</option>
-              <option>Tech Symposium 2026</option>
-              <option>Sportsfest 2026</option>
-              <option>Induction &amp; Recognition Night</option>
-              <option>Leadership Summit 2026</option>
-              <option>Foundation Day Celebration</option>
+              {events.map((evt) => (
+                <option key={evt.id} value={evt.id}>{evt.title}</option>
+              ))}
             </select>
           </div>
         </div>
@@ -422,6 +422,7 @@ export function BudgetFundSettings() {
   const [tab, setTab] = useState<MainTab>("ledger");
   const { data: rawTransactions, loading: ledgerLoading } = useSaoLedger();
   const { data: collections, loading: collectionsLoading } = useAllEventPayablesStream();
+  const { events: dbEvents, loading: eventsLoading } = useAllEvents();
   const { data: semesters } = useSemesters();
   const activeSemester = semesters.find(s => s.status === 'ACTIVE') || null;
   
@@ -432,7 +433,15 @@ export function BudgetFundSettings() {
   const [txFilter, setTxFilter] = useState<"all" | "income" | "expense">("all");
   const [semesterFilter, setSemesterFilter] = useState<string>("all");
 
-  const loading = ledgerLoading || collectionsLoading;
+  const loading = ledgerLoading || collectionsLoading || eventsLoading;
+
+  const eventMap = useMemo(() => {
+    const map = new Map<string, string>();
+    (dbEvents || []).forEach((e) => {
+      if (e.id && e.title) map.set(e.id, e.title);
+    });
+    return map;
+  }, [dbEvents]);
 
   // Calculate dynamic balances for the ledger
   const transactions = rawTransactions.map((tx, idx, arr) => {
@@ -637,6 +646,10 @@ export function BudgetFundSettings() {
                     ? collections.find((c) => c.id === tx.collectionId) ?? null
                     : null;
 
+                  const displayEventName = tx.eventId
+                    ? (eventMap.get(tx.eventId) || tx.eventId)
+                    : (linkedCollection?.eventName ?? null);
+
                   return (
                     <tr key={tx.id} className={`transition-colors ${tx.source === "student_collection" ? "bg-green-50/40 hover:bg-green-50" : "hover:bg-gray-50"
                       }`}>
@@ -646,8 +659,8 @@ export function BudgetFundSettings() {
                       <td className="px-4 py-3">
                         <p className="text-[#001A4D] text-sm font-medium">{tx.description}</p>
                       </td>
-                      <td className="px-4 py-3 text-gray-500 text-sm">
-                        {tx.eventId ?? <span className="text-gray-300">—</span>}
+                      <td className="px-4 py-3 text-gray-700 font-medium text-sm">
+                        {displayEventName ? displayEventName : <span className="text-gray-300">—</span>}
                       </td>
                       <td className="px-4 py-3">
                         <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${sourceBadgeMap[tx.source]}`}>
@@ -789,7 +802,14 @@ export function BudgetFundSettings() {
           onSave={handleSaveTransaction}
         />
       )}
-      {showAddExpense && <AddExpenseModal activeSemesterId={activeSemester?.id || null} onClose={() => setShowAddExpense(false)} onSave={handleSaveTransaction} />}
+      {showAddExpense && (
+        <AddExpenseModal
+          activeSemesterId={activeSemester?.id || null}
+          events={dbEvents}
+          onClose={() => setShowAddExpense(false)}
+          onSave={handleSaveTransaction}
+        />
+      )}
       {viewCollection && (
         <CollectionDetailModal
           collection={viewCollection}

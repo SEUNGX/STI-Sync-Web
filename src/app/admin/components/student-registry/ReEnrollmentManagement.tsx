@@ -2,6 +2,7 @@ import { Bell, Download, Check, Clock, AlertTriangle, UserX, Edit, ArrowRight, R
 import { useState, useMemo } from 'react';
 import { StudentDocument } from '../../../modules/students/types/student.types';
 import { SemesterDocument } from '../../../modules/academic/types/academic.types';
+import { formatTimestampDate } from '../../../modules/students/utils/date.utils';
 
 interface ReEnrollmentManagementProps {
   students: StudentDocument[];
@@ -206,7 +207,7 @@ export default function ReEnrollmentManagement({ students, activeSemester }: ReE
                     )}
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-700">
-                    {student.updatedAt ? new Date(student.updatedAt.toMillis()).toLocaleDateString() : '—'}
+                    {formatTimestampDate(student.updatedAt, '—')}
                   </td>
                 </tr>
               ))}

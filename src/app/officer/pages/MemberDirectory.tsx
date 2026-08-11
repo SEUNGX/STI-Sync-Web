@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Plus, Upload, Search, MoreVertical, Crown, Users } from 'lucide-react';
+import { Plus, Upload, Search, MoreVertical, Crown, Users, UserMinus } from 'lucide-react';
 import { useOfficerProfile } from '../../auth/hooks/useOfficerProfile';
 import { useRoles } from '../../modules/roles/hooks/useRoles';
 import { useOrgMembers } from '../../modules/organizations/hooks/useOrgMembers';
@@ -7,6 +7,7 @@ import { useOrgOfficers } from '../../modules/organizations/hooks/useOrgOfficers
 import { MemberProfilePanel } from '../components/MemberProfilePanel';
 import { AddMemberModal } from '../components/AddMemberModal';
 import { AppointOfficerModal } from '../components/AppointOfficerModal';
+import { RemoveMemberModal } from '../components/RemoveMemberModal';
 import type { OrganizationMemberDocument } from '../../modules/organizations/types/member.types';
 
 export default function MemberDirectory() {
@@ -28,6 +29,7 @@ export default function MemberDirectory() {
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
   const [isAppointOfficerOpen, setIsAppointOfficerOpen] = useState(false);
   const [appointPreselected, setAppointPreselected] = useState<OrganizationMemberDocument | null>(null);
+  const [memberToRemove, setMemberToRemove] = useState<OrganizationMemberDocument | null>(null);
 
   // Check if current user has permission to appoint officers
   const activeRoleDoc = roles.find(r => r.id === profile?.activeRoleId);
@@ -183,9 +185,9 @@ export default function MemberDirectory() {
                     <button className="p-1.5 hover:bg-[#F8F8F8] rounded-lg">
                       <MoreVertical className="w-4 h-4 text-[#888780]" />
                     </button>
-                    {/* Action Menu (CSS-based hover for simplicity) */}
-                    <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-[#E0E0E0] rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
-                      <button onClick={() => setSelectedMember(member)} className="w-full text-left px-4 py-2 text-sm text-[#001A4D] hover:bg-gray-50 rounded-t-lg">View Profile</button>
+                    {/* Action Menu */}
+                    <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-[#E0E0E0] rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10 overflow-hidden">
+                      <button onClick={() => setSelectedMember(member)} className="w-full text-left px-4 py-2 text-sm text-[#001A4D] hover:bg-gray-50">View Profile</button>
                       {canAppointOfficers && !member.isOfficer && (
                         <button 
                           onClick={() => {
@@ -197,6 +199,12 @@ export default function MemberDirectory() {
                           Appoint as Officer
                         </button>
                       )}
+                      <button
+                        onClick={() => setMemberToRemove(member)}
+                        className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 font-medium border-t border-gray-100 flex items-center gap-2"
+                      >
+                        <UserMinus className="w-4 h-4" /> Remove Member
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -304,6 +312,10 @@ export default function MemberDirectory() {
             setAppointPreselected(selectedMember);
             setIsAppointOfficerOpen(true);
           } : undefined}
+          onRemoveMember={() => {
+            setMemberToRemove(selectedMember);
+            setSelectedMember(null);
+          }}
         />
       )}
       
@@ -323,6 +335,13 @@ export default function MemberDirectory() {
         organizationId={activeOrgId}
         preselectedMember={appointPreselected}
         currentOfficers={officers}
+      />
+
+      <RemoveMemberModal
+        member={memberToRemove}
+        organizationId={activeOrgId}
+        isOpen={Boolean(memberToRemove)}
+        onClose={() => setMemberToRemove(null)}
       />
     </div>
   );

@@ -2,14 +2,18 @@ import { useState, useMemo } from "react";
 import {
   CheckCircle2, XCircle, AlertCircle, UserCheck, Clock,
   ArrowLeft, Calendar, MapPin, Users, Search, Download,
-  ChevronRight, QrCode, Timer, TrendingUp, Filter, Loader2, FileSpreadsheet
+  ChevronRight, QrCode, Timer, TrendingUp, Filter, Loader2, FileSpreadsheet,
+  DollarSign, AlertTriangle
 } from "lucide-react";
+import { toast } from "sonner";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { useAllEvents } from "../../modules/events/hooks/useEventStream";
 import { useAttendanceStream } from "../../modules/attendance/hooks/useAttendanceStream";
 import { useVenuesStream, useEventCategoriesStream } from "../../modules/events/hooks/useEventConfigStream";
 import { useStudents } from "../../modules/students/hooks/useStudentStream";
 import { useDepartments, useCourses, useSections } from "../../modules/academic/hooks/useAcademicStream";
+import { useOrganizationStream } from "../../modules/organizations/hooks/useOrganizationStream";
+import { recordEventFinePayables } from "../../modules/finance/services/payable.service";
 
 import { AttendanceFilterToolbar } from "../../modules/attendance/components/AttendanceFilterToolbar";
 import { AttendanceExportPreviewModal } from "../../modules/attendance/components/AttendanceExportPreviewModal";
@@ -86,6 +90,26 @@ function EventDetail({
 }) {
   const [filterState, setFilterState] = useState<AttendanceFilterState>(INITIAL_FILTERS);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isRecordingFines, setIsRecordingFines] = useState(false);
+
+  const handleRecordFines = async () => {
+    setIsRecordingFines(true);
+    try {
+      const res = await recordEventFinePayables(event.id, 'sao_admin_user', false);
+      if (res.created > 0) {
+        toast.success(`Recorded ${res.created} fine payable(s) for ${event.name}.${res.skipped > 0 ? ` (${res.skipped} already recorded)` : ''}`);
+      } else if (res.skipped > 0) {
+        toast.info(`No new fines created. All ${res.skipped} eligible fine(s) were already recorded.`);
+      } else {
+        toast.info(`No fine-eligible attendance records found for ${event.name}.`);
+      }
+    } catch (err: any) {
+      console.error('[EventDetail] Record fines error:', err);
+      toast.error(err?.message || 'Failed to record event fines.');
+    } finally {
+      setIsRecordingFines(false);
+    }
+  };
 
   const allRecords = useMemo(() => event.sessions.flatMap((s) => s.records), [event]);
 
@@ -237,6 +261,27 @@ function EventDetail({
         })}
       </div>
 
+      {/* Attendance Fine Control Bar */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-purple-50 border border-purple-200 rounded-2xl p-4 shadow-xs">
+        <div>
+          <h3 className="font-bold text-[#001A4D] text-sm flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-600" />
+            Institutional Event Fine Control
+          </h3>
+          <p className="text-xs text-gray-600 mt-0.5">
+            Automatically record fines for absent, late, or un-scanned students for this SAO institutional event.
+          </p>
+        </div>
+        <button
+          disabled={isRecordingFines}
+          onClick={handleRecordFines}
+          className="px-4 py-2 bg-gradient-to-r from-[#001A4D] to-[#83358E] text-white rounded-xl text-xs font-bold hover:opacity-90 transition-all flex items-center gap-2 disabled:opacity-50 cursor-pointer flex-shrink-0 shadow-sm"
+        >
+          {isRecordingFines ? <Loader2 className="w-4 h-4 animate-spin" /> : <DollarSign className="w-4 h-4 text-[#FFD41C]" />}
+          <span>Record Event Fines</span>
+        </button>
+      </div>
+
       {/* Shared Filter Toolbar */}
       <AttendanceFilterToolbar
         filters={filterState}
@@ -339,6 +384,7 @@ export function AttendanceMonitoring() {
   const { attendance: dbAttendance, loading: attendanceLoading } = useAttendanceStream();
   const { venues, loading: venuesLoading } = useVenuesStream();
   const { categories: dbCategories, loading: categoriesLoading } = useEventCategoriesStream();
+  const { data: rawOrganizations, loading: orgsLoading } = useOrganizationStream();
 
   const { data: students, loading: studentsLoading } = useStudents();
   const { data: departments } = useDepartments();
@@ -347,9 +393,12 @@ export function AttendanceMonitoring() {
 
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [eventSearch, setEventSearch] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("All");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [orgFilter, setOrgFilter] = useState("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [venueFilter, setVenueFilter] = useState("all");
 
-  const loading = eventsLoading || attendanceLoading || venuesLoading || categoriesLoading || studentsLoading;
+  const loading = eventsLoading || attendanceLoading || venuesLoading || categoriesLoading || studentsLoading || orgsLoading;
 
   // Student lookup map
   const studentMap = useMemo(() => {
@@ -370,7 +419,7 @@ export function AttendanceMonitoring() {
     return Array.from(set).sort();
   }, [dbSections, students]);
 
-  const mappedEvents: Event[] = useMemo(() => {
+  const mappedEvents: (Event & { hostingOrgId: string })[] = useMemo(() => {
     const validEvents = dbEvents.filter(evt => evt.enableQRTickets !== false);
     const eventsToUse = validEvents.length > 0 ? validEvents : dbEvents;
 
@@ -469,13 +518,20 @@ export function AttendanceMonitoring() {
       const catObj = (dbCategories || []).find(c => c.id === evt.eventCategoryId);
       const catName = catObj ? catObj.name : (evt.eventCategoryId || "General");
 
+      const orgObj = (rawOrganizations || []).find(
+        o => o.id === evt.hostingOrgId || o.acronym === evt.hostingOrgId || o.name === evt.hostingOrgId
+      );
+      const orgName = orgObj ? orgObj.name : (evt.hostingOrgId || "SAO");
+      const orgInitials = orgObj ? (orgObj.acronym || orgObj.name.substring(0, 3).toUpperCase()) : (evt.hostingOrgId ? evt.hostingOrgId.substring(0, 3).toUpperCase() : "SAO");
+
       return {
         id: evt.id,
         name: evt.title,
         date: eventDate,
         venue: venueName,
-        org: evt.hostingOrgId || "SAO",
-        orgInitials: evt.hostingOrgId ? evt.hostingOrgId.substring(0, 3).toUpperCase() : "SAO",
+        hostingOrgId: evt.hostingOrgId || "SAO",
+        org: orgName,
+        orgInitials: orgInitials,
         category: catName,
         registered,
         checkedIn,
@@ -485,18 +541,68 @@ export function AttendanceMonitoring() {
         sessions,
       };
     });
-  }, [dbEvents, dbAttendance, venues, dbCategories, studentMap, departments, courses]);
+  }, [dbEvents, dbAttendance, venues, dbCategories, studentMap, departments, courses, rawOrganizations]);
 
-  const categories = ["All", ...Array.from(new Set(mappedEvents.map((e) => e.category)))];
+  // Unique options for event filter dropdowns
+  const availableOrgs = useMemo(() => {
+    const map = new Map<string, string>();
+    (rawOrganizations || []).forEach(o => {
+      map.set(o.id, o.acronym ? `${o.name} (${o.acronym})` : o.name);
+    });
+    mappedEvents.forEach(e => {
+      if (e.hostingOrgId && !map.has(e.hostingOrgId)) {
+        map.set(e.hostingOrgId, e.org || e.hostingOrgId);
+      }
+    });
+    return Array.from(map.entries())
+      .map(([id, label]) => ({ id, label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [rawOrganizations, mappedEvents]);
 
-  const filteredEvents = mappedEvents.filter((e) => {
-    const nameStr = (e.name || "").toLowerCase();
-    const orgStr = (e.org || "").toLowerCase();
-    const searchStr = (eventSearch || "").toLowerCase();
-    const matchSearch = nameStr.includes(searchStr) || orgStr.includes(searchStr);
-    const matchCat = categoryFilter === "All" || e.category === categoryFilter;
-    return matchSearch && matchCat;
-  });
+  const availableCategories = useMemo(() => {
+    return Array.from(new Set(mappedEvents.map(e => e.category).filter(Boolean))).sort();
+  }, [mappedEvents]);
+
+  const availableVenues = useMemo(() => {
+    return Array.from(new Set(mappedEvents.map(e => e.venue).filter(Boolean))).sort();
+  }, [mappedEvents]);
+
+  const filteredEvents = useMemo(() => {
+    return mappedEvents.filter((e) => {
+      const searchStr = eventSearch.trim().toLowerCase();
+      const nameStr = (e.name || "").toLowerCase();
+      const orgStr = (e.org || "").toLowerCase();
+      const venueStr = (e.venue || "").toLowerCase();
+
+      const matchSearch =
+        !searchStr ||
+        nameStr.includes(searchStr) ||
+        orgStr.includes(searchStr) ||
+        venueStr.includes(searchStr);
+
+      const matchStatus = statusFilter === "all" || e.status === statusFilter;
+      const matchOrg = orgFilter === "all" || e.hostingOrgId === orgFilter || e.org === orgFilter;
+      const matchCat = categoryFilter === "all" || e.category === categoryFilter;
+      const matchVenue = venueFilter === "all" || e.venue === venueFilter;
+
+      return matchSearch && matchStatus && matchOrg && matchCat && matchVenue;
+    });
+  }, [mappedEvents, eventSearch, statusFilter, orgFilter, categoryFilter, venueFilter]);
+
+  const hasActiveEventFilters =
+    eventSearch !== "" ||
+    statusFilter !== "all" ||
+    orgFilter !== "all" ||
+    categoryFilter !== "all" ||
+    venueFilter !== "all";
+
+  const handleResetEventFilters = () => {
+    setEventSearch("");
+    setStatusFilter("all");
+    setOrgFilter("all");
+    setCategoryFilter("all");
+    setVenueFilter("all");
+  };
 
   const totalRegistered = mappedEvents.reduce((s, e) => s + e.registered, 0);
   const totalCheckedIn = mappedEvents.reduce((s, e) => s + e.checkedIn, 0);
@@ -584,19 +690,94 @@ export function AttendanceMonitoring() {
         </div>
       )}
 
-      {/* Events List Cards Header */}
-      <div className="flex items-center justify-between">
-        <h3 className="font-bold text-lg text-[#001A4D]">All Campus Events ({filteredEvents.length})</h3>
-        <div className="flex items-center gap-3">
-          <div className="relative w-64">
+      {/* Event Flexible Filter Toolbar */}
+      <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Filter className="w-4 h-4 text-[#83358E]" />
+            <h3 className="font-bold text-sm text-[#001A4D]">Event Filters</h3>
+            <span className="px-2 py-0.5 bg-purple-50 text-[#83358E] rounded-full text-xs font-semibold">
+              Showing {filteredEvents.length} of {mappedEvents.length} events
+            </span>
+          </div>
+
+          {hasActiveEventFilters && (
+            <button
+              onClick={handleResetEventFilters}
+              className="text-xs font-semibold text-red-600 hover:text-red-700 hover:underline cursor-pointer"
+            >
+              Reset All Filters
+            </button>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
+          {/* Search */}
+          <div className="relative">
             <input
               type="text"
-              placeholder="Search event name..."
+              placeholder="Search event, org, venue..."
               value={eventSearch}
               onChange={e => setEventSearch(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 bg-white border border-gray-300 rounded-xl text-xs focus:ring-2 focus:ring-[#83358E] outline-none"
+              className="w-full pl-8 pr-3 py-2 bg-gray-50 border border-gray-300 rounded-xl text-xs focus:ring-2 focus:ring-[#83358E] focus:bg-white outline-none"
             />
             <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+          </div>
+
+          {/* Event Status Filter */}
+          <div>
+            <select
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value)}
+              className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-xl text-xs font-medium text-gray-700 focus:ring-2 focus:ring-[#83358E] focus:bg-white outline-none"
+            >
+              <option value="all">All Event Statuses</option>
+              <option value="Ongoing">Ongoing</option>
+              <option value="Completed">Completed</option>
+              <option value="Upcoming">Upcoming</option>
+            </select>
+          </div>
+
+          {/* Organization Filter */}
+          <div>
+            <select
+              value={orgFilter}
+              onChange={e => setOrgFilter(e.target.value)}
+              className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-xl text-xs font-medium text-gray-700 focus:ring-2 focus:ring-[#83358E] focus:bg-white outline-none"
+            >
+              <option value="all">All Organizations</option>
+              {availableOrgs.map(org => (
+                <option key={org.id} value={org.id}>{org.label}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Category Filter */}
+          <div>
+            <select
+              value={categoryFilter}
+              onChange={e => setCategoryFilter(e.target.value)}
+              className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-xl text-xs font-medium text-gray-700 focus:ring-2 focus:ring-[#83358E] focus:bg-white outline-none"
+            >
+              <option value="all">All Categories</option>
+              {availableCategories.map(cat => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Venue Filter */}
+          <div>
+            <select
+              value={venueFilter}
+              onChange={e => setVenueFilter(e.target.value)}
+              className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-xl text-xs font-medium text-gray-700 focus:ring-2 focus:ring-[#83358E] focus:bg-white outline-none"
+            >
+              <option value="all">All Venues</option>
+              {availableVenues.map(ven => (
+                <option key={ven} value={ven}>{ven}</option>
+              ))}
+            </select>
           </div>
         </div>
       </div>
@@ -645,8 +826,16 @@ export function AttendanceMonitoring() {
         ))}
 
         {filteredEvents.length === 0 && (
-          <div className="col-span-full bg-gray-50 border border-gray-200 rounded-2xl p-12 text-center text-gray-500">
-            No events found.
+          <div className="col-span-full bg-gray-50 border border-gray-200 rounded-2xl p-12 text-center text-gray-500 space-y-3">
+            <p className="font-semibold text-gray-700 text-sm">No events match your selected filters.</p>
+            {hasActiveEventFilters && (
+              <button
+                onClick={handleResetEventFilters}
+                className="px-4 py-2 bg-[#001A4D] text-white text-xs font-bold rounded-xl hover:bg-[#83358E] transition-colors"
+              >
+                Reset Event Filters
+              </button>
+            )}
           </div>
         )}
       </div>

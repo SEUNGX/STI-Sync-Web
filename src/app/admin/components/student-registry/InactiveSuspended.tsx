@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Download, Send, RotateCcw, Archive, Eye } from 'lucide-react';
 import { StudentDocument } from '../../../modules/students/types/student.types';
+import { formatTimestampDate } from '../../../modules/students/utils/date.utils';
 
 interface InactiveSuspendedProps {
   inactiveStudents: StudentDocument[];
@@ -96,7 +97,7 @@ export default function InactiveSuspended({ inactiveStudents, suspendedStudents 
                       <div className="text-xs text-gray-500">{student.yearLevel}</div>
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-700">
-                      {student.updatedAt ? new Date(student.updatedAt.toMillis()).toLocaleDateString() : 'N/A'}
+                      {formatTimestampDate(student.updatedAt)}
                     </td>
                     <td className="px-6 py-4">
                       <span className="px-3 py-1 bg-gray-500 text-white rounded-full text-xs font-medium">
@@ -168,7 +169,7 @@ export default function InactiveSuspended({ inactiveStudents, suspendedStudents 
                       <div className="text-xs text-gray-500">{student.yearLevel}</div>
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-700">
-                      {student.updatedAt ? new Date(student.updatedAt.toMillis()).toLocaleDateString() : 'N/A'}
+                      {formatTimestampDate(student.updatedAt)}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-700">SAO Admin</td>
                     <td className="px-6 py-4 text-sm text-gray-700 max-w-xs truncate">{student.rejectionReason || 'No reason provided'}</td>
