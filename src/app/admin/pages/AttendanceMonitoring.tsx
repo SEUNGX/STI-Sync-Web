@@ -518,18 +518,19 @@ export function AttendanceMonitoring() {
       const catObj = (dbCategories || []).find(c => c.id === evt.eventCategoryId);
       const catName = catObj ? catObj.name : (evt.eventCategoryId || "General");
 
-      const orgObj = (rawOrganizations || []).find(
+      const isInstitutional = !evt.hostingOrgId || evt.hostingOrgId.toLowerCase() === 'sas' || evt.hostingOrgId.toLowerCase() === 'sao';
+      const orgObj = isInstitutional ? null : (rawOrganizations || []).find(
         o => o.id === evt.hostingOrgId || o.acronym === evt.hostingOrgId || o.name === evt.hostingOrgId
       );
-      const orgName = orgObj ? orgObj.name : (evt.hostingOrgId || "SAO");
-      const orgInitials = orgObj ? (orgObj.acronym || orgObj.name.substring(0, 3).toUpperCase()) : (evt.hostingOrgId ? evt.hostingOrgId.substring(0, 3).toUpperCase() : "SAO");
+      const orgName = isInstitutional ? "Student Affairs and Services (SAS)" : (orgObj ? orgObj.name : (evt.hostingOrgId || "SAS"));
+      const orgInitials = isInstitutional ? "SAS" : (orgObj ? (orgObj.acronym || orgObj.name.substring(0, 3).toUpperCase()) : (evt.hostingOrgId ? evt.hostingOrgId.substring(0, 3).toUpperCase() : "SAS"));
 
       return {
         id: evt.id,
         name: evt.title,
         date: eventDate,
         venue: venueName,
-        hostingOrgId: evt.hostingOrgId || "SAO",
+        hostingOrgId: evt.hostingOrgId || "sas",
         org: orgName,
         orgInitials: orgInitials,
         category: catName,

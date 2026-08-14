@@ -90,7 +90,19 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer }: Step1Pr
     }
   };
 
-  const selectedOrg = activeOrgs.find(o => o.id === data.hostingOrgId);
+  // Auto-bind hosting organization based on mode
+  useEffect(() => {
+    if (!showOfficerMode) {
+      if (data.hostingOrgId !== 'sas') {
+        onUpdate({ hostingOrgId: 'sas' });
+      }
+    } else if (officerProfile?.activeOrganizationId && data.hostingOrgId !== officerProfile.activeOrganizationId) {
+      onUpdate({ hostingOrgId: officerProfile.activeOrganizationId });
+    }
+  }, [showOfficerMode, officerProfile?.activeOrganizationId, data.hostingOrgId]);
+
+  const selectedOrg = activeOrgs.find(o => o.id === data.hostingOrgId) ||
+    (showOfficerMode && officerProfile?.activeOrganizationId ? activeOrgs.find(o => o.id === officerProfile.activeOrganizationId) : null);
   const selectedType = activeTypes.find(t => t.id === data.eventTypeId);
 
   return (
@@ -109,7 +121,7 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer }: Step1Pr
               <div className="relative">
                 <input
                   type="text"
-                  value={data.referenceId || 'EVT-ADM-[Auto-Generated]'}
+                  value={data.referenceId || (showOfficerMode ? 'EVT-PROP-[Auto-Generated]' : 'EVT-ADM-[Auto-Generated]')}
                   disabled
                   className="w-full px-4 py-2.5 bg-gray-100 border border-gray-300 rounded-lg text-gray-600 pr-10"
                 />
@@ -132,32 +144,60 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer }: Step1Pr
           </div>
         </div>
 
-        {/* Section B — Organization Assignment */}
+        {/* Section B — Organization Hosting Assignment */}
         <div>
           <div className="border-l-4 border-[#83358E] pl-3 mb-4">
-            <h3 className="text-[#001A4D] font-bold text-base">Organization Assignment</h3>
+            <h3 className="text-[#001A4D] font-bold text-base">
+              {showOfficerMode ? 'Hosting Organization' : 'Institutional Organization Context'}
+            </h3>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Hosting Organization <span className="text-red-500">*</span>
-            </label>
-            <select
-              value={data.hostingOrgId || ''}
-              onChange={(e) => updateField('hostingOrgId', e.target.value)}
-              disabled={orgsLoading || isOfficer}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent disabled:opacity-75 disabled:bg-gray-100"
-            >
-              <option value="">{orgsLoading ? 'Loading organizations...' : 'Select organization...'}</option>
-              {activeOrgs.map(org => (
-                <option key={org.id} value={org.id}>{org.name}</option>
-              ))}
-            </select>
-            {isOfficer && (
-              <p className="text-xs text-[#83358E] font-medium mt-1">
-                🔒 Locked to your active organization.
+          {showOfficerMode ? (
+            <div className="p-4 bg-purple-50/60 border border-purple-200 rounded-xl">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-[#83358E] to-[#0E4EBD] flex items-center justify-center text-white font-bold text-sm shadow-sm">
+                    {selectedOrg?.acronym?.slice(0, 3) || 'ORG'}
+                  </div>
+                  <div>
+                    <div className="font-semibold text-gray-900 text-sm">
+                      {selectedOrg ? `${selectedOrg.name} (${selectedOrg.acronym || 'Club'})` : (orgsLoading ? 'Loading organization...' : 'My Organization')}
+                    </div>
+                    <div className="text-xs text-[#83358E] flex items-center gap-1.5 font-medium mt-0.5">
+                      <Lock className="w-3.5 h-3.5" />
+                      <span>Auto-populated and locked to your active club</span>
+                    </div>
+                  </div>
+                </div>
+                <span className="px-2.5 py-1 bg-[#83358E] text-white text-xs font-semibold rounded-md">
+                  Club Event
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="p-4 bg-gradient-to-r from-blue-50/70 via-indigo-50/50 to-purple-50/60 border border-blue-200/80 rounded-xl">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-[#001A4D] to-[#83358E] flex items-center justify-center text-white font-bold text-xs shadow-sm">
+                    SAS
+                  </div>
+                  <div>
+                    <div className="font-bold text-[#001A4D] text-sm">
+                      Student Affairs and Services (SAS)
+                    </div>
+                    <div className="text-xs text-gray-600 mt-0.5">
+                      Institutional Event • Independent from student club ledgers and proposals
+                    </div>
+                  </div>
+                </div>
+                <span className="px-2.5 py-1 bg-[#001A4D] text-white text-xs font-semibold rounded-md shadow-xs">
+                  Institutional / SAS
+                </span>
+              </div>
+              <p className="text-xs text-gray-500 mt-2.5 pt-2.5 border-t border-blue-200/60">
+                💡 <span className="font-medium text-gray-700">Scanner recruitment:</span> In Step 4 (Staff), you can select and recruit student officers as scanners from specific organizations or across all organizations.
               </p>
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
         {/* Section C — Event Identity */}
@@ -363,7 +403,9 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer }: Step1Pr
             <p className="text-sm text-gray-600 mb-3">{data.tagline || 'Event tagline will appear here'}</p>
             <div className="flex items-center gap-2 mb-3">
               <div className="w-6 h-6 rounded-full bg-gradient-to-br from-[#0E4EBD] to-[#83358E]" />
-              <span className="text-xs text-gray-600">{selectedOrg ? selectedOrg.name : 'Organization Name'}</span>
+              <span className="text-xs text-gray-600 font-medium">
+                {showOfficerMode ? (selectedOrg ? selectedOrg.name : 'Club Name') : 'Student Affairs and Services (SAS)'}
+              </span>
             </div>
             <div className="flex items-center justify-between">
               <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded" style={{ backgroundColor: selectedType?.color ? `${selectedType.color}20` : undefined, color: selectedType?.color }}>

@@ -5,3 +5,5 @@ export * from './hooks/useEventConfigStream';
 export * from './hooks/useEventConfigMutations';
 export * from './hooks/useEventCreation';
 export * from './hooks/useEventStream';
+export { default as OfficerEventDetailView } from './components/OfficerEventDetailView';
+

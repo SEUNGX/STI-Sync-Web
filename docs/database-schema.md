@@ -1236,6 +1236,8 @@ interface VenueDocument {
 **Path:** `/events/{eventId}`
 
 ```typescript
+<!-- AGENT-UPDATED: 2026-08-14 — Decoupled SAS Admin events from club hosting org (hostingOrgId = 'sas') and added cross-organization scanner recruitment model -->
+
 interface EventDocument {
   // ─── Identity ───
   id: string;
@@ -1250,7 +1252,7 @@ interface EventDocument {
   // ─── Classification ───
   eventTypeId: string;                     // FK → /event_types
   eventCategoryId: string;                 // FK → /event_categories
-  hostingOrgId: string;                    // FK → /organizations
+  hostingOrgId: string;                    // FK → /organizations or 'sas' (Student Affairs and Services institutional events)
 
   // ─── Academic Context ───
   semesterId: string;                      // FK → /semesters
@@ -1285,7 +1287,7 @@ interface EventDocument {
   totalExpectedCollection: number | null;
 
   // ─── Staff ───
-  supervisorId: string;                    // SAO Adviser UID
+  supervisorId: string;                    // SAS Adviser UID
   scanners: EventScanner[];
 
   // ─── Budget ───
@@ -1302,8 +1304,9 @@ interface EventDocument {
   scannerActivationCode: string;           // auto-generated 6-digit code
 
   // ─── Lifecycle ───
-  proposalStatus: 'draft' | 'approved';    // admin-created events are always 'approved'
-  createdBy: string;                       // SAO Adviser UID
+  isOfficerProposal?: boolean;             // false for SAS Admin events, true for officer proposals
+  proposalStatus: 'draft' | 'pending' | 'approved' | 'rejected' | 'returned';
+  createdBy: string;                       // SAS Adviser UID or Officer UID
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -1325,6 +1328,8 @@ interface EventScanner {
   id: string;
   officerName: string;
   officerUserId: string | null;
+  organizationId?: string | null;          // Selected student organization ID (cross-org scanner support)
+  organizationName?: string | null;        // Denormalized organization name/acronym
   fullAccess: boolean;
   canCheckIn: boolean;
   canCheckOut: boolean;

@@ -57,26 +57,47 @@ export async function generatePayablesForEvent(
   const assignedFee = feeAmount > 0 ? feeAmount : (Number(eventData.adminFeeOverride) || 0);
 
   try {
-    // Check if payables already exist for this event to avoid duplication
+    // Query existing payables for this event to deduplicate per student
     const existingQ = query(collection(db, 'payables'), where('eventId', '==', eventId));
     const existingSnap = await getDocs(existingQ);
-    if (!existingSnap.empty) {
-      console.log('[generatePayablesForEvent] Payables already exist for event:', eventId);
-      return;
-    }
+    const existingStudentIds = new Set<string>();
+    existingSnap.docs.forEach((d) => {
+      const data = d.data();
+      if (data.studentId) existingStudentIds.add(data.studentId);
+      if (data.studentSchoolId) existingStudentIds.add(data.studentSchoolId);
+    });
 
     const q = query(collection(db, STUDENTS_COLLECTION));
     const snapshot = await getDocs(q);
 
     const targetYearLevels = eventData.targetYearLevels || [];
     const targetDeptIds = eventData.targetDepartmentIds || [];
-    const isAllStudents = eventData.targetAudience === 'all' || !eventData.targetAudience || (targetYearLevels.length === 0 && targetDeptIds.length === 0);
+    const isAllStudents =
+      eventData.targetAudience === 'all' ||
+      !eventData.targetAudience ||
+      (targetYearLevels.length === 0 && targetDeptIds.length === 0);
 
     const studentsToCharge = snapshot.docs
       .map((d) => ({ id: d.id, ...d.data() }))
       .filter((student: any) => {
+        const studentIdentifier = student.id || student.authUid || student.studentId;
+        const officialSchoolId = student.studentId || student.schoolId || '';
+
+        // Skip if already charged
+        if (
+          existingStudentIds.has(studentIdentifier) ||
+          (officialSchoolId && existingStudentIds.has(officialSchoolId))
+        ) {
+          return false;
+        }
+
         // Accept students whose status is ACTIVE, active, or not explicitly INACTIVE/SUSPENDED/ARCHIVED
-        if (student.status && ['INACTIVE', 'SUSPENDED', 'ARCHIVED', 'RETURNED'].includes(String(student.status).toUpperCase())) {
+        if (
+          student.status &&
+          ['INACTIVE', 'SUSPENDED', 'ARCHIVED', 'RETURNED'].includes(
+            String(student.status).toUpperCase()
+          )
+        ) {
           return false;
         }
         if (isAllStudents) return true;
@@ -89,7 +110,12 @@ export async function generatePayablesForEvent(
         return matchesDept && matchesYear;
       });
 
-    console.log('[generatePayablesForEvent] Charging students count:', studentsToCharge.length, 'for event:', eventId);
+    console.log(
+      '[generatePayablesForEvent] Charging students count:',
+      studentsToCharge.length,
+      'for event:',
+      eventId
+    );
 
     if (studentsToCharge.length > 0) {
       const chunks = [];

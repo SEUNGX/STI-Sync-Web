@@ -21,6 +21,7 @@ export function AddMemberModal({ isOpen, onClose, organizationId, addedBy }: Add
   const [searchQuery, setSearchQuery] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedAuthUid, setSelectedAuthUid] = useState<string>('');
   
   const [formData, setFormData] = useState({
     studentId: '',
@@ -36,6 +37,7 @@ export function AddMemberModal({ isOpen, onClose, organizationId, addedBy }: Add
   if (!isOpen) return null;
 
   const handleSelectStudent = (student: any) => {
+    setSelectedAuthUid(student.id || student.authUid || student.studentId || '');
     setFormData({
       ...formData,
       studentId: student.studentId,
@@ -69,7 +71,7 @@ export function AddMemberModal({ isOpen, onClose, organizationId, addedBy }: Add
       // Auto-create payable doc for membership dues if applicable
       try {
         const payableId = await createPayable({
-          studentId: formData.studentId,
+          studentId: selectedAuthUid || formData.studentId,
           studentName: formData.studentName,
           studentSchoolId: formData.studentId,
           type: 'membership_due',

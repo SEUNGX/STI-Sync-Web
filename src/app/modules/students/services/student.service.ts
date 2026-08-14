@@ -16,6 +16,7 @@ import {
   query,
   where,
   getDocs,
+  getDoc,
   Timestamp,
 } from 'firebase/firestore';
 import {
@@ -23,6 +24,7 @@ import {
   sendPasswordResetEmail,
 } from 'firebase/auth';
 import { db, auth } from '../../../../services/firebase';
+import { syncStudentPayablesForActiveEvents } from '../../finance/services/payable.service';
 import type {
   StudentDocument,
   StudentStatus,
@@ -175,7 +177,14 @@ export async function createStudentManually(
 
   await setDoc(docRef, studentDoc);
 
-  // ── 4. Send welcome / password email ────────────────────────────────────
+  // ── 4. Auto-sync payables for active events & dues ───────────────────────
+  try {
+    await syncStudentPayablesForActiveEvents(studentDoc, addedByUid);
+  } catch (syncErr) {
+    console.warn('Could not auto-sync payables for new student:', syncErr);
+  }
+
+  // ── 5. Send welcome / password email ────────────────────────────────────
   try {
     await sendPasswordResetEmail(auth, payload.email.trim().toLowerCase());
   } catch {
@@ -202,6 +211,18 @@ export async function updateStudentStatus(
 ): Promise<void> {
   const ref = doc(db, STUDENTS_COLLECTION, id);
   await updateDoc(ref, { status, updatedAt: Timestamp.now() });
+
+  if (status === 'ACTIVE') {
+    try {
+      const snap = await getDoc(ref);
+      if (snap.exists()) {
+        const studentData = { id: snap.id, ...snap.data() } as StudentDocument;
+        await syncStudentPayablesForActiveEvents(studentData, 'admin_approval');
+      }
+    } catch (syncErr) {
+      console.warn('Could not sync payables upon activating student:', syncErr);
+    }
+  }
 }
 
 export async function returnStudent(
@@ -215,3 +236,52 @@ export async function returnStudent(
     updatedAt: Timestamp.now() 
   });
 }
+
+// ─── Re-enrollment ─────────────────────────────────────────────────────────────
+
+export async function reEnrollStudent(
+  id: string,
+  targetAcademicYear: string,
+  targetSemester: StudentSemester,
+  updates?: Partial<Pick<StudentDocument, 'yearLevel' | 'section' | 'courseId' | 'courseName' | 'courseCode'>>
+): Promise<void> {
+  const ref = doc(db, STUDENTS_COLLECTION, id);
+  await updateDoc(ref, {
+    schoolYear: targetAcademicYear,
+    semester: targetSemester,
+    status: 'ACTIVE',
+    ...(updates || {}),
+    updatedAt: Timestamp.now(),
+  });
+}
+
+export async function bulkReEnrollStudents(
+  studentIds: string[],
+  targetAcademicYear: string,
+  targetSemester: StudentSemester
+): Promise<void> {
+  const batch = (await import('firebase/firestore')).writeBatch(db);
+  for (const id of studentIds) {
+    const ref = doc(db, STUDENTS_COLLECTION, id);
+    batch.update(ref, {
+      schoolYear: targetAcademicYear,
+      semester: targetSemester,
+      status: 'ACTIVE',
+      updatedAt: Timestamp.now(),
+    });
+  }
+  await batch.commit();
+}
+
+export async function inactivateOverdueStudents(studentIds: string[]): Promise<void> {
+  const batch = (await import('firebase/firestore')).writeBatch(db);
+  for (const id of studentIds) {
+    const ref = doc(db, STUDENTS_COLLECTION, id);
+    batch.update(ref, {
+      status: 'INACTIVE',
+      updatedAt: Timestamp.now(),
+    });
+  }
+  await batch.commit();
+}
+

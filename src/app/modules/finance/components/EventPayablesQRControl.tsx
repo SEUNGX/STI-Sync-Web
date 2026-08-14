@@ -14,6 +14,10 @@ interface EventPayablesQRControlProps {
   eventTitle: string;
   adminFeeAmount?: number | null;
   recordedByUid: string;
+  isOfficer?: boolean;
+  isClubEvent?: boolean;
+  hostingOrgName?: string;
+  readOnly?: boolean;
 }
 
 export function EventPayablesQRControl({
@@ -21,9 +25,16 @@ export function EventPayablesQRControl({
   eventTitle,
   adminFeeAmount,
   recordedByUid,
+  isOfficer = false,
+  isClubEvent = false,
+  hostingOrgName,
+  readOnly = false,
 }: EventPayablesQRControlProps) {
   const { data: payables, loading } = useEventPayablesStream(eventId);
   const { data: students } = useStudents();
+
+  // Admin cannot accept payment or unlock QR tickets for club events
+  const canManagePayments = !readOnly && (isOfficer ? true : !isClubEvent);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'unpaid' | 'paid' | 'locked' | 'unlocked'>('all');
@@ -108,6 +119,7 @@ export function EventPayablesQRControl({
   const [isSyncing, setIsSyncing] = useState(false);
 
   const handleToggleQR = async (payableId: string, currentUnlocked: boolean) => {
+    if (!canManagePayments) return;
     setTogglingId(payableId);
     try {
       await toggleQRTicketUnlock(payableId, !currentUnlocked);
@@ -165,8 +177,8 @@ export function EventPayablesQRControl({
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 bg-white border border-[#E0E0E0] rounded-xl">
-        <Loader2 className="w-8 h-8 animate-spin text-[#001A4D] mb-2" />
+      <div className="bg-white border border-[#E0E0E0] rounded-xl p-8 text-center space-y-2">
+        <Loader2 className="w-6 h-6 animate-spin text-[#83358E] mx-auto" />
         <p className="text-gray-500 text-xs font-medium">Loading event student payables & QR access control...</p>
       </div>
     );
@@ -182,7 +194,9 @@ export function EventPayablesQRControl({
             <h3 className="text-lg font-bold">Student Payables & QR Access Control</h3>
           </div>
           <p className="text-gray-300 text-xs">
-            Manage student payments and explicitly unlock or lock event QR ticket entry for <strong className="text-white">{eventTitle}</strong>
+            {canManagePayments
+              ? `Manage student payments and explicitly unlock or lock event QR ticket entry for ${eventTitle}`
+              : `View student payables roster and QR ticket entry status for ${eventTitle}`}
           </p>
         </div>
 
@@ -207,6 +221,19 @@ export function EventPayablesQRControl({
           </button>
         </div>
       </div>
+
+      {/* Notice Banner when Admin is viewing a club event */}
+      {!canManagePayments && (
+        <div className="p-3.5 bg-amber-50 border-b border-amber-200 flex items-start gap-2.5 text-xs text-amber-900">
+          <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="font-bold">Club-Managed Event Fee & QR Gate Access</p>
+            <p className="text-amber-800 text-[11px] mt-0.5">
+              Payment collection and QR ticket unlocking for this event are handled directly by {hostingOrgName ? `the ${hostingOrgName} officers` : 'the club officers'}. The SAS Admin view is read-only for institutional monitoring.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Toolbar: Search & Status Filters */}
       <div className="p-4 border-b border-[#E0E0E0] bg-gray-50 flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -292,39 +319,67 @@ export function EventPayablesQRControl({
                     </span>
                   </td>
                   <td className="px-5 py-3.5">
-                    <button
-                      onClick={() => handleToggleQR(payable.id, isUnlocked)}
-                      disabled={togglingId === payable.id}
-                      className={`px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition-all ${
-                        isUnlocked
-                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-300 hover:bg-emerald-100'
-                          : 'bg-amber-50 text-amber-800 border border-amber-300 hover:bg-amber-100'
-                      }`}
-                      title="Click to toggle QR ticket access status"
-                    >
-                      {togglingId === payable.id ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : isUnlocked ? (
-                        <>
-                          <Unlock className="w-3.5 h-3.5 text-emerald-600" />
-                          <span>Unlocked</span>
-                        </>
-                      ) : (
-                        <>
-                          <Lock className="w-3.5 h-3.5 text-amber-700" />
-                          <span>Locked</span>
-                        </>
-                      )}
-                    </button>
+                    {canManagePayments ? (
+                      <button
+                        onClick={() => handleToggleQR(payable.id, isUnlocked)}
+                        disabled={togglingId === payable.id}
+                        className={`px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition-all ${
+                          isUnlocked
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-300 hover:bg-emerald-100'
+                            : 'bg-amber-50 text-amber-800 border border-amber-300 hover:bg-amber-100'
+                        }`}
+                        title="Click to toggle QR ticket access status"
+                      >
+                        {togglingId === payable.id ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : isUnlocked ? (
+                          <>
+                            <Unlock className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Unlocked</span>
+                          </>
+                        ) : (
+                          <>
+                            <Lock className="w-3.5 h-3.5 text-amber-700" />
+                            <span>Locked</span>
+                          </>
+                        )}
+                      </button>
+                    ) : (
+                      <span
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold inline-flex items-center gap-1.5 ${
+                          isUnlocked
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : 'bg-amber-50 text-amber-800 border border-amber-200'
+                        }`}
+                      >
+                        {isUnlocked ? (
+                          <>
+                            <Unlock className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Unlocked</span>
+                          </>
+                        ) : (
+                          <>
+                            <Lock className="w-3.5 h-3.5 text-amber-700" />
+                            <span>Locked</span>
+                          </>
+                        )}
+                      </span>
+                    )}
                   </td>
                   <td className="px-5 py-3.5 text-right">
-                    <button
-                      onClick={() => setSelectedPayable(payable)}
-                      className="px-3 py-1.5 bg-[#001A4D] hover:bg-[#001A4D]/90 text-white rounded-lg font-bold text-[11px] transition-colors shadow-sm inline-flex items-center gap-1"
-                    >
-                      <Coins className="w-3.5 h-3.5 text-[#FFC107]" />
-                      Record Payment
-                    </button>
+                    {canManagePayments ? (
+                      <button
+                        onClick={() => setSelectedPayable(payable)}
+                        className="px-3 py-1.5 bg-[#001A4D] hover:bg-[#001A4D]/90 text-white rounded-lg font-bold text-[11px] transition-colors shadow-sm inline-flex items-center gap-1"
+                      >
+                        <Coins className="w-3.5 h-3.5 text-[#FFC107]" />
+                        Record Payment
+                      </button>
+                    ) : (
+                      <span className="px-2.5 py-1 bg-gray-100 text-gray-500 rounded-lg text-[11px] font-semibold inline-block">
+                        Club Managed
+                      </span>
+                    )}
                   </td>
                 </tr>
               );
@@ -346,11 +401,15 @@ export function EventPayablesQRControl({
       {/* Footer info */}
       <div className="p-4 bg-gray-50 border-t border-[#E0E0E0] flex items-center justify-between text-xs text-gray-500">
         <span>Showing {filteredPayables.length} of {payables.length} student records</span>
-        <span className="text-[11px] text-gray-400">SAO Admins have full permission to lock/unlock QR code tickets</span>
+        <span className="text-[11px] text-gray-400">
+          {canManagePayments
+            ? 'Advisers & Officers have permission to record cash payments and manage QR ticket gate access'
+            : 'Payment collections and QR ticket unlocking for club events are managed by student officers.'}
+        </span>
       </div>
 
       {/* Record Payment Modal */}
-      {selectedPayable && (
+      {selectedPayable && canManagePayments && (
         <AdminRecordPaymentModal
           payable={selectedPayable}
           onClose={() => setSelectedPayable(null)}

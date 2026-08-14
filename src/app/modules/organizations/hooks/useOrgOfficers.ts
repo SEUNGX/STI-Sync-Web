@@ -28,13 +28,17 @@ export function useOrgOfficers(orgId: string | null | undefined) {
     }
 
     setLoading(true);
-    // Note: Removed orderBy('studentName', 'asc') from Firestore query to avoid requiring composite indexes.
-    // Sorting is performed in-memory below.
-    const q = query(
-      collection(db, 'organization_officers'),
-      where('organizationId', '==', orgId),
-      where('isActive', '==', true)
-    );
+    // If orgId is 'all', query all active officers regardless of organization
+    const q = orgId === 'all'
+      ? query(
+          collection(db, 'organization_officers'),
+          where('isActive', '==', true)
+        )
+      : query(
+          collection(db, 'organization_officers'),
+          where('organizationId', '==', orgId),
+          where('isActive', '==', true)
+        );
 
     const unsubscribe = onSnapshot(
       q,
@@ -63,3 +67,8 @@ export function useOrgOfficers(orgId: string | null | undefined) {
 
   return { officers, loading, error };
 }
+
+export function useAllActiveOfficers() {
+  return useOrgOfficers('all');
+}
+

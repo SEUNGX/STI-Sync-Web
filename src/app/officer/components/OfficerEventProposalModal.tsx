@@ -182,15 +182,25 @@ const checkStepModified = (stepName: string, currentData: EventFormData, baselin
 };
 
 export default function OfficerEventProposalModal({ isOpen, onClose, initialDraft, draftId }: OfficerEventProposalModalProps) {
-  const [currentStep, setCurrentStep] = useState(0);
-  const [formData, setFormData] = useState<EventFormData>(initialDraft ? { ...initialDraft } : {});
-  const [activeDraftId, setActiveDraftId] = useState<string | undefined>(draftId);
-  const [saving, setSaving] = useState(false);
-
   const { profile } = useOfficerProfile();
   const { data: orgs } = useOrganizationStream();
   const activeOrgId = profile?.activeOrganizationId || '';
   const currentOrg = orgs.find(o => o.id === activeOrgId);
+
+  const [currentStep, setCurrentStep] = useState(0);
+  const [formData, setFormData] = useState<EventFormData>(
+    initialDraft
+      ? { hostingOrgId: initialDraft.hostingOrgId || activeOrgId, ...initialDraft }
+      : { hostingOrgId: activeOrgId }
+  );
+  const [activeDraftId, setActiveDraftId] = useState<string | undefined>(draftId);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (activeOrgId && (!formData.hostingOrgId || formData.hostingOrgId === 'sas')) {
+      setFormData(prev => ({ ...prev, hostingOrgId: activeOrgId }));
+    }
+  }, [activeOrgId]);
 
   const { createEvent, saveDraft, loading } = useEventCreation();
 

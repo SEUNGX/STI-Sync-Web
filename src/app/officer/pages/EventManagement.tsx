@@ -6,6 +6,7 @@ import { useOrganizationStream } from '../../modules/organizations/hooks/useOrga
 import { useOrgEvents } from '../../modules/events/hooks/useEventStream';
 import { deleteEvent } from '../../modules/events/services/event.service';
 import type { EventDocument } from '../../modules/events/types/event.types';
+import { OfficerEventDetailView } from '../../modules/events';
 
 type EventStatusTab = 'all' | 'draft' | 'pending' | 'approved' | 'completed' | 'rejected' | 'returned';
 
@@ -259,9 +260,9 @@ export default function EventManagement() {
         />
       )}
 
-      {/* Event Detail Modal */}
+      {/* Rich Officer Event Detail View */}
       {selectedEvent && (
-        <EventDetailModal
+        <OfficerEventDetailView
           event={selectedEvent}
           onClose={() => setSelectedEventId(null)}
           onEdit={() => {
@@ -275,184 +276,3 @@ export default function EventManagement() {
   );
 }
 
-function EventDetailModal({
-  event,
-  onClose,
-  onEdit,
-}: {
-  event: EventDocument;
-  onClose: () => void;
-  onEdit: () => void;
-}) {
-  const isEditable =
-    event.proposalStatus === 'draft' ||
-    event.proposalStatus === 'returned' ||
-    (event.proposalStatus === 'rejected' && event.allowResubmission !== false);
-
-  return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-6 overflow-y-auto">
-      <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden border border-gray-100">
-        <div className="sticky top-0 bg-[#001A4D] text-white px-6 py-4 flex items-center justify-between">
-          <div>
-            <span className="text-xs font-mono text-[#FFD41C]">{event.referenceId}</span>
-            <h2 className="text-lg font-bold">{event.title}</h2>
-          </div>
-          <button onClick={onClose} className="p-1 hover:bg-white/10 rounded-lg text-white">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        <div className="p-6 overflow-y-auto space-y-6 flex-1">
-          {/* Status Banners */}
-          {event.proposalStatus === 'returned' && (
-            <div className="p-4 bg-purple-50 border border-purple-200 rounded-xl space-y-2">
-              <div className="flex items-center gap-2 text-[#83358E] font-bold text-sm">
-                <AlertCircle className="w-5 h-5" />
-                <span>Returned for Revision by SAO Adviser</span>
-              </div>
-              {event.adviserRemarks && (
-                <p className="text-sm text-gray-800 bg-white p-3 rounded-lg border border-purple-100">
-                  <strong>Remarks:</strong> {event.adviserRemarks}
-                </p>
-              )}
-              {event.returnFlags && event.returnFlags.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  {event.returnFlags.map((flag, idx) => (
-                    <span key={idx} className="px-2.5 py-0.5 bg-purple-200 text-purple-900 text-xs rounded-full font-semibold">
-                      ⚠ {flag}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {event.proposalStatus === 'rejected' && (
-            <div className="p-4 bg-red-50 border border-red-200 rounded-xl space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-red-700 font-bold text-sm">
-                  <X className="w-5 h-5" />
-                  <span>Proposal Rejected</span>
-                </div>
-                {event.allowResubmission !== false ? (
-                  <span className="px-2.5 py-0.5 bg-green-100 text-green-800 text-xs rounded-full font-bold">
-                    Re-editing Allowed
-                  </span>
-                ) : (
-                  <span className="px-2.5 py-0.5 bg-red-200 text-red-900 text-xs rounded-full font-bold">
-                    Resubmission Locked
-                  </span>
-                )}
-              </div>
-
-              {event.rejectionReason && (
-                <p className="text-sm text-red-900">
-                  <strong>Reason Category:</strong> {event.rejectionReason}
-                </p>
-              )}
-
-              {event.adviserRemarks && (
-                <p className="text-sm text-gray-800 bg-white p-3 rounded-lg border border-red-100">
-                  <strong>Adviser Remarks:</strong> {event.adviserRemarks}
-                </p>
-              )}
-
-              {event.allowResubmission !== false && (
-                <p className="text-xs text-red-700 italic">
-                  Tip: You can edit this proposal to fix the issues mentioned by SAO, then click <strong>"Revise & Resubmit Proposal"</strong> below to send it back for review.
-                </p>
-              )}
-            </div>
-          )}
-
-          {/* Overview Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-gray-50 p-4 rounded-xl border border-gray-200">
-            <div>
-              <span className="text-xs text-gray-500 font-medium">Event Format</span>
-              <p className="text-sm font-bold text-[#001A4D] mt-0.5">{event.eventFormat || 'On-Campus'}</p>
-            </div>
-            <div>
-              <span className="text-xs text-gray-500 font-medium">Expected Participants</span>
-              <p className="text-sm font-bold text-[#83358E] mt-0.5">{event.expectedParticipantCount || 0} students</p>
-            </div>
-            <div>
-              <span className="text-xs text-gray-500 font-medium">Approved Budget Ceiling</span>
-              <p className="text-sm font-bold text-green-600 mt-0.5">₱{(event.totalApprovedBudget || 0).toLocaleString()}</p>
-            </div>
-          </div>
-
-          {/* Description */}
-          {event.description && (
-            <div>
-              <h4 className="font-bold text-sm text-[#001A4D] mb-1">Description & Objectives</h4>
-              <p className="text-sm text-gray-700 leading-relaxed bg-gray-50 p-3 rounded-lg border border-gray-100">{event.description}</p>
-            </div>
-          )}
-
-          {/* Sessions Schedule */}
-          {event.sessions && event.sessions.length > 0 && (
-            <div>
-              <h4 className="font-bold text-sm text-[#001A4D] mb-2">Sessions Schedule</h4>
-              <div className="space-y-2">
-                {event.sessions.map((session, idx) => (
-                  <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 border border-gray-200 rounded-lg text-xs">
-                    <span className="font-bold text-gray-800">{session.title || `Session ${idx + 1}`}</span>
-                    <span className="text-gray-600">{session.date} · {session.startTime} to {session.endTime}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Budget Line Items */}
-          {event.budgetItems && event.budgetItems.length > 0 && (
-            <div>
-              <h4 className="font-bold text-sm text-[#001A4D] mb-2">Proposed Budget Items</h4>
-              <div className="border border-gray-200 rounded-lg overflow-hidden">
-                <table className="w-full text-xs text-left">
-                  <thead className="bg-gray-100 font-bold text-gray-700">
-                    <tr>
-                      <th className="p-2.5">Item</th>
-                      <th className="p-2.5">Qty</th>
-                      <th className="p-2.5">Unit Cost</th>
-                      <th className="p-2.5">Approved Cost</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {event.budgetItems.map((bi, i) => (
-                      <tr key={i}>
-                        <td className="p-2.5 font-medium text-gray-900">{bi.item || bi.description}</td>
-                        <td className="p-2.5">{bi.quantity}</td>
-                        <td className="p-2.5">₱{(bi.unitCost || 0).toLocaleString()}</td>
-                        <td className="p-2.5 font-bold text-[#83358E]">₱{(bi.approvedAmount || bi.unitCost * bi.quantity || 0).toLocaleString()}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Modal Footer */}
-        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-xs font-bold hover:bg-gray-300 transition-colors"
-          >
-            Close
-          </button>
-          {isEditable && (
-            <button
-              onClick={onEdit}
-              className="px-5 py-2 bg-[#83358E] text-white rounded-lg text-xs font-bold hover:bg-[#6D2A78] transition-colors flex items-center gap-1.5 shadow-sm"
-            >
-              <Edit className="w-4 h-4" />
-              Revise / Edit Proposal
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}

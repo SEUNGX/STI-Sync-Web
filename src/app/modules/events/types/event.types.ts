@@ -117,6 +117,8 @@ export interface EventScanner {
   id: string;
   officerName: string;
   officerUserId: string | null;
+  organizationId?: string | null;
+  organizationName?: string | null;
   fullAccess: boolean;
   canCheckIn: boolean;
   canCheckOut: boolean;

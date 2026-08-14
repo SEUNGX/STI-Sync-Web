@@ -88,6 +88,52 @@ export async function deleteSection(id: string): Promise<void> {
 // ─── SEMESTERS ────────────────────────────────────────────────────────────────
 
 /**
+ * Generates smart Academic Year suggestions based on current date and existing records.
+ * Returns e.g. ["2025-2026", "2026-2027", "2027-2028", "2028-2029"]
+ */
+export function getAcademicYearSuggestions(): string[] {
+  const currentYear = new Date().getFullYear();
+  const suggestions: string[] = [];
+  for (let i = 0; i <= 3; i++) {
+    const start = currentYear + i - 1;
+    const end = start + 1;
+    suggestions.push(`${start}-${end}`);
+  }
+  return suggestions;
+}
+
+/**
+ * Checks existing semesters for a given academic year to determine term availability.
+ */
+export function getSemesterTermAvailability(
+  academicYear: string,
+  existingSemesters: SemesterDocument[]
+): {
+  firstSemExists: boolean;
+  secondSemExists: boolean;
+  bothExist: boolean;
+  suggestedTerm: SemesterTerm | null;
+} {
+  const cleanAY = academicYear.replace(/[–—\s]/g, '-').trim().toLowerCase();
+  const matching = existingSemesters.filter(
+    (s) => s.academicYear.replace(/[–—\s]/g, '-').trim().toLowerCase() === cleanAY && !s.archived
+  );
+
+  const firstSemExists = matching.some((s) => s.semester === '1st Semester');
+  const secondSemExists = matching.some((s) => s.semester === '2nd Semester');
+  const bothExist = firstSemExists && secondSemExists;
+
+  let suggestedTerm: SemesterTerm | null = null;
+  if (!firstSemExists) {
+    suggestedTerm = '1st Semester';
+  } else if (!secondSemExists) {
+    suggestedTerm = '2nd Semester';
+  }
+
+  return { firstSemExists, secondSemExists, bothExist, suggestedTerm };
+}
+
+/**
  * Derives the standardised semester label from the form inputs.
  * Format: A.Y.{startYear}-{endYear}-{1S|2S}
  * Example: A.Y.2026-2027-1S
@@ -140,3 +186,56 @@ export async function deleteSemester(id: string): Promise<void> {
   const ref = doc(db, SEMESTERS_COLLECTION, id);
   await deleteDoc(ref);
 }
+
+/**
+ * Executes a real Firestore Semester Rollover:
+ * 1. Completes the currently active semester.
+ * 2. Activates the target upcoming semester.
+ * 3. Records an audit log entry.
+ */
+export async function executeSemesterRollover(
+  closingSemester: SemesterDocument,
+  targetSemester: SemesterDocument,
+  options?: { carryBudget?: boolean; autoInactivate?: boolean; flagOfficers?: boolean; resetCompliance?: boolean },
+  adminUid?: string
+): Promise<{ success: boolean; closingLabel: string; targetLabel: string }> {
+  const batch = (await import('firebase/firestore')).writeBatch(db);
+
+  // 1. Close current active semester
+  const closingRef = doc(db, SEMESTERS_COLLECTION, closingSemester.id);
+  batch.update(closingRef, {
+    status: 'COMPLETED',
+    updatedAt: Timestamp.now(),
+  });
+
+  // 2. Activate target upcoming semester
+  const targetRef = doc(db, SEMESTERS_COLLECTION, targetSemester.id);
+  batch.update(targetRef, {
+    status: 'ACTIVE',
+    updatedAt: Timestamp.now(),
+  });
+
+  // 3. Write Audit Log
+  const auditRef = doc(collection(db, 'audit_logs'));
+  batch.set(auditRef, {
+    id: auditRef.id,
+    action: 'SEMESTER_ROLLOVER',
+    performedBy: adminUid || 'admin',
+    closingSemesterId: closingSemester.id,
+    closingSemesterLabel: closingSemester.label,
+    targetSemesterId: targetSemester.id,
+    targetSemesterLabel: targetSemester.label,
+    options: options || {},
+    timestamp: Timestamp.now(),
+    createdAt: Timestamp.now(),
+  });
+
+  await batch.commit();
+
+  return {
+    success: true,
+    closingLabel: closingSemester.label,
+    targetLabel: targetSemester.label,
+  };
+}
+

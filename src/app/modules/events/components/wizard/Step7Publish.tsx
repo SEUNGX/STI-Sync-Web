@@ -18,16 +18,19 @@ export default function Step7Publish({ data, onUpdate, onPublish, isPublishing, 
   const showOfficerMode = isOfficer || !!officerProfile;
   const creatorName = showOfficerMode
     ? (officerProfile?.studentName || data.createdByName || 'Student Officer')
-    : (adviserProfile?.displayName || 'SAO Adviser');
+    : (adviserProfile?.displayName || 'SAS Adviser');
 
-  // Validate steps based on real data
-  const isDetailsComplete = !!data.title && !!data.description && !!data.eventTypeId && !!data.hostingOrgId;
+  // Validate steps based on real data (Admin does not require club hostingOrgId)
+  const isDetailsComplete = showOfficerMode
+    ? (!!data.title && !!data.description && !!data.eventTypeId && !!data.hostingOrgId)
+    : (!!data.title && !!data.description && !!data.eventTypeId);
+
   const isScheduleComplete = !!data.semesterId && !!data.venueId && (data.sessions?.length ?? 0) > 0;
-  const isStaffComplete = true; // Automatically valid for admin
+  const isStaffComplete = true; // Automatically valid for admin & officer
   const isBudgetValid = (data.totalApprovedBudget ?? 0) >= 0;
 
   const validationItems = [
-    { id: 1, label: 'Event details complete', desc: 'title, description, type, org', status: isDetailsComplete ? 'valid' : 'invalid' },
+    { id: 1, label: 'Event details complete', desc: 'title, description, type', status: isDetailsComplete ? 'valid' : 'invalid' },
     { id: 2, label: 'Schedule and venue assigned', desc: 'dates, sessions, venue', status: isScheduleComplete ? 'valid' : 'invalid' },
     { id: 3, label: 'Participant settings configured', desc: 'limits, audience, attendance rules', status: 'valid' },
     { id: 4, label: 'Staff fully assigned', desc: 'Event Head, Officer-in-Charge, scanners', status: isStaffComplete ? 'valid' : 'invalid' },
@@ -59,7 +62,7 @@ export default function Step7Publish({ data, onUpdate, onPublish, isPublishing, 
                 <div className="flex items-center gap-2 text-white text-sm">
                   <div className="w-6 h-6 rounded-full bg-white/20"></div>
                   <span className="px-2 py-0.5 bg-purple-500 rounded text-xs font-semibold">
-                    {isOfficer ? 'Officer Proposal' : 'Admin Draft'}
+                    {isOfficer ? 'Officer Proposal' : 'SAS Institutional Event'}
                   </span>
                 </div>
               </div>
@@ -69,7 +72,7 @@ export default function Step7Publish({ data, onUpdate, onPublish, isPublishing, 
                   isOfficer ? 'bg-amber-400 text-[#001A4D]' : 'bg-green-500 text-white'
                 }`}>
                   <Shield className="w-4 h-4" />
-                  {isOfficer ? 'REQUIRES SAO REVIEW' : 'SAO APPROVED'}
+                  {isOfficer ? 'REQUIRES SAS REVIEW' : 'SAS APPROVED'}
                 </div>
               </div>
             </div>

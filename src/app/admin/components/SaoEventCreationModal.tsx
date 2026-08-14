@@ -57,7 +57,7 @@ export default function SaoEventCreationModal({
     initialDraft ? inferLastStep(initialDraft) : 0
   );
   const [formData, setFormData] = useState<EventFormData>(
-    initialDraft ? { ...initialDraft } : {}
+    initialDraft ? { hostingOrgId: initialDraft.hostingOrgId || 'sas', ...initialDraft } : { hostingOrgId: 'sas' }
   );
   const [activeDraftId, setActiveDraftId] = useState<string | undefined>(draftId);
   const [saving, setSaving] = useState(false);
@@ -96,7 +96,8 @@ export default function SaoEventCreationModal({
   };
 
   const handleSubmit = async () => {
-    const id = await createEvent(formData, activeDraftId);
+    const payload = { hostingOrgId: 'sas', ...formData };
+    const id = await createEvent(payload, activeDraftId, false);
     if (id) {
       toast.success('Event Published!', {
         description: 'The event has been successfully published and activated.',
@@ -109,7 +110,8 @@ export default function SaoEventCreationModal({
   const handleSaveDraft = async () => {
     setSaving(true);
     try {
-      const id = await saveDraft(formData, activeDraftId);
+      const payload = { hostingOrgId: 'sas', ...formData };
+      const id = await saveDraft(payload, activeDraftId);
       if (id) {
         setActiveDraftId(id);
         toast.success('Draft saved!', {
@@ -133,19 +135,19 @@ export default function SaoEventCreationModal({
   const renderStep = () => {
     switch (currentStepName) {
       case 'Event Details':
-        return <Step1EventDetails data={formData} onUpdate={updateFormData} />;
+        return <Step1EventDetails data={formData} onUpdate={updateFormData} isOfficer={false} />;
       case 'Schedule':
         return <Step2Schedule data={formData} onUpdate={updateFormData} />;
       case 'Participants':
-        return <Step3Participants data={formData} onUpdate={updateFormData} />;
+        return <Step3Participants data={formData} onUpdate={updateFormData} isOfficer={false} />;
       case 'Staff':
-        return <Step4Staff data={formData} onUpdate={updateFormData} />;
+        return <Step4Staff data={formData} onUpdate={updateFormData} isOfficer={false} />;
       case 'Budget':
         return <Step5Budget data={formData} onUpdate={updateFormData} />;
       case 'Documents':
         return <Step6Documents data={formData} onUpdate={updateFormData} />;
       case 'Publish':
-        return <Step7Publish data={formData} onUpdate={updateFormData} />;
+        return <Step7Publish data={formData} onUpdate={updateFormData} onPublish={handleSubmit} isPublishing={saving || loading} isOfficer={false} />;
       default:
         return null;
     }

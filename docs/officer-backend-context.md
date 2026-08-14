@@ -547,55 +547,27 @@ When `useValidateGateAccess` returns `{ allowed: false, reason: 'PAYMENT_REQUIRE
 )}
 ```
 
----
+<!-- AGENT-UPDATED: 2026-08-14 — Updated Section 6: Officer Event Payables & QR Ticket Access Control -->
 
-## 6. Officer Payables View — Read Only
+## 6. Officer Event Payables & QR Ticket Access Control
 
-Officers can **view** payables for their organization's events but **cannot modify** payment status. Payment confirmation is an admin-only operation.
+Officers can view all target student participants for their organization's events, track collection progress, record cash payments, and manage QR ticket gate unlocking.
 
-### Hook: `usePayableStream(organizationId, eventId)`
+### Hook: `useEventPayablesStream(eventId)` / `usePayableStream(organizationId, eventId)`
 
-**Location:** `src/app/modules/payables/hooks/usePayableStream.ts`
+**Location:** `src/app/modules/finance/hooks/usePayableStream.ts`
 
 ```typescript
-export function usePayableStream(organizationId: string, eventId?: string) {
-  const [payables, setPayables] = useState<PayableDocument[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (!organizationId) return;
-
-    let constraints = [
-      where('organizationId', '==', organizationId)  // ← MANDATORY tenant filter
-    ];
-
-    if (eventId) {
-      constraints.push(where('eventId', '==', eventId));
-    }
-
-    const q = query(collection(db, 'payables'), ...constraints);
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setPayables(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as PayableDocument)));
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [organizationId, eventId]);
-
-  return { payables, loading };
+export function useEventPayablesStream(eventId: string) {
+  // Real-time subscription to /payables filtered by eventId
 }
 ```
 
-Officers see:
-- Payment status per student (paid/unpaid)
-- QR ticket lock status
-- Total collection progress
-
-Officers **do not** see:
-- "Mark as Paid" / "Mark as Unpaid" action buttons
-- Payment method or reference details
-- Transaction history
+### Officer Capabilities
+- **Event Payables Roster**: View all target participants matching event criteria (student name, 11-digit STI Student ID, assigned fee amount, paid amount, payment status).
+- **Record Cash Payment**: Open payment modal (`AdminRecordPaymentModal` / `recordPayment`) to enter cash amount, mark student as `paid`, and unlock their mobile QR ticket in real-time.
+- **Manual QR Gate Unlock**: Toggle individual student QR code tickets between `Locked 🔒` and `Unlocked 🔓` for gate access control.
+- **Sync Roster Data**: Trigger `generatePayablesForEvent(eventId)` to auto-populate payables for all eligible target students.
 
 ---
 
@@ -724,23 +696,18 @@ All read hooks return `{ data/payables/liquidations, loading, error }`. All incl
 
 ---
 
-<!-- AGENT-UPDATED: 2026-08-07 — Documented Certificate Module org-scoping contract for student officers -->
-## 11. Officer Certificate Module — Org-Scoped
+---
 
-### Hook: `useCertificateTemplatesStream(organizationId, isAdmin)`
+<!-- AGENT-UPDATED: 2026-08-14 — Added Section 12: Auto-Population of Hosting Organization in Officer Proposal Wizard -->
 
-**Location:** `src/app/modules/certificates/hooks/useCertificateStream.ts`
+## 12. Officer Proposal Wizard — Auto-Population of Hosting Organization
 
-```typescript
-export function useCertificateTemplatesStream(organizationId?: string, isAdmin?: boolean) {
-  // Subscribes to /certificate_templates
-  // When isAdmin === false and organizationId is provided:
-  // Filters templates strictly to doc.organizationId === organizationId
-}
-```
+### Overview
+In the Officer Event Proposal Wizard (`OfficerEventProposalModal.tsx` and `Step1EventDetails.tsx`):
+- `hostingOrgId` is automatically extracted from the officer's active club profile (`profile.activeOrganizationId`) and assigned to the form state.
+- Step 1 displays a locked, auto-populated organization identity card (showing club name, acronym, and lock badge). Manual organization selection is completely bypassed.
+- In Step 4 (Staff), scanner officer selection is strictly scoped to the active officers of the proposing club.
+- Proposing officers submit events with `isOfficerProposal: true` and `proposalStatus: 'pending'`, strictly segmented from institutional SAS Admin events.
 
-### Event & Template Isolation Rules
-- **Events**: Officers only see events where `hostingOrgId === activeOrgId` AND `attendedCount > 0`.
-- **Templates**: Officers only see templates saved with their `activeOrgId`. SAO Admin templates (`organizationId === 'admin'`) are isolated from officer views and vice versa.
 
 

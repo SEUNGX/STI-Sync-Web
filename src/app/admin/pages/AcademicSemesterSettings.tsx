@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   RefreshCw,
   Plus,
@@ -28,8 +28,13 @@ import {
   archiveSemester,
   deleteSemester,
   generateSemesterLabel,
+  getAcademicYearSuggestions,
+  getSemesterTermAvailability,
+  executeSemesterRollover,
 } from "../../modules/academic/services/academic.service";
+import { useAdviserProfile } from "../../modules/auth/hooks/useAdviserProfile";
 import type { SemesterDocument, SemesterStatus, SemesterTerm } from "../../modules/academic/types/academic.types";
+
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type BannerState = "active" | "ending-soon" | "rollover-needed" | "in-progress";
@@ -201,6 +206,34 @@ function StatusPill({ status }: { status: SemesterStatus }) {
   );
 }
 
+// ─── Academic Year Helpers ───────────────────────────────────────────────────
+function sanitizeAcademicYearInput(rawInput: string): string {
+  const digits = rawInput.replace(/\D/g, '').slice(0, 8);
+  if (digits.length > 4) {
+    return `${digits.slice(0, 4)}-${digits.slice(4)}`;
+  }
+  return digits;
+}
+
+function validateAcademicYearStrict(ay: string): { valid: boolean; error?: string } {
+  if (!ay || !ay.trim()) {
+    return { valid: false, error: "Academic year is required." };
+  }
+  const clean = ay.trim();
+  if (!/^\d{4}-\d{4}$/.test(clean)) {
+    return { valid: false, error: "Format must be YYYY-YYYY (e.g. 2026-2027)." };
+  }
+  const [startYear, endYear] = clean.split("-").map(Number);
+  const currentYear = new Date().getFullYear();
+  if (endYear !== startYear + 1) {
+    return { valid: false, error: "End year must be exactly 1 year after start year (e.g. 2026-2027)." };
+  }
+  if (startYear < currentYear - 1) {
+    return { valid: false, error: `Cannot create a past academic year (minimum ${currentYear - 1}-${currentYear}).` };
+  }
+  return { valid: true };
+}
+
 // ─── Add Semester Modal ────────────────────────────────────────────────────────
 interface AddSemesterModalProps {
   existingSemesters: SemesterDocument[];
@@ -209,8 +242,10 @@ interface AddSemesterModalProps {
 }
 
 function AddSemesterModal({ existingSemesters, onClose, onSuccess }: AddSemesterModalProps) {
+  const aySuggestions = useMemo(() => getAcademicYearSuggestions(), []);
+
   const [form, setForm] = useState({
-    academicYear: "",
+    academicYear: aySuggestions[1] || "2026-2027",
     semester: "" as SemesterTerm | "",
     startDate: "",
     endDate: "",
@@ -222,6 +257,114 @@ function AddSemesterModal({ existingSemesters, onClose, onSuccess }: AddSemester
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  // Live AY strict validation
+  const ayValidation = useMemo(
+    () => validateAcademicYearStrict(form.academicYear),
+    [form.academicYear]
+  );
+
+  // Term availability for the selected Academic Year
+  const termAvailability = useMemo(
+    () => getSemesterTermAvailability(form.academicYear, existingSemesters),
+    [form.academicYear, existingSemesters]
+  );
+
+  // Auto-select valid term when AY changes or initializes
+  useEffect(() => {
+    if (termAvailability.suggestedTerm && (!form.semester || (form.semester === '1st Semester' && termAvailability.firstSemExists))) {
+      const term = termAvailability.suggestedTerm;
+      const [startYear, endYear] = form.academicYear.split("-").map(Number);
+      let sDate = form.startDate;
+      let eDate = form.endDate;
+      let rDate = form.reenrollDeadline;
+
+      if (startYear && endYear) {
+        if (term === "1st Semester") {
+          sDate = `${startYear}-08-01`;
+          eDate = `${startYear}-12-15`;
+          rDate = `${startYear}-07-25`;
+        } else if (term === "2nd Semester") {
+          sDate = `${endYear}-01-15`;
+          eDate = `${endYear}-05-30`;
+          rDate = `${endYear}-01-05`;
+        }
+      }
+
+      setForm((prev) => ({
+        ...prev,
+        semester: term,
+        startDate: sDate,
+        endDate: eDate,
+        reenrollDeadline: rDate,
+      }));
+    }
+  }, [form.academicYear, termAvailability.suggestedTerm, termAvailability.firstSemExists]);
+
+  const handleSelectAY = (ay: string) => {
+    const termInfo = getSemesterTermAvailability(ay, existingSemesters);
+    const term = termInfo.suggestedTerm || (termInfo.secondSemExists ? "" : "1st Semester");
+    
+    let sDate = "";
+    let eDate = "";
+    let rDate = "";
+    const [startYear, endYear] = ay.split("-").map(Number);
+    if (startYear && endYear) {
+      if (term === "1st Semester") {
+        sDate = `${startYear}-08-01`;
+        eDate = `${startYear}-12-15`;
+        rDate = `${startYear}-07-25`;
+      } else if (term === "2nd Semester") {
+        sDate = `${endYear}-01-15`;
+        eDate = `${endYear}-05-30`;
+        rDate = `${endYear}-01-05`;
+      }
+    }
+
+    setForm((prev) => ({
+      ...prev,
+      academicYear: ay,
+      semester: term as SemesterTerm,
+      startDate: sDate || prev.startDate,
+      endDate: eDate || prev.endDate,
+      reenrollDeadline: rDate || prev.reenrollDeadline,
+    }));
+    setErrors({});
+  };
+
+  const handleAYInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formatted = sanitizeAcademicYearInput(e.target.value);
+    setForm((prev) => ({ ...prev, academicYear: formatted }));
+    setErrors((prev) => ({ ...prev, academicYear: "", duplicate: "" }));
+  };
+
+  const handleSelectTerm = (term: SemesterTerm) => {
+    let sDate = form.startDate;
+    let eDate = form.endDate;
+    let rDate = form.reenrollDeadline;
+    const [startYear, endYear] = form.academicYear.split("-").map(Number);
+
+    if (startYear && endYear) {
+      if (term === "1st Semester") {
+        sDate = `${startYear}-08-01`;
+        eDate = `${startYear}-12-15`;
+        rDate = `${startYear}-07-25`;
+      } else if (term === "2nd Semester") {
+        sDate = `${endYear}-01-15`;
+        eDate = `${endYear}-05-30`;
+        rDate = `${endYear}-01-05`;
+      }
+    }
+
+    setForm((prev) => ({
+      ...prev,
+      semester: term,
+      startDate: sDate,
+      endDate: eDate,
+      reenrollDeadline: rDate,
+    }));
+    setErrors((prev) => ({ ...prev, semester: "", duplicate: "" }));
+  };
+
   // Auto-generate label live from form inputs
   const autoLabel = useMemo(() => {
     if (!form.academicYear || !form.semester) return "";
@@ -232,23 +375,16 @@ function AddSemesterModal({ existingSemesters, onClose, onSuccess }: AddSemester
   function validate(): Record<string, string> {
     const errs: Record<string, string> = {};
 
+    // Strict AY check
+    const ayCheck = validateAcademicYearStrict(form.academicYear);
+    if (!ayCheck.valid) {
+      errs.academicYear = ayCheck.error || "Invalid academic year.";
+    }
+
     // Required fields
-    if (!form.academicYear.trim()) errs.academicYear = "Academic year is required.";
     if (!form.semester)           errs.semester     = "Please select a semester.";
     if (!form.startDate)          errs.startDate    = "Start date is required.";
     if (!form.endDate)            errs.endDate      = "End date is required.";
-
-    // Academic year format: 4 digits - 4 digits (hyphens or en-dashes)
-    const ayClean = form.academicYear.replace(/[–—]/g, "-").trim();
-    const ayMatch = /^\d{4}-\d{4}$/.test(ayClean);
-    if (form.academicYear && !ayMatch) {
-      errs.academicYear = "Format must be YYYY-YYYY (e.g. 2026-2027).";
-    } else if (ayMatch) {
-      const [startYear, endYear] = ayClean.split("-").map(Number);
-      if (endYear !== startYear + 1) {
-        errs.academicYear = "End year must be exactly 1 year after start year.";
-      }
-    }
 
     // Date logic
     if (form.startDate && form.endDate && form.endDate <= form.startDate) {
@@ -259,7 +395,7 @@ function AddSemesterModal({ existingSemesters, onClose, onSuccess }: AddSemester
     }
 
     // Block adding if there's already an ACTIVE semester and new one is also ACTIVE
-    const hasActive = existingSemesters.some((s) => s.status === "ACTIVE");
+    const hasActive = existingSemesters.some((s) => s.status === "ACTIVE" && !s.archived);
     if (hasActive && form.status === "ACTIVE") {
       errs.status = "There is already an active semester. A new semester cannot be set as Active. Run a semester rollover to switch.";
     }
@@ -267,32 +403,12 @@ function AddSemesterModal({ existingSemesters, onClose, onSuccess }: AddSemester
     // Duplicate check: same academic year + same semester
     const duplicate = existingSemesters.some(
       (s) =>
-        s.academicYear.replace(/[–—\s]/g, "-").toLowerCase() ===
-          ayClean.toLowerCase() &&
+        !s.archived &&
+        s.academicYear.replace(/[–—\s]/g, "-").toLowerCase() === form.academicYear.replace(/[–—\s]/g, "-").toLowerCase() &&
         s.semester === form.semester
     );
     if (duplicate && !errs.academicYear && !errs.semester) {
       errs.duplicate = `${form.semester} for A.Y. ${form.academicYear} already exists.`;
-    }
-
-    // Date-range conflict: new semester cannot overlap with any existing semester's dates
-    if (form.startDate && form.endDate && !errs.startDate && !errs.endDate) {
-      const newStart = form.startDate;
-      const newEnd   = form.endDate;
-
-      const conflicting = existingSemesters.find((s) => {
-        if (!s.startDate || !s.endDate) return false;
-        // Two ranges [A,B] and [C,D] overlap when A <= D && B >= C
-        return newStart <= s.endDate && newEnd >= s.startDate;
-      });
-
-      if (conflicting) {
-        errs.dateConflict =
-          `Date range conflicts with an existing semester: ` +
-          `${conflicting.semester} · A.Y. ${conflicting.academicYear} ` +
-          `(${formatDate(conflicting.startDate)} – ${formatDate(conflicting.endDate)}). ` +
-          `Choose dates that do not overlap with published semesters.`;
-      }
     }
 
     return errs;
@@ -325,12 +441,13 @@ function AddSemesterModal({ existingSemesters, onClose, onSuccess }: AddSemester
     }
   }
 
-  const hasActiveBlock = existingSemesters.some((s) => s.status === "ACTIVE");
+  const hasActiveBlock = existingSemesters.some((s) => s.status === "ACTIVE" && !s.archived);
+
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/55" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-[540px] overflow-hidden">
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-[560px] overflow-hidden">
         {/* Header */}
         <div className="bg-gradient-to-r from-[#001A4D] to-[#83358E] px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -347,8 +464,21 @@ function AddSemesterModal({ existingSemesters, onClose, onSuccess }: AddSemester
           <div className="mx-5 mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
             <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
             <p className="text-amber-700 text-xs">
-              <strong>Active semester detected.</strong> You can still add an upcoming semester, but you cannot set the new semester as Active while another is running. Use "Run Semester Rollover" to switch active semesters.
+              <strong>Active semester detected.</strong> New semesters default to <strong>Upcoming</strong>. You can switch active semesters anytime by running a <strong>Semester Rollover</strong>.
             </p>
+          </div>
+        )}
+
+        {/* Both Terms Exist Warning */}
+        {termAvailability.bothExist && (
+          <div className="mx-5 mt-3 p-3 bg-purple-50 border border-purple-200 rounded-lg flex items-start gap-2 text-xs text-purple-900">
+            <AlertCircle className="w-4 h-4 text-[#83358E] flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-bold">Both 1st & 2nd Semesters Created</p>
+              <p className="text-[11px] text-purple-800 mt-0.5">
+                Both terms for A.Y. {form.academicYear} have already been registered. Please choose an upcoming Academic Year below.
+              </p>
+            </div>
           </div>
         )}
 
@@ -360,73 +490,100 @@ function AddSemesterModal({ existingSemesters, onClose, onSuccess }: AddSemester
           </div>
         )}
 
-        {/* Date-range conflict error */}
-        {errors.dateConflict && (
-          <div className="mx-5 mt-3 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
-            <Calendar className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="text-red-700 text-xs font-semibold mb-0.5">Date Range Conflict</p>
-              <p className="text-red-700 text-xs">{errors.dateConflict}</p>
-            </div>
-          </div>
-        )}
-
-
         {/* Body */}
         <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
           {/* Academic Year */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
               Academic Year <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
               placeholder="e.g. 2026-2027"
-              className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent ${
-                errors.academicYear ? "border-red-400 bg-red-50" : "border-gray-300"
+              maxLength={9}
+              className={`w-full px-4 py-2.5 border rounded-lg font-mono focus:ring-2 focus:ring-[#83358E] focus:border-transparent ${
+                errors.academicYear || (!ayValidation.valid && form.academicYear.length === 9)
+                  ? "border-red-400 bg-red-50"
+                  : "border-gray-300"
               }`}
               value={form.academicYear}
-              onChange={(e) => {
-                setForm({ ...form, academicYear: e.target.value });
-                setErrors((prev) => ({ ...prev, academicYear: "", duplicate: "" }));
-              }}
+              onChange={handleAYInputChange}
             />
             {errors.academicYear ? (
               <p className="text-red-500 text-xs mt-1">{errors.academicYear}</p>
-            ) : (
-              <p className="text-xs text-gray-500 mt-1">Format: YYYY-YYYY</p>
-            )}
+            ) : !ayValidation.valid && form.academicYear.length === 9 ? (
+              <p className="text-red-500 text-xs mt-1">{ayValidation.error}</p>
+            ) : form.academicYear.length > 0 && form.academicYear.length < 9 ? (
+              <p className="text-amber-600 text-xs mt-1 font-sans">
+                Format must be YYYY-YYYY (e.g. 2026-2027)
+              </p>
+            ) : null}
+
+            {/* Quick Suggestions Chips */}
+            <div className="flex flex-wrap items-center gap-1.5 mt-2">
+              <span className="text-[11px] text-gray-400 font-semibold mr-1">Suggestions:</span>
+              {aySuggestions.map((ay) => {
+                const isSelected = form.academicYear === ay;
+                return (
+                  <button
+                    key={ay}
+                    type="button"
+                    onClick={() => handleSelectAY(ay)}
+                    className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all ${
+                      isSelected
+                        ? "bg-[#83358E] text-white shadow-xs"
+                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    }`}
+                  >
+                    {ay}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
-          {/* Semester */}
+          {/* Semester Term Availability */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">
               Semester <span className="text-red-500">*</span>
             </label>
             <div className="flex gap-3">
-              {(["1st Semester", "2nd Semester"] as SemesterTerm[]).map((opt) => (
-                <label
-                  key={opt}
-                  className={`flex-1 flex items-center gap-2.5 px-4 py-3 border rounded-lg cursor-pointer transition-all ${
-                    form.semester === opt
-                      ? "border-[#83358E] bg-[#F3E8FF]/40 ring-2 ring-[#83358E]/30"
-                      : "border-gray-200 hover:border-gray-300"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="semester"
-                    value={opt}
-                    checked={form.semester === opt}
-                    onChange={() => {
-                      setForm({ ...form, semester: opt });
-                      setErrors((prev) => ({ ...prev, semester: "", duplicate: "" }));
-                    }}
-                    className="accent-[#83358E]"
-                  />
-                  <span className="text-sm font-medium text-[#001A4D]">{opt}</span>
-                </label>
-              ))}
+              {(["1st Semester", "2nd Semester"] as SemesterTerm[]).map((opt) => {
+                const isFirst = opt === "1st Semester";
+                const isAlreadyCreated = isFirst ? termAvailability.firstSemExists : termAvailability.secondSemExists;
+                const isSelected = form.semester === opt;
+
+                return (
+                  <label
+                    key={opt}
+                    className={`flex-1 flex flex-col gap-1 px-4 py-3 border rounded-xl transition-all ${
+                      isAlreadyCreated
+                        ? "bg-gray-50 border-gray-200 opacity-60 cursor-not-allowed"
+                        : isSelected
+                        ? "border-[#83358E] bg-[#F3E8FF]/40 ring-2 ring-[#83358E]/30 cursor-pointer"
+                        : "border-gray-200 hover:border-gray-300 cursor-pointer"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <input
+                        type="radio"
+                        name="semester"
+                        value={opt}
+                        checked={isSelected}
+                        disabled={isAlreadyCreated}
+                        onChange={() => handleSelectTerm(opt)}
+                        className="accent-[#83358E]"
+                      />
+                      <span className="text-sm font-bold text-[#001A4D]">{opt}</span>
+                    </div>
+                    {isAlreadyCreated && (
+                      <span className="text-[10px] font-bold text-amber-700 ml-6">
+                        ✓ Already Created
+                      </span>
+                    )}
+                  </label>
+                );
+              })}
             </div>
             {errors.semester && <p className="text-red-500 text-xs mt-1">{errors.semester}</p>}
           </div>
@@ -441,13 +598,13 @@ function AddSemesterModal({ existingSemesters, onClose, onSuccess }: AddSemester
               <input
                 type="text"
                 readOnly
-                value={autoLabel || "Fill in Academic Year and Semester above…"}
-                className="w-full px-4 py-2.5 border border-gray-200 rounded-lg bg-gray-50 text-gray-500 italic text-sm pr-9"
+                value={autoLabel || "Select Academic Year and Semester above…"}
+                className="w-full px-4 py-2.5 border border-gray-200 rounded-lg bg-gray-50 text-gray-600 font-mono font-semibold text-sm pr-9"
               />
               <Lock className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2" />
             </div>
             <p className="text-xs text-gray-500 mt-1">
-              Auto-generated in format <span className="font-mono font-semibold text-[#001A4D]">A.Y.YYYY-YYYY-#S</span>. Used in all reports and exports.
+              Auto-generated label used across events, QR tickets, certificates, and student transcripts.
             </p>
           </div>
 
@@ -460,12 +617,12 @@ function AddSemesterModal({ existingSemesters, onClose, onSuccess }: AddSemester
               <input
                 type="date"
                 className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent ${
-                  errors.startDate || errors.dateConflict ? "border-red-400 bg-red-50" : "border-gray-300"
+                  errors.startDate ? "border-red-400 bg-red-50" : "border-gray-300"
                 }`}
                 value={form.startDate}
                 onChange={(e) => {
                   setForm({ ...form, startDate: e.target.value });
-                  setErrors((prev) => ({ ...prev, startDate: "", endDate: "", dateConflict: "" }));
+                  setErrors((prev) => ({ ...prev, startDate: "", endDate: "" }));
                 }}
               />
               {errors.startDate && <p className="text-red-500 text-xs mt-1">{errors.startDate}</p>}
@@ -477,12 +634,12 @@ function AddSemesterModal({ existingSemesters, onClose, onSuccess }: AddSemester
               <input
                 type="date"
                 className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent ${
-                  errors.endDate || errors.dateConflict ? "border-red-400 bg-red-50" : "border-gray-300"
+                  errors.endDate ? "border-red-400 bg-red-50" : "border-gray-300"
                 }`}
                 value={form.endDate}
                 onChange={(e) => {
                   setForm({ ...form, endDate: e.target.value });
-                  setErrors((prev) => ({ ...prev, endDate: "", dateConflict: "" }));
+                  setErrors((prev) => ({ ...prev, endDate: "" }));
                 }}
               />
               {errors.endDate && <p className="text-red-500 text-xs mt-1">{errors.endDate}</p>}
@@ -508,7 +665,7 @@ function AddSemesterModal({ existingSemesters, onClose, onSuccess }: AddSemester
             {errors.reenrollDeadline ? (
               <p className="text-red-500 text-xs mt-1">{errors.reenrollDeadline}</p>
             ) : (
-              <p className="text-xs text-gray-500 mt-1">Date by which students must confirm enrollment.</p>
+              <p className="text-xs text-gray-500 mt-1">Date by which students must confirm enrollment for this term.</p>
             )}
           </div>
 
@@ -531,7 +688,7 @@ function AddSemesterModal({ existingSemesters, onClose, onSuccess }: AddSemester
                     className="accent-[#83358E]"
                   />
                   <span className={`text-sm capitalize ${s === "ACTIVE" && hasActiveBlock ? "text-gray-400" : ""}`}>
-                    {s === "UPCOMING" ? "Upcoming" : "Active"}
+                    {s === "UPCOMING" ? "Upcoming (Recommended)" : "Active"}
                   </span>
                 </label>
               ))}
@@ -539,13 +696,6 @@ function AddSemesterModal({ existingSemesters, onClose, onSuccess }: AddSemester
             {errors.status && (
               <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-lg">
                 <p className="text-red-700 text-xs">{errors.status}</p>
-              </div>
-            )}
-            {form.status === "ACTIVE" && !hasActiveBlock && (
-              <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                <p className="text-amber-700 text-xs">
-                  Setting this semester as <strong>Active</strong> will make it the current semester immediately. Ensure no other semester is currently active.
-                </p>
               </div>
             )}
           </div>
@@ -558,11 +708,11 @@ function AddSemesterModal({ existingSemesters, onClose, onSuccess }: AddSemester
           </button>
           <button
             onClick={handleSave}
-            disabled={saving || saved}
+            disabled={saving || saved || !ayValidation.valid || termAvailability.bothExist}
             className={`px-5 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2 transition-all ${
               saved
                 ? "bg-green-600 text-white"
-                : "bg-[#001A4D] text-white hover:bg-[#001A4D]/90"
+                : "bg-[#001A4D] text-white hover:bg-[#001A4D]/90 disabled:opacity-50 disabled:cursor-not-allowed"
             }`}
           >
             {saving ? (
@@ -588,8 +738,17 @@ function AddSemesterModal({ existingSemesters, onClose, onSuccess }: AddSemester
   );
 }
 
+
 // ─── Rollover Modal ────────────────────────────────────────────────────────────
-function RolloverModal({ onClose }: { onClose: () => void }) {
+interface RolloverModalProps {
+  activeSemester: SemesterDocument | undefined;
+  existingSemesters: SemesterDocument[];
+  onClose: () => void;
+  onSuccess?: () => void;
+}
+
+function RolloverModal({ activeSemester, existingSemesters, onClose, onSuccess }: RolloverModalProps) {
+  const { profile } = useAdviserProfile();
   const [step, setStep] = useState(1);
   const [executing, setExecuting] = useState(false);
   const [done, setDone] = useState(false);
@@ -599,31 +758,63 @@ function RolloverModal({ onClose }: { onClose: () => void }) {
   const [autoInactivate, setAutoInactivate] = useState(true);
   const [flagOfficers, setFlagOfficers] = useState(true);
   const [resetCompliance, setResetCompliance] = useState(true);
+  const [execError, setExecError] = useState<string | null>(null);
+
+  const upcomingSemesters = useMemo(
+    () => existingSemesters.filter((s) => s.status === "UPCOMING" && !s.archived),
+    [existingSemesters]
+  );
+
+  const [selectedTargetId, setSelectedTargetId] = useState<string>(
+    upcomingSemesters[0]?.id || ""
+  );
+
+  const targetSemester = useMemo(
+    () => upcomingSemesters.find((s) => s.id === selectedTargetId) || upcomingSemesters[0],
+    [upcomingSemesters, selectedTargetId]
+  );
 
   const steps = ["Select New Semester", "Review Impact", "Configure Rollover", "Confirm & Execute"];
 
   const execSteps = [
-    "Closing current active semester...",
-    "Updating student account statuses...",
-    "Resetting semester compliance scores...",
-    "Processing budget carry-over...",
-    "Generating re-enrollment notifications...",
-    "Activating new semester...",
-    "Updating system configuration...",
-    "Writing audit log entry...",
+    "Validating semester records and permissions...",
+    `Closing active semester (${activeSemester?.label || 'Current'})...`,
+    `Activating target semester (${targetSemester?.label || 'Next'})...`,
+    "Flagging active students for re-enrollment in active registry...",
+    "Writing immutable audit trail log...",
   ];
 
-  const handleExecute = () => {
+  const handleExecute = async () => {
+    if (!activeSemester || !targetSemester) return;
     setExecuting(true);
-    let s = 0;
-    const interval = setInterval(() => {
-      s++;
-      setExecStep(s);
-      if (s >= execSteps.length) {
-        clearInterval(interval);
-        setTimeout(() => setDone(true), 600);
-      }
-    }, 700);
+    setExecError(null);
+    setExecStep(0);
+
+    try {
+      setExecStep(1);
+      await new Promise((r) => setTimeout(r, 600));
+
+      setExecStep(2);
+      await new Promise((r) => setTimeout(r, 600));
+
+      setExecStep(3);
+      await executeSemesterRollover(
+        activeSemester,
+        targetSemester,
+        { carryBudget, autoInactivate, flagOfficers, resetCompliance },
+        profile?.uid
+      );
+
+      setExecStep(4);
+      await new Promise((r) => setTimeout(r, 600));
+
+      setDone(true);
+      if (onSuccess) onSuccess();
+    } catch (err: any) {
+      console.error("Rollover execution error:", err);
+      setExecError(err?.message || "Failed to execute rollover.");
+      setExecuting(false);
+    }
   };
 
   if (executing) {
@@ -631,7 +822,7 @@ function RolloverModal({ onClose }: { onClose: () => void }) {
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85">
         <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[480px] p-8">
           <div className="bg-gradient-to-r from-[#001A4D] to-[#83358E] -mx-8 -mt-8 px-8 py-5 rounded-t-2xl mb-6 flex items-center gap-3">
-            <RefreshCw className="w-9 h-9 text-[#FFD41C] animate-spin" style={{ animationDuration: "2s" }} />
+            <RefreshCw className="w-8 h-8 text-[#FFD41C] animate-spin" style={{ animationDuration: "2s" }} />
             <span className="text-white font-bold text-lg">{done ? "Rollover Complete!" : "Executing Rollover..."}</span>
           </div>
 
@@ -641,12 +832,17 @@ function RolloverModal({ onClose }: { onClose: () => void }) {
                 <CheckCircle className="w-8 h-8 text-green-600" />
               </div>
               <p className="text-[#001A4D] font-bold text-xl mb-1">Semester Rollover Complete!</p>
-              <p className="text-gray-500 text-sm mb-4">New semester is now active.</p>
+              <p className="text-gray-500 text-sm mb-1">
+                <strong>{targetSemester?.label}</strong> is now the active semester.
+              </p>
+              <p className="text-xs text-gray-400 mb-5">
+                All active students are now listed under <strong>Re-enrollment Management</strong>.
+              </p>
               <button
                 onClick={onClose}
                 className="w-full py-3 bg-[#001A4D] text-[#FFD41C] font-bold rounded-xl text-sm hover:bg-[#001A4D]/90 transition-colors"
               >
-                View New Semester Dashboard
+                View Updated Dashboard
               </button>
             </div>
           ) : (
@@ -694,7 +890,7 @@ function RolloverModal({ onClose }: { onClose: () => void }) {
         {/* Header */}
         <div className="bg-gradient-to-r from-[#001A4D] to-[#83358E] px-8 py-5 rounded-t-2xl flex items-center gap-4">
           <div className="w-[52px] h-[52px] bg-[#FFD41C] rounded-full flex items-center justify-center">
-            <RefreshCw className="w-7 h-7 text-[#001A4D] animate-spin" style={{ animationDuration: "4s" }} />
+            <RefreshCw className="w-7 h-7 text-[#001A4D]" />
           </div>
           <div>
             <p className="text-white font-bold text-[22px]">Semester Rollover</p>
@@ -730,40 +926,113 @@ function RolloverModal({ onClose }: { onClose: () => void }) {
           })}
         </div>
 
+        {/* Error notice if any */}
+        {execError && (
+          <div className="mx-6 mt-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2 text-xs text-red-700">
+            <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+            <p>{execError}</p>
+          </div>
+        )}
+
         {/* Step Content */}
         <div className="flex-1 overflow-y-auto p-6">
           {step === 1 && (
-            <div>
-              <p className="text-[#001A4D] font-bold text-lg mb-1">Which semester are you starting?</p>
-              <p className="text-gray-500 text-sm mb-5">Select the semester that will become active after this rollover.</p>
-              <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2">
-                <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
-                <p className="text-amber-700 text-sm">
-                  Make sure the target semester has been added via <strong>Add Semester</strong> before running a rollover. Only <strong>UPCOMING</strong> semesters can be activated.
-                </p>
-              </div>
+            <div className="space-y-4">
+              <p className="text-[#001A4D] font-bold text-lg mb-1">Which upcoming semester are you activating?</p>
+              <p className="text-gray-500 text-sm mb-4">
+                Select the target semester from your registered upcoming semesters.
+              </p>
+
+              {upcomingSemesters.length === 0 ? (
+                <div className="p-5 bg-amber-50 border border-amber-200 rounded-xl space-y-2">
+                  <div className="flex items-center gap-2 text-amber-800 font-bold">
+                    <AlertTriangle className="w-5 h-5 text-amber-600" />
+                    No Upcoming Semesters Found
+                  </div>
+                  <p className="text-amber-700 text-xs leading-relaxed">
+                    You do not have any registered <strong>UPCOMING</strong> semesters. Please close this modal, click <strong>"Add Academic Semester"</strong>, and create the next semester before running a rollover.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {upcomingSemesters.map((sem) => {
+                    const isSelected = (targetSemester?.id === sem.id);
+                    return (
+                      <label
+                        key={sem.id}
+                        onClick={() => setSelectedTargetId(sem.id)}
+                        className={`block p-4 border rounded-xl cursor-pointer transition-all ${
+                          isSelected
+                            ? "border-[#83358E] bg-[#F3E8FF]/30 ring-2 ring-[#83358E]/40"
+                            : "border-gray-200 hover:border-gray-300"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <input
+                              type="radio"
+                              name="targetSemester"
+                              checked={isSelected}
+                              onChange={() => setSelectedTargetId(sem.id)}
+                              className="accent-[#83358E]"
+                            />
+                            <div>
+                              <p className="font-bold text-[#001A4D] text-base">
+                                {sem.semester} · A.Y. {sem.academicYear}
+                              </p>
+                              <p className="text-xs text-gray-500 mt-0.5">
+                                {formatDate(sem.startDate)} – {formatDate(sem.endDate)}
+                              </p>
+                            </div>
+                          </div>
+                          <span className="px-3 py-1 bg-purple-100 text-[#83358E] text-xs font-bold rounded-full">
+                            {sem.label}
+                          </span>
+                        </div>
+                        {sem.reenrollDeadline && (
+                          <div className="mt-2 text-xs text-gray-500 pl-7">
+                            Re-enrollment Deadline: <strong className="text-gray-700">{formatDate(sem.reenrollDeadline)}</strong>
+                          </div>
+                        )}
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
           {step === 2 && (
             <div>
-              <p className="text-[#001A4D] font-bold text-lg mb-5">What will happen during this rollover?</p>
+              <p className="text-[#001A4D] font-bold text-lg mb-4">What will happen during this rollover?</p>
+              
+              {/* Transition Banner */}
+              <div className="p-4 bg-gradient-to-r from-[#001A4D] to-[#83358E] rounded-xl text-white mb-5 flex items-center justify-between">
+                <div>
+                  <p className="text-white/70 text-xs uppercase font-bold tracking-wider">Closing Active Semester</p>
+                  <p className="text-base font-bold">{activeSemester?.label || "None"}</p>
+                </div>
+                <div className="text-2xl font-bold text-[#FFD41C]">➔</div>
+                <div>
+                  <p className="text-[#FFD41C] text-xs uppercase font-bold tracking-wider">Activating New Semester</p>
+                  <p className="text-base font-bold">{targetSemester?.label}</p>
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <div className="border border-gray-200 rounded-xl overflow-hidden">
-                  <div className="border-l-4 border-red-500 pl-3 py-3 pr-3 bg-gray-50">
-                    <p className="text-[#001A4D] font-bold text-sm">What Resets (Fresh Start):</p>
+                  <div className="border-l-4 border-amber-500 pl-3 py-3 pr-3 bg-gray-50">
+                    <p className="text-[#001A4D] font-bold text-sm">State Changes (New Term):</p>
                   </div>
                   {[
-                    "All active student accounts → Pending Re-enrollment",
-                    "Student compliance scores → Reset to 0%",
-                    "Student attendance rates → Reset to 0%",
-                    "Organization compliance checklists → Reset",
-                    "Active event proposal queue → Closed",
-                    "Current semester budget tracking → Closed",
-                    "Scanner activation codes → Invalidated",
+                    "Active Semester status → COMPLETED",
+                    "Target Semester status → ACTIVE",
+                    "All Active Students → Pending Re-enrollment",
+                    "Compliance checklists → Fresh semester cycle",
+                    "New event proposals anchor to new term",
                   ].map((item, i) => (
                     <div key={i} className="flex items-start gap-2 px-3 py-2.5 border-b border-gray-100 last:border-0">
-                      <RefreshCw className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+                      <RefreshCw className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
                       <span className="text-[#001A4D] text-xs">{item}</span>
                     </div>
                   ))}
@@ -773,15 +1042,12 @@ function RolloverModal({ onClose }: { onClose: () => void }) {
                     <p className="text-[#001A4D] font-bold text-sm">What Carries Over (Preserved):</p>
                   </div>
                   {[
-                    "All event records and outcomes",
+                    "All past event records and outcomes",
                     "All attendance logs — Preserved in full",
-                    "All payment records and outstanding balances",
-                    "All fine records and outstanding fines",
-                    "All liquidation records",
-                    "All student identity and verification data",
-                    "All certificate records",
-                    "All audit logs and adviser decisions",
-                    "All organization membership records",
+                    "All unpaid balances and fines carry over",
+                    "All liquidation and audit trail records",
+                    "All student verification data",
+                    "All issued certificates",
                   ].map((item, i) => (
                     <div key={i} className="flex items-start gap-2 px-3 py-2.5 border-b border-gray-100 last:border-0">
                       <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
@@ -804,19 +1070,19 @@ function RolloverModal({ onClose }: { onClose: () => void }) {
                 </div>
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Re-enrollment Deadline</label>
-                    <input
-                      type="date"
-                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">Students must confirm enrollment by this date.</p>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Re-enrollment Deadline</label>
+                    <p className="text-xs font-bold text-[#001A4D]">
+                      {targetSemester?.reenrollDeadline ? formatDate(targetSemester.reenrollDeadline) : "Configured on semester creation"}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-0.5">Students must confirm enrollment by this date.</p>
                   </div>
                   <div className="flex items-start gap-3 p-3 bg-gray-50 border border-gray-200 rounded-lg">
                     <div className="flex-1">
                       <p className="text-sm font-medium text-gray-900">Auto-Inactivate Students Who Don't Confirm</p>
-                      <p className="text-xs text-gray-500">After 14 days past deadline</p>
+                      <p className="text-xs text-gray-500">Allows one-click batch inactivation of unconfirmed students in Student Registry</p>
                     </div>
                     <button
+                      type="button"
                       onClick={() => setAutoInactivate(!autoInactivate)}
                       className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${autoInactivate ? "bg-[#83358E]" : "bg-gray-300"}`}
                     >
@@ -834,9 +1100,10 @@ function RolloverModal({ onClose }: { onClose: () => void }) {
                 <div className="flex items-start gap-3 p-3 bg-gray-50 border border-gray-200 rounded-lg">
                   <div className="flex-1">
                     <p className="text-sm font-medium text-gray-900">Carry Over Unspent Org Budgets</p>
-                    <p className="text-xs text-gray-500">Add remaining balances from this semester to next semester's allocation.</p>
+                    <p className="text-xs text-gray-500">Preserve remaining club cash balances into next semester's allocation.</p>
                   </div>
                   <button
+                    type="button"
                     onClick={() => setCarryBudget(!carryBudget)}
                     className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${carryBudget ? "bg-[#83358E]" : "bg-gray-300"}`}
                   >
@@ -852,8 +1119,8 @@ function RolloverModal({ onClose }: { onClose: () => void }) {
                 </div>
                 <div className="space-y-3">
                   {[
-                    { label: "Flag Officer Roles for Re-assignment Review", desc: "Notify SAO that officer positions should be reviewed.", state: flagOfficers, toggle: () => setFlagOfficers(!flagOfficers) },
-                    { label: "Reset Organization Compliance Scores", desc: "Resets all organization compliance tracking for the new semester.", state: resetCompliance, toggle: () => setResetCompliance(!resetCompliance) },
+                    { label: "Flag Officer Roles for Re-assignment Review", desc: "Notify SAS that officer positions should be confirmed.", state: flagOfficers, toggle: () => setFlagOfficers(!flagOfficers) },
+                    { label: "Reset Organization Compliance Scores", desc: "Resets organization compliance checklist for the fresh semester cycle.", state: resetCompliance, toggle: () => setResetCompliance(!resetCompliance) },
                   ].map((item) => (
                     <div key={item.label} className="flex items-start gap-3 p-3 bg-gray-50 border border-gray-200 rounded-lg">
                       <div className="flex-1">
@@ -861,6 +1128,7 @@ function RolloverModal({ onClose }: { onClose: () => void }) {
                         <p className="text-xs text-gray-500">{item.desc}</p>
                       </div>
                       <button
+                        type="button"
                         onClick={item.toggle}
                         className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${item.state ? "bg-[#83358E]" : "bg-gray-300"}`}
                       >
@@ -876,16 +1144,17 @@ function RolloverModal({ onClose }: { onClose: () => void }) {
           {step === 4 && (
             <div>
               <p className="text-[#001A4D] font-bold text-lg mb-4">Final confirmation before executing rollover.</p>
-              <div className="p-5 bg-[#001A4D] rounded-2xl mb-4">
-                <p className="text-[#FFD41C] font-bold text-xs uppercase tracking-wider mb-3">Rollover Summary</p>
+              <div className="p-5 bg-[#001A4D] rounded-2xl mb-4 text-white">
+                <p className="text-[#FFD41C] font-bold text-xs uppercase tracking-wider mb-3">Rollover Execution Summary</p>
                 {[
+                  { label: "Current Active Semester", value: activeSemester ? `${activeSemester.semester} · A.Y. ${activeSemester.academicYear}` : "None" },
+                  { label: "Target Active Semester", value: targetSemester ? `${targetSemester.semester} · A.Y. ${targetSemester.academicYear}` : "—" },
                   { label: "Budget carry-over", value: carryBudget ? "Yes — unspent balances roll over" : "No — fresh start" },
-                  { label: "Auto-inactivate", value: autoInactivate ? "After 14 days of no confirmation" : "Disabled" },
-                  { label: "Execution time", value: "Estimated 2–5 minutes" },
+                  { label: "Auto-inactivate overdue", value: autoInactivate ? "Enabled" : "Disabled" },
                 ].map((row) => (
-                  <div key={row.label} className="flex justify-between items-center py-2 border-b border-white/10 last:border-0">
-                    <span className="text-white/70 text-sm">{row.label}</span>
-                    <span className="text-white text-sm font-medium">{row.value}</span>
+                  <div key={row.label} className="flex justify-between items-center py-2 border-b border-white/10 last:border-0 text-sm">
+                    <span className="text-white/70">{row.label}</span>
+                    <span className="text-white font-medium">{row.value}</span>
                   </div>
                 ))}
               </div>
@@ -897,12 +1166,10 @@ function RolloverModal({ onClose }: { onClose: () => void }) {
                     onChange={() => setAuthorized(!authorized)}
                     className="w-5 h-5 accent-[#83358E] flex-shrink-0 mt-0.5"
                   />
-                  <span className="text-sm text-gray-700">
-                    I authorize this semester rollover. I understand this will affect all active student accounts, reset semester-specific data, and activate the next semester.{" "}
-                    <strong>This action cannot be undone.</strong>
+                  <span className="text-sm text-gray-700 leading-relaxed">
+                    I authorize this semester rollover. I understand this will activate <strong>{targetSemester?.label}</strong>, complete the previous active semester, and flag active students for re-enrollment.
                   </span>
                 </label>
-                <p className="text-xs text-gray-400 mt-2 ml-8">Auto-filled: {new Date().toLocaleString()}</p>
               </div>
             </div>
           )}
@@ -919,18 +1186,18 @@ function RolloverModal({ onClose }: { onClose: () => void }) {
           {step < 4 ? (
             <button
               onClick={() => setStep(step + 1)}
-              className="px-5 py-2.5 bg-[#83358E] text-white rounded-lg text-sm font-medium hover:bg-[#6D2A78] transition-colors"
+              disabled={step === 1 && !targetSemester}
+              className="px-5 py-2.5 bg-[#83358E] text-white rounded-lg text-sm font-medium hover:bg-[#6D2A78] transition-colors disabled:opacity-50"
             >
               Next: {steps[step]} →
             </button>
           ) : (
             <div className="flex items-center gap-3">
-              <p className="text-xs text-red-500">This action cannot be undone.</p>
               <button
                 onClick={handleExecute}
-                disabled={!authorized}
+                disabled={!authorized || !targetSemester}
                 className={`px-5 py-3 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors ${
-                  authorized ? "bg-[#001A4D] text-[#FFD41C] hover:bg-[#001A4D]/90" : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                  authorized && targetSemester ? "bg-[#001A4D] text-[#FFD41C] hover:bg-[#001A4D]/90" : "bg-gray-100 text-gray-400 cursor-not-allowed"
                 }`}
               >
                 <RefreshCw className="w-4 h-4" />
@@ -943,6 +1210,7 @@ function RolloverModal({ onClose }: { onClose: () => void }) {
     </div>
   );
 }
+
 
 // ─── Semester History View ─────────────────────────────────────────────────────
 function SemesterHistoryModal({
@@ -1168,6 +1436,18 @@ function EditSemesterModal({ semester, existingSemesters, onClose }: EditSemeste
   const [saving, setSaving] = useState(false);
   const [saved,  setSaved]  = useState(false);
 
+  // Live AY strict validation
+  const ayValidation = useMemo(
+    () => validateAcademicYearStrict(form.academicYear),
+    [form.academicYear]
+  );
+
+  const handleAYInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formatted = sanitizeAcademicYearInput(e.target.value);
+    setForm((prev) => ({ ...prev, academicYear: formatted }));
+    setErrors((prev) => ({ ...prev, academicYear: "", duplicate: "" }));
+  };
+
   const autoLabel = useMemo(() => {
     if (!form.academicYear || !form.semester) return "";
     return generateSemesterLabel(form.academicYear, form.semester as SemesterTerm);
@@ -1176,19 +1456,14 @@ function EditSemesterModal({ semester, existingSemesters, onClose }: EditSemeste
   function validate(): Record<string, string> {
     const errs: Record<string, string> = {};
 
-    if (!form.academicYear.trim()) errs.academicYear = "Academic year is required.";
+    const ayCheck = validateAcademicYearStrict(form.academicYear);
+    if (!ayCheck.valid) {
+      errs.academicYear = ayCheck.error || "Invalid academic year.";
+    }
+
     if (!form.semester)           errs.semester     = "Please select a semester.";
     if (!form.startDate)          errs.startDate    = "Start date is required.";
     if (!form.endDate)            errs.endDate      = "End date is required.";
-
-    const ayClean = form.academicYear.replace(/[–—]/g, "-").trim();
-    const ayMatch = /^\d{4}-\d{4}$/.test(ayClean);
-    if (form.academicYear && !ayMatch) {
-      errs.academicYear = "Format must be YYYY-YYYY (e.g. 2026-2027).";
-    } else if (ayMatch) {
-      const [sy, ey] = ayClean.split("-").map(Number);
-      if (ey !== sy + 1) errs.academicYear = "End year must be exactly 1 year after start year.";
-    }
 
     if (form.startDate && form.endDate && form.endDate <= form.startDate) {
       errs.endDate = "End date must be after start date.";
@@ -1198,11 +1473,10 @@ function EditSemesterModal({ semester, existingSemesters, onClose }: EditSemeste
     }
 
     // Duplicate: same AY + term, but not itself
-    const ayClean2 = form.academicYear.replace(/[–—\s]/g, "-").toLowerCase();
     const duplicate = existingSemesters.some(
       (s) =>
         s.id !== semester.id &&
-        s.academicYear.replace(/[–—\s]/g, "-").toLowerCase() === ayClean2 &&
+        s.academicYear.replace(/[–—\s]/g, "-").toLowerCase() === form.academicYear.replace(/[–—\s]/g, "-").toLowerCase() &&
         s.semester === form.semester
     );
     if (duplicate && !errs.academicYear && !errs.semester) {
@@ -1294,16 +1568,24 @@ function EditSemesterModal({ semester, existingSemesters, onClose }: EditSemeste
             <input
               type="text"
               placeholder="e.g. 2026-2027"
-              className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent ${
-                errors.academicYear ? "border-red-400 bg-red-50" : "border-gray-300"
+              maxLength={9}
+              className={`w-full px-4 py-2.5 border rounded-lg font-mono focus:ring-2 focus:ring-[#83358E] focus:border-transparent ${
+                errors.academicYear || (!ayValidation.valid && form.academicYear.length === 9)
+                  ? "border-red-400 bg-red-50"
+                  : "border-gray-300"
               }`}
               value={form.academicYear}
-              onChange={(e) => {
-                setForm({ ...form, academicYear: e.target.value });
-                setErrors((p) => ({ ...p, academicYear: "", duplicate: "" }));
-              }}
+              onChange={handleAYInputChange}
             />
-            {errors.academicYear && <p className="text-red-500 text-xs mt-1">{errors.academicYear}</p>}
+            {errors.academicYear ? (
+              <p className="text-red-500 text-xs mt-1">{errors.academicYear}</p>
+            ) : !ayValidation.valid && form.academicYear.length === 9 ? (
+              <p className="text-red-500 text-xs mt-1">{ayValidation.error}</p>
+            ) : form.academicYear.length > 0 && form.academicYear.length < 9 ? (
+              <p className="text-amber-600 text-xs mt-1 font-sans">
+                Format must be YYYY-YYYY (e.g. 2026-2027)
+              </p>
+            ) : null}
           </div>
 
           {/* Semester */}
@@ -1419,9 +1701,11 @@ function EditSemesterModal({ semester, existingSemesters, onClose }: EditSemeste
           </button>
           <button
             onClick={handleSave}
-            disabled={saving || saved}
+            disabled={saving || saved || !ayValidation.valid}
             className={`px-5 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2 transition-all ${
-              saved ? "bg-green-600 text-white" : "bg-[#001A4D] text-white hover:bg-[#001A4D]/90"
+              saved
+                ? "bg-green-600 text-white"
+                : "bg-[#001A4D] text-white hover:bg-[#001A4D]/90 disabled:opacity-50 disabled:cursor-not-allowed"
             }`}
           >
             {saving ? (
@@ -1768,7 +2052,13 @@ export function AcademicSemesterSettings() {
           onSuccess={() => setShowAddModal(false)}
         />
       )}
-      {showRollover && <RolloverModal onClose={() => setShowRollover(false)} />}
+      {showRollover && (
+        <RolloverModal
+          activeSemester={activeSemester}
+          existingSemesters={semesters}
+          onClose={() => setShowRollover(false)}
+        />
+      )}
       {historyTarget && (
         <SemesterHistoryModal semester={historyTarget} onClose={() => setHistoryTarget(null)} />
       )}

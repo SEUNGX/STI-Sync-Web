@@ -734,6 +734,16 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
                   eventTitle={event.title}
                   adminFeeAmount={event.adminFeeOverride}
                   recordedByUid={profile?.uid || 'admin'}
+                  isOfficer={false}
+                  isClubEvent={
+                    event.isOfficerProposal === true ||
+                    (!!event.hostingOrgId &&
+                      event.hostingOrgId !== 'sas' &&
+                      event.hostingOrgId !== 'sas_admin' &&
+                      event.hostingOrgId !== 'sao' &&
+                      event.hostingOrgId !== 'sao_admin')
+                  }
+                  hostingOrgName={orgName}
                 />
               </div>
             )}

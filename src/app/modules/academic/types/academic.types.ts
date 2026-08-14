@@ -50,3 +50,20 @@ export interface SectionDocument {
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
+
+// ─── Rollover Interfaces ──────────────────────────────────────────────────────
+export interface RolloverOptions {
+  carryBudget?: boolean;
+  autoInactivate?: boolean;
+  flagOfficers?: boolean;
+  resetCompliance?: boolean;
+}
+
+export interface RolloverExecutionResult {
+  success: boolean;
+  closingSemesterLabel: string;
+  targetSemesterLabel: string;
+  timestamp: string;
+  studentsAffected: number;
+}
+

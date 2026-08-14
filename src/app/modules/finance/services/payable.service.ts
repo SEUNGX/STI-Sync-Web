@@ -14,6 +14,7 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import { db } from '../../../../services/firebase';
+import { addLedgerTransaction, addOrgLedgerTransaction } from './finance.service';
 import type {
   PayableDocument,
   CreatePayablePayload,
@@ -209,11 +210,53 @@ export async function recordPayment(
     updatedAt: serverTimestamp(),
   };
 
+  // Option A (Strict): Automatically unlock only when 100% fully paid, or if explicit boolean passed
   if (typeof unlockQRTicket === 'boolean') {
     updates.qrTicketUnlocked = unlockQRTicket;
+  } else if (newStatus === 'paid') {
+    updates.qrTicketUnlocked = true;
   }
 
   await updateDoc(payableRef, updates);
+
+  // Auto-post payment to the appropriate independent ledger
+  if (paymentAmount > 0) {
+    try {
+      const isClubPayable =
+        data.organizationId &&
+        data.organizationId !== 'sao_admin' &&
+        data.organizationId !== 'sao';
+
+      if (isClubPayable) {
+        await addOrgLedgerTransaction({
+          organizationId: data.organizationId!,
+          semesterId: data.semesterId || null,
+          date: Timestamp.now(),
+          description: `Student Payment: ${data.studentName || 'Student'} — ${data.label}`,
+          eventId: data.eventId || null,
+          type: 'income',
+          source: 'student_collection',
+          amount: paymentAmount,
+          addedBy: recordedBy,
+          collectionId: payableId,
+        });
+      } else {
+        await addLedgerTransaction({
+          semesterId: data.semesterId || null,
+          date: Timestamp.now(),
+          description: `Student Payment: ${data.studentName || 'Student'} — ${data.label}`,
+          eventId: data.eventId || null,
+          type: 'income',
+          source: 'student_collection',
+          amount: paymentAmount,
+          addedBy: recordedBy,
+          collectionId: payableId,
+        });
+      }
+    } catch (ledgerErr) {
+      console.warn('[recordPayment] Non-fatal error posting to ledger:', ledgerErr);
+    }
+  }
 }
 
 /**
@@ -374,14 +417,17 @@ export async function recordEventFinePayables(
     existingFineKeys.add(`${studentId}_${category}`);
   });
 
-  const isSaoAdminEvent =
+  const isSasAdminEvent =
+    eventData.hostingOrgId === 'sas_admin' ||
+    eventData.hostingOrgId === 'sas' ||
     eventData.hostingOrgId === 'sao_admin' ||
     eventData.hostingOrgId === 'sao' ||
+    eventData.isOfficerProposal === false ||
     !isOfficer;
 
-  const payableType: PayableType = isSaoAdminEvent ? 'admin_fine' : 'org_fine';
-  const orgId = eventData.hostingOrgId || null;
-  const orgName = eventData.hostingOrgName || eventData.org || null;
+  const payableType: PayableType = isSasAdminEvent ? 'admin_fine' : 'org_fine';
+  const orgId = isSasAdminEvent ? null : (eventData.hostingOrgId || null);
+  const orgName = isSasAdminEvent ? 'Student Affairs and Services (SAS)' : (eventData.hostingOrgName || eventData.org || null);
   const semesterId = eventData.semesterId || 'current';
 
   let createdCount = 0;
@@ -479,4 +525,211 @@ export async function recordEventFinePayables(
   }
 
   return { created: createdCount, skipped: skippedCount };
+}
+
+/**
+ * Dynamically synchronizes missing event payables and membership dues for a student.
+ * Useful when a student registers late, is approved to ACTIVE status, or joins a club/department.
+ */
+export async function syncStudentPayablesForActiveEvents(
+  student: {
+    id: string;
+    studentId?: string;
+    schoolId?: string;
+    authUid?: string;
+    firstName?: string;
+    lastName?: string;
+    studentName?: string;
+    departmentId?: string;
+    yearLevel?: string;
+    semester?: string;
+  },
+  createdBy: string = 'system_sync'
+): Promise<number> {
+  const studentDocId = student.id || student.authUid || student.studentId;
+  if (!studentDocId) return 0;
+
+  const officialSchoolId = student.studentId || student.schoolId || '';
+  const fullName =
+    student.studentName ||
+    `${student.firstName || ''} ${student.lastName || ''}`.trim() ||
+    'Student';
+  const studentDeptId = student.departmentId || '';
+  const studentYear = student.yearLevel || '';
+
+  let createdCount = 0;
+
+  try {
+    // 1. Fetch approved events
+    const eventsRef = collection(db, 'events');
+    const qEvents = query(eventsRef, where('proposalStatus', '==', 'approved'));
+    const eventsSnap = await getDocs(qEvents);
+
+    const eligibleEvents = eventsSnap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((event: any) => {
+        const feeAmount =
+          Number(event.adminFeeOverride) ||
+          Number(event.suggestedFeePerStudent) ||
+          Number(event.feeAmount) ||
+          Number(event.fee) ||
+          0;
+        if (!event.studentPayablesEnabled && feeAmount <= 0) return false;
+
+        const targetDeptIds = event.targetDepartmentIds || [];
+        const targetYearLevels = event.targetYearLevels || [];
+        const isAllStudents =
+          event.targetAudience === 'all' ||
+          !event.targetAudience ||
+          (targetDeptIds.length === 0 && targetYearLevels.length === 0);
+
+        if (isAllStudents) return true;
+
+        const matchesDept =
+          targetDeptIds.length === 0 ||
+          (studentDeptId && targetDeptIds.includes(studentDeptId));
+        const matchesYear =
+          targetYearLevels.length === 0 ||
+          (studentYear && targetYearLevels.includes(studentYear));
+
+        return matchesDept && matchesYear;
+      });
+
+    // 2. Query existing payables for this student to deduplicate
+    const payablesRef = collection(db, PAYABLES_COLLECTION);
+    const qStudentPayables = query(
+      payablesRef,
+      where('studentId', 'in', [studentDocId, officialSchoolId].filter(Boolean))
+    );
+    const studentPayablesSnap = await getDocs(qStudentPayables);
+
+    const existingEventIds = new Set<string>();
+    const existingMembershipOrgIds = new Set<string>();
+
+    studentPayablesSnap.docs.forEach((d) => {
+      const data = d.data();
+      if (data.eventId) existingEventIds.add(data.eventId);
+      if (data.type === 'membership_due' && data.organizationId) {
+        existingMembershipOrgIds.add(data.organizationId);
+      }
+    });
+
+    const newPayablesToCreate: any[] = [];
+
+    for (const evt of eligibleEvents) {
+      if (existingEventIds.has(evt.id)) continue;
+
+      const fee =
+        Number(evt.adminFeeOverride) ||
+        Number(evt.suggestedFeePerStudent) ||
+        Number(evt.feeAmount) ||
+        Number(evt.fee) ||
+        0;
+
+      if (fee <= 0) continue;
+
+      newPayablesToCreate.push({
+        studentId: studentDocId,
+        studentName: fullName,
+        studentSchoolId: officialSchoolId,
+        type: 'event_fee',
+        label: `Event Fee — ${evt.title || 'Event'}`,
+        description: `Fee for event: ${evt.title || ''}`,
+        organizationId:
+          evt.hostingOrgId &&
+          evt.hostingOrgId !== 'sas_admin' &&
+          evt.hostingOrgId !== 'sas' &&
+          evt.hostingOrgId !== 'sao_admin' &&
+          evt.hostingOrgId !== 'sao'
+            ? evt.hostingOrgId
+            : null,
+        organizationName:
+          evt.hostingOrgId === 'sas' || evt.hostingOrgId === 'sas_admin'
+            ? 'Student Affairs and Services (SAS)'
+            : (evt.hostingOrgName || evt.org || null),
+        semesterId: evt.semesterId || '',
+        eventId: evt.id,
+        assignedAmount: fee,
+        paidAmount: 0,
+        status: 'pending',
+        qrTicketUnlocked: false,
+        dueDate:
+          evt.sessions && evt.sessions[0]?.date
+            ? Timestamp.fromDate(new Date(evt.sessions[0].date))
+            : null,
+        paidAt: null,
+        recordedBy: null,
+        paymentMethod: null,
+        createdBy,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      existingEventIds.add(evt.id);
+    }
+
+    // 3. Check active club memberships in organization_members
+    const membersRef = collection(db, 'organization_members');
+    const memberIdentifiers = [studentDocId, officialSchoolId].filter(Boolean);
+    for (const ident of memberIdentifiers) {
+      const qMemberships = query(
+        membersRef,
+        where('studentId', '==', ident),
+        where('status', '==', 'active')
+      );
+      const membersSnap = await getDocs(qMemberships);
+
+      for (const mDoc of membersSnap.docs) {
+        const mData = mDoc.data();
+        const orgId = mData.organizationId;
+        if (!orgId || existingMembershipOrgIds.has(orgId)) continue;
+
+        newPayablesToCreate.push({
+          studentId: studentDocId,
+          studentName: fullName,
+          studentSchoolId: officialSchoolId,
+          type: 'membership_due',
+          label: `Membership Due (${mData.organizationName || 'Club'})`,
+          description: `Semester membership fee for ${mData.organizationName || 'Organization'}`,
+          organizationId: orgId,
+          organizationName: mData.organizationName || null,
+          semesterId: mData.semesterId || 'active',
+          eventId: null,
+          assignedAmount: Number(mData.membershipFee) || 50,
+          paidAmount: 0,
+          status: 'pending',
+          qrTicketUnlocked: false,
+          dueDate: null,
+          paidAt: null,
+          recordedBy: null,
+          paymentMethod: null,
+          createdBy,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+        existingMembershipOrgIds.add(orgId);
+      }
+    }
+
+    // 4. Batch commit in chunks of 500
+    if (newPayablesToCreate.length > 0) {
+      const chunks = [];
+      for (let i = 0; i < newPayablesToCreate.length; i += 500) {
+        chunks.push(newPayablesToCreate.slice(i, i + 500));
+      }
+
+      for (const chunk of chunks) {
+        const batch = writeBatch(db);
+        for (const p of chunk) {
+          const newRef = doc(payablesRef);
+          batch.set(newRef, { ...p, id: newRef.id });
+          createdCount++;
+        }
+        await batch.commit();
+      }
+    }
+  } catch (err) {
+    console.error('[syncStudentPayablesForActiveEvents] Error syncing payables:', err);
+  }
+
+  return createdCount;
 }

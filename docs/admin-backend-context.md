@@ -681,16 +681,59 @@ const transactions = rawTransactions.map((tx, idx, arr) => {
 
 ---
 
-## 13. Event Approval & Automated Payables Denormalization
+---
 
-### Workflow (`EventProposalReview.tsx` & `event.service.ts`)
-- **Approval Action (`approveEvent`)**: When an SAO Admin approves an event proposal (`proposalStatus: 'approved'`), the system automatically invokes `generatePayablesForEvent()`.
-- **Targeted Student Matching**: Queries active students matching the event's target departments and year levels.
-- **Denormalized Roster Generation**: Each document written to `/payables` explicitly stores:
-  - `studentName`: Student's full name (e.g. `"Lei Concordia"`)
-  - `studentSchoolId`: Official 11-digit STI Student ID (e.g. `"02000123456"`)
-  - `qrTicketUnlocked`: `false` (Defaults to **Locked 🔒** until admin unlocks or records payment)
-- **In-Context Access & Sync**:
-  - Embedded **Student Payables & QR Access Control** panel inside [EventProposalReview.tsx](file:///c:/VSCODE%20PROJECTS/STI%20Sync%20Web/src/app/admin/components/EventProposalReview.tsx).
-  - Includes a **Sync Roster Data** button to backfill missing denormalized fields or generate roster records on existing test events.
+<!-- AGENT-UPDATED: 2026-08-14 — Added Section 14: Independent SAS Event Creation & Cross-Organization Scanner Recruitment -->
+
+## 14. Independent SAS Event Creation & Cross-Organization Scanner Recruitment
+
+### Overview
+SAO/SAS Admin events are decoupled from student club organizations to ensure administrative, attendance monitoring, and financial liquidation autonomy from student club ledgers.
+
+- **Institutional Context (`Step1EventDetails.tsx`)**:
+  - The Hosting Organization selector is removed for Admin event creation.
+  - Automatically bound to `hostingOrgId: 'sas'` and `isOfficerProposal: false`.
+  - Identified in the system as **Student Affairs and Services (SAS)**.
+- **Cross-Organization Scanner Recruitment (`Step4Staff.tsx`)**:
+  - Admins can assign attendance scanners across all student clubs using the **Organization Scope** filter (`'all'` or specific club).
+  - Search input allows instant lookup of active student officers by name, student ID, or club acronym.
+  - Each assigned scanner records `officerUserId`, `officerName`, `organizationId`, and `organizationName` with granular permissions (`canCheckIn`, `canCheckOut`, `canViewList`, `canEditRecords`, `allowManualAttendance`, and `fullAccess`).
+- **Financial & Attendance Isolation**:
+  - Generated fine payables from Admin-created events are recorded as `admin_fine` (controlled by SAS) rather than `org_fine` (controlled by clubs).
+  - Admin financial liquidations filter strictly to SAS Admin-created events and exclude student club proposals.
+  - **Club Event Payables Read-Only Enforcement (`EventPayablesQRControl.tsx`)**: In Admin Event Review (`EventProposalReview.tsx`), payables for club-hosted events (`isClubEvent: true`) are strictly read-only. Admins can view the roster and collection progress for monitoring, but cannot record cash payments or toggle student QR ticket gate unlock status; payment collection and gate ticket unlocking for club events are handled exclusively by student officers of that organization.
+
+---
+
+<!-- AGENT-UPDATED: 2026-08-14 — Added Section 15: Semester Management, Strict Validation, Rollover Execution & Re-enrollment Lifecycle -->
+
+## 15. Semester Management, Strict Validation, Rollover Execution & Student Re-enrollment
+
+### 15.1 Add Semester Validation & Suggestions (`AcademicSemesterSettings.tsx`)
+- **Dynamic Academic Year Suggestions (`getAcademicYearSuggestions`)**: Provides one-click pills for upcoming academic years (e.g. `2025-2026`, `2026-2027`, `2027-2028`, `2028-2029`).
+- **Strict Past Year Blocking**: Disallows adding academic years that are in the past (`startYear < currentCalendarYear - 1`).
+- **Dynamic Semester Term Availability (`getSemesterTermAvailability`)**:
+  - Automatically queries registered semesters for the chosen Academic Year.
+  - If `1st Semester` is already created: `1st Semester` is disabled with a `(Already Created)` badge, and `2nd Semester` is selected automatically.
+  - If `2nd Semester` is already created: `2nd Semester` is disabled.
+  - If both terms exist: Form shows an inline warning prompting the user to select the next Academic Year.
+- **Smart Default Dates**: Auto-suggests standard semester start/end and re-enrollment dates upon selecting the term.
+
+### 15.2 Semester Rollover Engine (`academic.service.ts -> executeSemesterRollover`)
+- **Pre-flight Validation**: Admin must select an existing `UPCOMING` semester from Firestore.
+- **Batch Mutation**:
+  1. Sets active semester `status: 'COMPLETED'`, `updatedAt: Timestamp.now()`.
+  2. Sets target upcoming semester `status: 'ACTIVE'`, `updatedAt: Timestamp.now()`.
+  3. Writes an immutable audit entry in `/audit_logs`.
+- **Data Preservation**: All event proposals, attendance logs, fine records, payables, liquidations, and certificates remain permanently stamped with their respective historical `semesterId` and `academicYear`. Outstanding balances carry over into the student's ledger.
+
+### 15.3 Student Re-enrollment Lifecycle (`ReEnrollmentManagement.tsx`)
+- **Active Registry Re-enrollment State**: In `StudentRegistry.tsx` and `ReEnrollmentManagement.tsx`, students whose `schoolYear` or `semester` does not match the active semester automatically appear as `pending` (or `overdue` if past `reenrollDeadline`).
+- **Confirmation Actions**:
+  - **Individual Confirmation**: Modal allowing the Admin to verify/advance Year Level (1–4) and Section, then stamps the student with the active semester and `status: 'ACTIVE'`.
+  - **Bulk Confirmation**: Multi-student checkbox selection with **"Bulk Confirm Re-enrollment"** (`bulkReEnrollStudents`).
+  - **Overdue Inactivation**: One-click action to mark unconfirmed overdue students as `INACTIVE` (`inactivateOverdueStudents`).
+
+
+
 
