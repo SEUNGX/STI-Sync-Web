@@ -9,7 +9,6 @@ import ArchivedGraduates from '../components/student-registry/ArchivedGraduates'
 import { useStudents } from '../../modules/students/hooks/useStudentStream';
 import { useSemesters } from '../../modules/academic/hooks/useAcademicStream';
 import { StudentDocument } from '../../modules/students/types/student.types';
-import { SemesterDocument } from '../../modules/academic/types/academic.types';
 
 type RegistryView = 'dashboard' | 'pending' | 'reenrollment' | 'active' | 'inactive' | 'archived';
 
@@ -30,7 +29,6 @@ export function StudentRegistry() {
     const pending: StudentDocument[] = [];
     const active: StudentDocument[] = [];
     const inactive: StudentDocument[] = [];
-    const suspended: StudentDocument[] = [];
     const archived: StudentDocument[] = [];
     const reenrollment: StudentDocument[] = [];
 
@@ -48,16 +46,18 @@ export function StudentRegistry() {
         case 'INACTIVE':
           inactive.push(student);
           break;
-        case 'SUSPENDED':
-          suspended.push(student);
-          break;
         case 'ARCHIVED':
           archived.push(student);
+          break;
+        default:
+          if ((student.status as string) === 'SUSPENDED') {
+            inactive.push(student);
+          }
           break;
       }
     });
 
-    return { pending, active, inactive, suspended, archived, reenrollment };
+    return { pending, active, inactive, archived, reenrollment };
   }, [students, activeSemester]);
 
   if (loading) {
@@ -78,14 +78,14 @@ export function StudentRegistry() {
     );
   }
 
-  const { pending, active, inactive, suspended, archived, reenrollment } = categorizedStudents;
+  const { pending, active, inactive, archived, reenrollment } = categorizedStudents;
 
   const renderView = () => {
     switch (activeView) {
       case 'dashboard':
         return <RegistryDashboard 
-          onNavigate={setActiveView} 
-          categorizedStudents={categorizedStudents} 
+          onNavigate={(v) => setActiveView(v as RegistryView)} 
+          categorizedStudents={{ ...categorizedStudents, suspended: [] }} 
           activeSemester={activeSemester} 
           allStudents={students}
         />;
@@ -96,13 +96,13 @@ export function StudentRegistry() {
       case 'active':
         return <ActiveStudents students={active} />;
       case 'inactive':
-        return <InactiveSuspended inactiveStudents={inactive} suspendedStudents={suspended} />;
+        return <InactiveSuspended inactiveStudents={inactive} suspendedStudents={[]} />;
       case 'archived':
         return <ArchivedGraduates students={archived} />;
       default:
         return <RegistryDashboard 
-          onNavigate={setActiveView} 
-          categorizedStudents={categorizedStudents} 
+          onNavigate={(v) => setActiveView(v as RegistryView)} 
+          categorizedStudents={{ ...categorizedStudents, suspended: [] }} 
           activeSemester={activeSemester} 
           allStudents={students}
         />;
@@ -112,10 +112,10 @@ export function StudentRegistry() {
   return (
     <div className="space-y-6">
       {/* Sub-navigation */}
-      <div className="flex flex-wrap items-center gap-2 bg-white border border-[#E0E0E0] rounded-xl p-2">
+      <div className="flex flex-wrap items-center gap-2 bg-white border border-[#E0E0E0] rounded-xl p-2 shadow-sm">
         <button
           onClick={() => setActiveView('dashboard')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
             activeView === 'dashboard'
               ? 'bg-[#001A4D] text-white'
               : 'text-[#001A4D] hover:bg-gray-50'
@@ -125,7 +125,7 @@ export function StudentRegistry() {
         </button>
         <button
           onClick={() => setActiveView('pending')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
             activeView === 'pending'
               ? 'bg-[#001A4D] text-white'
               : 'text-[#001A4D] hover:bg-gray-50'
@@ -134,14 +134,14 @@ export function StudentRegistry() {
           <Clock className="w-4 h-4" />
           Pending Verification
           {pending.length > 0 && (
-            <span className="px-2 py-0.5 bg-red-500 text-white rounded-full text-xs">
+            <span className="px-2 py-0.5 bg-red-500 text-white rounded-full text-xs font-bold font-mono">
               {pending.length}
             </span>
           )}
         </button>
         <button
           onClick={() => setActiveView('reenrollment')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
             activeView === 'reenrollment'
               ? 'bg-[#001A4D] text-white'
               : 'text-[#001A4D] hover:bg-gray-50'
@@ -150,14 +150,14 @@ export function StudentRegistry() {
           <RefreshCw className="w-4 h-4" />
           Re-enrollment
           {reenrollment.length > 0 && (
-            <span className="px-2 py-0.5 bg-amber-500 text-white rounded-full text-xs">
+            <span className="px-2 py-0.5 bg-amber-500 text-white rounded-full text-xs font-bold font-mono">
               {reenrollment.length}
             </span>
           )}
         </button>
         <button
           onClick={() => setActiveView('active')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
             activeView === 'active'
               ? 'bg-[#001A4D] text-white'
               : 'text-[#001A4D] hover:bg-gray-50'
@@ -168,18 +168,18 @@ export function StudentRegistry() {
         </button>
         <button
           onClick={() => setActiveView('inactive')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
             activeView === 'inactive'
               ? 'bg-[#001A4D] text-white'
               : 'text-[#001A4D] hover:bg-gray-50'
           }`}
         >
           <UserX className="w-4 h-4" />
-          Inactive & Suspended
+          Inactive Students
         </button>
         <button
           onClick={() => setActiveView('archived')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
             activeView === 'archived'
               ? 'bg-[#001A4D] text-white'
               : 'text-[#001A4D] hover:bg-gray-50'

@@ -23,35 +23,35 @@ const navGroups = [
   {
     title: "Main",
     items: [
-      { icon: LayoutDashboard, label: "Dashboard Overview", path: "/home", badge: null },
-      { icon: Users, label: "Student Registry", path: "/home/students", badge: 2 },
-      { icon: GraduationCap, label: "Academic Semester", path: "/home/academic-semester", badge: null },
+      { icon: LayoutDashboard, label: "Dashboard Overview", path: "/home" },
+      { icon: Users, label: "Student Registry", path: "/home/students" },
+      { icon: GraduationCap, label: "Academic Semester", path: "/home/academic-semester" },
     ]
   },
   {
     title: "Organizations & Activities",
     items: [
-      { icon: Building2, label: "Organization Management", path: "/home/organizations", badge: null },
-      { icon: CalendarCheck, label: "Event Approvals", path: "/home/event-approvals", badge: 5 },
-      { icon: QrCode, label: "Attendance Monitoring", path: "/home/attendance", badge: null },
+      { icon: Building2, label: "Organization Management", path: "/home/organizations" },
+      { icon: CalendarCheck, label: "Event Approvals", path: "/home/event-approvals" },
+      { icon: QrCode, label: "Attendance Monitoring", path: "/home/attendance" },
     ]
   },
   {
     title: "Finance & Documents",
     items: [
-      { icon: Banknote, label: "Budget & Fund", path: "/home/budget-fund", badge: null },
-      { icon: Receipt, label: "Financial Liquidations", path: "/home/liquidations", badge: 3 },
-      { icon: Files, label: "Document Management", path: "/home/documents", badge: 3 },
-      { icon: Award, label: "Certificates", path: "/home/certificates", badge: null },
+      { icon: Banknote, label: "Budget & Fund", path: "/home/budget-fund" },
+      { icon: Receipt, label: "Financial Liquidations", path: "/home/liquidations" },
+      { icon: Files, label: "Document Management", path: "/home/documents" },
+      { icon: Award, label: "Certificates", path: "/home/certificates" },
     ]
   },
   {
     title: "System & Reports",
     items: [
-      { icon: Bell, label: "Announcements", path: "/home/announcements", badge: null },
-      { icon: BarChart3, label: "Reports & Analytics", path: "/home/reports", badge: null },
-      { icon: Shield, label: "Audit Logs", path: "/home/audit-logs", badge: null },
-      { icon: Settings, label: "System Settings", path: "/home/settings", badge: null },
+      { icon: Bell, label: "Announcements", path: "/home/announcements" },
+      { icon: BarChart3, label: "Reports & Analytics", path: "/home/reports" },
+      { icon: Shield, label: "Audit Logs", path: "/home/audit-logs" },
+      { icon: Settings, label: "System Settings", path: "/home/settings" },
     ]
   }
 ];
@@ -73,7 +73,7 @@ export function Sidebar() {
 
   return (
     <div className="fixed left-0 top-0 h-screen w-[260px] bg-[#001A4D] flex flex-col">
-      {/* Logo and Role Badge */}
+      {/* Logo and Role */}
       <div className="p-6 border-b border-white/10">
         <div className="flex items-center gap-2 mb-3">
           <img src={stiSyncLogo} alt="STI Sync" className="w-8 h-8 object-cover rounded-lg" />
@@ -110,11 +110,6 @@ export function Sidebar() {
                     )}
                     <Icon className="w-5 h-5 flex-shrink-0" />
                     <span className="text-sm font-medium flex-1">{item.label}</span>
-                    {item.badge !== null && (
-                      <span className="w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-white text-xs font-bold">
-                        {item.badge}
-                      </span>
-                    )}
                   </Link>
                 );
               })}

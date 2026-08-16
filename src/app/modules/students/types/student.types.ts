@@ -5,7 +5,7 @@ import { Timestamp } from 'firebase/firestore';
 export type StudentSex       = 'Male' | 'Female';
 export type StudentYearLevel = '1st Year' | '2nd Year' | '3rd Year' | '4th Year';
 export type StudentSemester  = '1st Semester' | '2nd Semester';
-export type StudentStatus    = 'ACTIVE' | 'PENDING' | 'RETURNED' | 'INACTIVE' | 'SUSPENDED' | 'ARCHIVED';
+export type StudentStatus    = 'ACTIVE' | 'PENDING' | 'RETURNED' | 'INACTIVE' | 'ARCHIVED';
 
 export interface StudentDocument {
   // ── Identity ──────────────────────────────────────────────────────────────
@@ -36,8 +36,8 @@ export interface StudentDocument {
   authUid:      string;       // Firebase Auth UID, filled after account creation
 
   // ── Media ─────────────────────────────────────────────────────────────────
-  profilePhotoUrl: string;    // Firebase Storage URL, '' if not yet uploaded
-  schoolIdPhotoUrl: string;   // Firebase Storage URL, '' if not yet uploaded
+  profilePhotoUrl: string;    // Cloudinary URL, '' if not yet uploaded
+  schoolIdPhotoUrl: string;   // Cloudinary URL, '' if not yet uploaded
 
   // ── Registry ──────────────────────────────────────────────────────────────
   status:       StudentStatus;
@@ -45,7 +45,34 @@ export interface StudentDocument {
   addedBy:      string;       // admin UID who created the record manually
   rejectionReason?: string;   // if status is RETURNED, admin reason for return
 
+  // ── Archival ──────────────────────────────────────────────────────────────
+  archiveReason?: string;     // e.g. "Graduated", "Transferred", "Dropped", "Manual"
+  archivedAt?:    Timestamp;
+  archivedBy?:    string;
+
   // ── Timestamps ────────────────────────────────────────────────────────────
   createdAt:    Timestamp;
   updatedAt:    Timestamp;
+}
+
+export interface StudentArchivalValidation {
+  canArchive: boolean;
+  blockers: string[];
+  unpaidPayables: Array<{
+    id: string;
+    label: string;
+    type: string;
+    organizationName?: string | null;
+    assignedAmount: number;
+    paidAmount: number;
+    outstandingAmount: number;
+    status: string;
+    dueDate?: string | null;
+  }>;
+  activeOfficerRoles: Array<{
+    id: string;
+    organizationId: string;
+    organizationName?: string;
+    roleName?: string;
+  }>;
 }

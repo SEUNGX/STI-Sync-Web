@@ -529,8 +529,11 @@ function StudentPayablesTab({
   }, [payables]);
 
   const filteredMembers = memberGroups.filter((m) => {
-    const matchesSearch = m.studentName.toLowerCase().includes(searchQuery.toLowerCase()) || m.schoolId.toLowerCase().includes(searchQuery.toLowerCase());
-    if (!matchesSearch) return false;
+    if (!m) return false;
+    const q = (searchQuery || '').trim().toLowerCase();
+    const nameMatch = (m.studentName || '').toLowerCase().includes(q);
+    const idMatch = (m.schoolId || m.studentId || '').toLowerCase().includes(q);
+    if (q && !nameMatch && !idMatch) return false;
     if (statusFilter === 'All') return true;
 
     const memberAssigned = m.payables.reduce((a, p) => a + p.assignedAmount, 0);
@@ -546,11 +549,26 @@ function StudentPayablesTab({
   return (
     <div className="space-y-4">
       {/* Overview & Action Bar */}
+      <div className="p-3.5 bg-blue-50 border border-blue-200 rounded-xl flex items-center justify-between text-xs text-blue-900 shadow-xs">
+        <div className="flex items-center gap-2">
+          <Info className="w-4 h-4 text-[#0E4EBD] flex-shrink-0" />
+          <span>
+            This tab manages organizational dues and club fines. <strong>Event ticket payables & QR passes</strong> are managed and collected directly under each event in <strong>Event Management</strong>.
+          </span>
+        </div>
+        <a
+          href="/officer/events"
+          className="px-3 py-1.5 bg-[#001A4D] text-[#FFD41C] font-bold rounded-lg hover:bg-[#001A4D]/90 whitespace-nowrap ml-3 transition-colors shadow-xs"
+        >
+          Manage Event Payables →
+        </a>
+      </div>
+
       <div className="bg-white border border-[#E0E0E0] rounded-xl p-5 space-y-4">
         <div className="flex items-center justify-between border-b border-gray-100 pb-4">
           <div>
-            <h3 className="font-bold text-[#001A4D] text-base">Student Payables Overview</h3>
-            <p className="text-gray-500 text-xs mt-0.5">Manage membership dues, fines, and event payables for active members.</p>
+            <h3 className="font-bold text-[#001A4D] text-base">Club Payables & Membership Dues</h3>
+            <p className="text-gray-500 text-xs mt-0.5">Manage membership dues and non-event club payables for active members.</p>
           </div>
           {!isPast && (
             <div className="flex items-center gap-2">
@@ -1317,6 +1335,12 @@ export default function FinanceCenter() {
 
   const { data: payablesData } = useOrgPayables(activeOrgId, selectedSemId);
 
+  // Strictly isolate non-event payables (membership dues, club fines, custom dues)
+  // Event ticket fees & payables are managed under Event Management (/officer/events)
+  const orgNonEventPayables = useMemo(() => {
+    return payablesData.filter((p) => p.type !== 'event_fee' && !p.eventId);
+  }, [payablesData]);
+
   const [activeTab, setActiveTab] = useState<FinanceTab>("budget");
   const [showTransition, setShowTransition] = useState(false);
   const [showSetup, setShowSetup] = useState(false);
@@ -1391,7 +1415,7 @@ export default function FinanceCenter() {
       {isPast && <HistoricalSummaryCard />}
 
       {/* Metric Cards */}
-      <MetricsRow isPast={isPast} ledgerData={ledgerData} semesterId={selectedSemId} payablesData={payablesData} />
+      <MetricsRow isPast={isPast} ledgerData={ledgerData} semesterId={selectedSemId} payablesData={orgNonEventPayables} />
 
       {/* Export row for past semester */}
       {isPast && (
@@ -1439,7 +1463,7 @@ export default function FinanceCenter() {
         {activeTab === "payables" && (
           <StudentPayablesTab
             isPast={isPast}
-            payables={payablesData}
+            payables={orgNonEventPayables}
             organizationId={activeOrgId}
             organizationName={activeOrgName}
             officerStudentId={officerStudentId}

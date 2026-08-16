@@ -1,4 +1,4 @@
-import { useState, KeyboardEvent } from 'react';
+import { useState, useEffect, KeyboardEvent } from 'react';
 import { Lock, Upload } from 'lucide-react';
 import { useOrganizationStream } from '../../../organizations';
 import { useEventTypesStream, useEventCategoriesStream } from '../../hooks/useEventConfigStream';

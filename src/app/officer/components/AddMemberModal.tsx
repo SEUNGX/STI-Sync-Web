@@ -3,7 +3,6 @@ import { X, Search, Loader2 } from 'lucide-react';
 import { useStudents } from '../../modules/students/hooks/useStudentStream';
 import { useSemesters } from '../../modules/academic/hooks/useAcademicStream';
 import { addMember } from '../../modules/organizations/services/member.service';
-import { createPayable, recordPayment } from '../../modules/finance/services/payable.service';
 import type { AddMemberPayload } from '../../modules/organizations/types/member.types';
 
 interface AddMemberModalProps {
@@ -14,14 +13,12 @@ interface AddMemberModalProps {
 }
 
 export function AddMemberModal({ isOpen, onClose, organizationId, addedBy }: AddMemberModalProps) {
-  const { data: allStudents, loading: loadingStudents } = useStudents();
+  const { data: allStudents = [], loading: loadingStudents } = useStudents();
   const { data: semesters = [] } = useSemesters();
-  const activeSemester = semesters.find((s) => s.status === 'ACTIVE') || semesters[0];
   
   const [searchQuery, setSearchQuery] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [selectedAuthUid, setSelectedAuthUid] = useState<string>('');
   
   const [formData, setFormData] = useState({
     studentId: '',
@@ -37,15 +34,15 @@ export function AddMemberModal({ isOpen, onClose, organizationId, addedBy }: Add
   if (!isOpen) return null;
 
   const handleSelectStudent = (student: any) => {
-    setSelectedAuthUid(student.id || student.authUid || student.studentId || '');
     setFormData({
       ...formData,
-      studentId: student.studentId,
-      studentName: `${student.firstName} ${student.lastName}`,
-      email: student.email,
-      course: student.courseCode || '',
+      studentId: student.studentId || student.id || '',
+      studentName: `${student.firstName || ''} ${student.lastName || ''}`.trim(),
+      email: student.email || '',
+      course: student.courseCode || student.courseName || '',
       year: student.yearLevel || '',
-      department: student.department || '', // Assuming these exist, if not they can be edited manually
+      department: student.department || student.departmentName || '',
+      contactNumber: student.contactNumber || student.phone || '',
     });
     setSearchQuery('');
     setShowDropdown(false);
@@ -62,38 +59,22 @@ export function AddMemberModal({ isOpen, onClose, organizationId, addedBy }: Add
     try {
       const payload: AddMemberPayload = {
         ...formData,
+        studentId: (formData.studentId || '').trim(),
+        studentName: (formData.studentName || '').trim(),
+        email: (formData.email || '').trim().toLowerCase(),
+        course: formData.course || '',
+        year: formData.year || '',
+        department: formData.department || '',
+        contactNumber: formData.contactNumber || '',
         organizationId,
         status: 'active',
       };
       
-      const newMemberId = await addMember(payload, addedBy);
-
-      // Auto-create payable doc for membership dues if applicable
-      try {
-        const payableId = await createPayable({
-          studentId: selectedAuthUid || formData.studentId,
-          studentName: formData.studentName,
-          studentSchoolId: formData.studentId,
-          type: 'membership_due',
-          label: 'Membership Due',
-          description: 'Initial membership due upon joining',
-          organizationId,
-          semesterId: activeSemester?.id || 'active',
-          assignedAmount: 50,
-          createdBy: addedBy,
-        });
-
-        if (formData.paymentStatus === 'paid') {
-          await recordPayment(payableId, 50, addedBy, 'cash');
-        }
-      } catch (pErr) {
-        console.warn('Could not auto-create payable for new member:', pErr);
-      }
-
+      await addMember(payload, addedBy);
       onClose();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert('Failed to add member. Check console for details.');
+      alert(`Failed to add member: ${err.message}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -109,37 +90,40 @@ export function AddMemberModal({ isOpen, onClose, organizationId, addedBy }: Add
           </button>
         </div>
 
-        <div className="p-6 overflow-y-auto flex-1">
-          {/* Search Bar */}
-          <div className="mb-6 relative">
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Search Registered Students</label>
+        <div className="p-6 overflow-y-auto flex-1 space-y-4">
+          {/* Quick Search Student */}
+          <div className="relative">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Search Registered Student</label>
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                placeholder="Search by name or ID to auto-fill..."
+                placeholder="Search by name, ID, or email..."
                 value={searchQuery}
                 onChange={(e) => {
                   setSearchQuery(e.target.value);
                   setShowDropdown(true);
                 }}
                 onFocus={() => setShowDropdown(true)}
-                className="w-full pl-9 pr-4 py-2 border border-[#E0E0E0] rounded-lg text-sm focus:ring-2 focus:ring-[#1E70E8] focus:border-transparent outline-none"
+                className="w-full pl-9 pr-4 py-2 border border-[#E0E0E0] rounded-lg text-sm focus:ring-2 focus:ring-[#1E70E8] outline-none"
               />
             </div>
 
             {/* Dropdown */}
-            {showDropdown && searchQuery.length > 0 && (
+            {showDropdown && searchQuery.trim().length > 0 && (
               <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#E0E0E0] rounded-lg shadow-xl z-50 max-h-48 overflow-y-auto">
                 {loadingStudents ? (
-                  <div className="p-3 text-sm text-gray-500 text-center">Loading...</div>
+                  <div className="p-3 text-sm text-gray-500 text-center">Loading students...</div>
                 ) : (
                   (() => {
-                    const query = searchQuery.toLowerCase();
-                    const matches = allStudents.filter(s =>
-                      `${s.firstName} ${s.lastName}`.toLowerCase().includes(query) ||
-                      s.studentId.toLowerCase().includes(query)
-                    ).slice(0, 5);
+                    const query = searchQuery.trim().toLowerCase();
+                    const matches = allStudents.filter(s => {
+                      if (!s) return false;
+                      const fullName = `${s.firstName || ''} ${s.lastName || ''}`.toLowerCase();
+                      const sId = (s.studentId || '').toLowerCase();
+                      const sEmail = (s.email || '').toLowerCase();
+                      return fullName.includes(query) || sId.includes(query) || sEmail.includes(query);
+                    }).slice(0, 5);
 
                     if (matches.length === 0) {
                       return <div className="p-3 text-sm text-gray-500 text-center">No students found</div>;
@@ -149,10 +133,10 @@ export function AddMemberModal({ isOpen, onClose, organizationId, addedBy }: Add
                       <div
                         key={s.id}
                         onClick={() => handleSelectStudent(s)}
-                        className="px-4 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-0"
+                        className="px-4 py-2.5 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-0"
                       >
                         <div className="font-medium text-[#001A4D] text-sm">{s.firstName} {s.lastName}</div>
-                        <div className="text-xs text-gray-500">{s.studentId} • {s.courseCode}</div>
+                        <div className="text-xs text-gray-500">{s.studentId} • {s.courseCode || s.courseName || 'Student'}</div>
                       </div>
                     ));
                   })()
@@ -238,13 +222,13 @@ export function AddMemberModal({ isOpen, onClose, organizationId, addedBy }: Add
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Membership Dues (₱50)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Initial Payment Status</label>
               <select
                 value={formData.paymentStatus}
                 onChange={(e) => setFormData({ ...formData, paymentStatus: e.target.value as 'paid' | 'outstanding' })}
                 className="w-full px-3 py-2 border border-[#E0E0E0] rounded-lg text-sm focus:ring-2 focus:ring-[#1E70E8]"
               >
-                <option value="outstanding">Outstanding</option>
+                <option value="outstanding">Outstanding (Pending Payment)</option>
                 <option value="paid">Paid</option>
               </select>
             </div>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, Send, Save, AlertTriangle, AlertCircle, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useEventCreation } from '../../modules/events/hooks/useEventCreation';

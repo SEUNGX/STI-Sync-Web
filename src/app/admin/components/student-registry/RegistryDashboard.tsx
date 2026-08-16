@@ -1,4 +1,4 @@
-import { RefreshCw, Download, Clock, UserCheck, UserX, Ban, CircleCheck } from 'lucide-react';
+import { RefreshCw, Download, Clock, UserCheck, UserX, CircleCheck } from 'lucide-react';
 import { StudentDocument } from '../../../modules/students/types/student.types';
 import { SemesterDocument } from '../../../modules/academic/types/academic.types';
 import { getMillis } from '../../../modules/students/utils/date.utils';
@@ -9,7 +9,6 @@ interface RegistryDashboardProps {
     pending: StudentDocument[];
     active: StudentDocument[];
     inactive: StudentDocument[];
-    suspended: StudentDocument[];
     archived: StudentDocument[];
     reenrollment: StudentDocument[];
   };
@@ -18,7 +17,7 @@ interface RegistryDashboardProps {
 }
 
 export default function RegistryDashboard({ onNavigate, categorizedStudents, activeSemester, allStudents }: RegistryDashboardProps) {
-  const { pending, active, inactive, suspended, reenrollment } = categorizedStudents;
+  const { pending, active, inactive, reenrollment } = categorizedStudents;
 
   // Re-enrollment logic
   const totalExpectedToReenroll = active.length;
@@ -60,9 +59,9 @@ export default function RegistryDashboard({ onNavigate, categorizedStudents, act
       switch (student.status) {
         case 'ACTIVE': action = `${student.firstName} ${student.lastName} — Account Active`; type = 'approved'; break;
         case 'RETURNED': action = `${student.firstName} ${student.lastName} — Correction Requested`; type = 'returned'; break;
-        case 'SUSPENDED': action = `${student.firstName} ${student.lastName} — Account Suspended`; type = 'suspended'; break;
         case 'PENDING': action = `${student.firstName} ${student.lastName} — Pending Verification`; type = 'blue'; break;
         case 'INACTIVE': action = `${student.firstName} ${student.lastName} — Account Inactive`; type = 'blue'; break;
+        case 'ARCHIVED': action = `${student.firstName} ${student.lastName} — Account Archived`; type = 'blue'; break;
         default: action = `${student.firstName} ${student.lastName} — Status Updated`; type = 'blue'; break;
       }
       
@@ -128,7 +127,7 @@ export default function RegistryDashboard({ onNavigate, categorizedStudents, act
       )}
 
       {/* Status Metric Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <button
           onClick={() => onNavigate('pending')}
           className="relative bg-gradient-to-br from-[#EF4444] to-[#F97316] rounded-xl p-6 text-white overflow-hidden group hover:shadow-lg transition-shadow text-left"
@@ -180,18 +179,6 @@ export default function RegistryDashboard({ onNavigate, categorizedStudents, act
           <div className="text-5xl font-bold mb-2">{inactive.length}</div>
           <div className="text-sm font-medium mb-1">Inactive Students</div>
           <div className="text-xs text-white/80">Did not re-enroll</div>
-        </button>
-
-        <button
-          onClick={() => onNavigate('inactive')}
-          className="relative bg-gradient-to-br from-[#0E4EBD] to-[#1E70E8] rounded-xl p-6 text-white overflow-hidden group hover:shadow-lg transition-shadow text-left"
-        >
-          <div className="absolute top-4 right-4 bg-white/20 p-3 rounded-lg">
-            <Ban className="w-6 h-6" />
-          </div>
-          <div className="text-5xl font-bold mb-2">{suspended.length}</div>
-          <div className="text-sm font-medium mb-1">Suspended Accounts</div>
-          <div className="text-xs text-white/80">Under SAO action</div>
         </button>
       </div>
 

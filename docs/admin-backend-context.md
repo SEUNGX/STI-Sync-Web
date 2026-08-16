@@ -729,10 +729,48 @@ SAO/SAS Admin events are decoupled from student club organizations to ensure adm
 
 ### 15.3 Student Re-enrollment Lifecycle (`ReEnrollmentManagement.tsx`)
 - **Active Registry Re-enrollment State**: In `StudentRegistry.tsx` and `ReEnrollmentManagement.tsx`, students whose `schoolYear` or `semester` does not match the active semester automatically appear as `pending` (or `overdue` if past `reenrollDeadline`).
-- **Confirmation Actions**:
-  - **Individual Confirmation**: Modal allowing the Admin to verify/advance Year Level (1–4) and Section, then stamps the student with the active semester and `status: 'ACTIVE'`.
-  - **Bulk Confirmation**: Multi-student checkbox selection with **"Bulk Confirm Re-enrollment"** (`bulkReEnrollStudents`).
-  - **Overdue Inactivation**: One-click action to mark unconfirmed overdue students as `INACTIVE` (`inactivateOverdueStudents`).
+- **Academic Hierarchy Cascade Filters**:
+  - Filter by **Course / Program** (e.g. `BSIT`), **Year Level** (e.g. `1st Year`), and **Current Section** (e.g. `BSIT 1101`).
+  - Section dropdown strictly resolves available sections matching the Course and Year Level from `/sections`.
+- **Targeted Batch Promotion & Re-enrollment (`bulkReEnrollStudents`)**:
+  - Admin filters by current section (e.g. `BSIT 1101`), selects the batch, and can deselect irregular/transfer students.
+  - Action toolbar allows selecting **Target Year Level** (e.g. `2nd Year`) and **Target Promoted Section** (e.g. `BSIT 2101`).
+  - Batch writes update `yearLevel`, `section`, active `schoolYear`, `semester`, and `status: 'ACTIVE'` across all selected students in one atomic transaction.
+- **Individual Student Re-enrollment & Shifting (`IndividualReEnrollModal`)**:
+  - Supports program shifting across courses (e.g., from `BSCS` to `BSIT`), updating `courseId`, `courseCode`, `courseName`, `departmentId`, `departmentName`.
+  - Dynamic section dropdown strictly filtered to the chosen course and year level.
+- **Overdue Inactivation**: Filter-aware batch action to mark unconfirmed overdue students as `INACTIVE` (`inactivateOverdueStudents`).
+
+---
+
+<!-- AGENT-UPDATED: 2026-08-16 — Added Section 16: Student Registry Profile Inspection, Archival Clearance Engine & Permanent Deletion Lifecycle -->
+
+## 16. Student Registry Profile Inspection, Archival Clearance & Deletion Lifecycle
+
+### 16.1 Comprehensive Profile Inspection (`StudentDetailModal.tsx`, `useStudentDetail.ts`)
+- **Hook `useStudentDetail(studentDocOrId)`**: Real-time listener aggregating:
+  - Personal identity & verified photo comparison (`profilePhotoUrl` vs `schoolIdPhotoUrl`).
+  - Club & organization memberships and officer roles from `/organization_members`.
+  - Financial payables summary (Total Billed, Total Paid, Outstanding Balance) from `/payables`.
+  - Event attendance logs and compliance rates from `/attendances`.
+  - Issued certificate records from `/issued_certificates`.
+- **Multi-Tab Interface**:
+  - **Profile & Info**: Personal & academic details, DOB, sex, contact info, registration metadata, side-by-side photo comparison preview.
+  - **Clubs & Orgs**: Joined clubs, officer roles, join dates, and dues status.
+  - **Finances & Payables**: Itemized payables breakdown with payment dates and receipt methods.
+  - **Event Attendance**: Check-in/check-out logs, scanner officer name, attendance rate %.
+  - **Certificates**: Visual list of earned certificates with verification codes.
+
+### 16.2 Pre-Flight Archival Clearance Engine (`student.service.ts -> validateStudentArchival`)
+- **Strict Financial Clearance**: Queries `/payables` for unsettled balances (`status !== 'paid' && status !== 'waived' && (assignedAmount - paidAmount) > 0`). If any unpaid item exists, archival is **hard blocked** and an itemized debt breakdown is displayed.
+- **Active Officer Role Deactivation**: Queries `/organization_officers` where `isActive === true`. When archived via `archiveStudent(studentDoc, reason, adminUid)`, officer credentials are automatically set to `isActive: false`.
+- **Archival Metadata**: Sets student `status: 'ARCHIVED'`, `archiveReason`, `archivedAt: Timestamp.now()`, and `archivedBy: adminUid`.
+
+### 16.3 Permanent Deletion from Archive (`DeleteStudentModal.tsx`, `deleteStudentPermanently`)
+- **Purge Scope**: Permanently deletes `/students/{studentId}`, `/organization_members`, and `/organization_officers`.
+- **Financial Ledger Protection**: Historical `/payables` retain denormalized `studentName` and `studentSchoolId` so past semester audit logs and club budget liquidations remain permanently consistent.
+- **Double-Confirmation Guard**: Requires typing the student's exact Student ID or `DELETE` before the delete action is executed.
+
 
 
 

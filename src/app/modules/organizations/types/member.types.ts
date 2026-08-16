@@ -1,5 +1,7 @@
 import { Timestamp } from 'firebase/firestore';
 
+export type OrganizationMemberStatus = 'active' | 'inactive' | 'suspended' | 'pending' | 'rejected';
+
 export interface OrganizationMemberDocument {
   id: string;
   organizationId: string;
@@ -10,10 +12,12 @@ export interface OrganizationMemberDocument {
   year: string;
   department: string;
   contactNumber: string;
-  status: 'active' | 'inactive' | 'suspended';
+  status: OrganizationMemberStatus;
   paymentStatus: 'paid' | 'outstanding';
   dateJoined: any;
   isOfficer: boolean;
+  rejectionReason?: string;
+  applicationDate?: any;
   createdAt: any;
   updatedAt: any;
   addedBy: string;
@@ -28,6 +32,6 @@ export interface AddMemberPayload {
   year: string;
   department: string;
   contactNumber: string;
-  status: 'active' | 'inactive' | 'suspended';
+  status: OrganizationMemberStatus;
   paymentStatus: 'paid' | 'outstanding';
 }

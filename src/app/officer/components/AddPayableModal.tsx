@@ -146,10 +146,9 @@ export function AddPayableModal({
                 onChange={(e) => setPayableType(e.target.value as PayableType)}
                 className="w-full px-3 py-2 border border-[#E0E0E0] rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] outline-none"
               >
-                <option value="custom">Custom Fee (T-Shirt, Trip, etc.)</option>
-                <option value="org_fine">Organization Fine</option>
-                <option value="event_fee">Event Fee</option>
-                <option value="membership_due">Membership Due</option>
+                <option value="custom">Custom Fee (T-Shirt, Merchandise, Project)</option>
+                <option value="org_fine">Organization Fine / Penalty</option>
+                <option value="membership_due">Membership Due / Semester Dues</option>
               </select>
             </div>
 

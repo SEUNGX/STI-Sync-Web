@@ -1524,3 +1524,65 @@ interface IssuedCertificate {
 - `studentId` ASC, `issueDate` DESC
 - `eventId` ASC, `studentId` ASC
 
+---
+
+<!-- AGENT-UPDATED: 2026-08-16 — Documented students collection with archival lifecycle fields (archiveReason, archivedAt, archivedBy) and status definitions -->
+
+### 1.18 `students`
+
+**Path:** `/students/{studentId}`
+
+Stores enrolled and verified student master profile records.
+
+```typescript
+type StudentStatus = 'ACTIVE' | 'PENDING' | 'RETURNED' | 'INACTIVE' | 'ARCHIVED';
+
+interface StudentDocument {
+  // ─── Identity ───
+  id: string;                              // Firestore doc ID (Auth UID)
+  studentId: string;                       // Official STI student ID (e.g. "2023-0001")
+  firstName: string;
+  middleName: string;
+  lastName: string;
+  email: string;
+  contactNumber: string;
+  dateOfBirth: string;                     // ISO date string YYYY-MM-DD
+  sex: 'Male' | 'Female';
+
+  // ─── Academic ───
+  courseId: string;                        // FK → /courses
+  courseCode: string;                      // e.g. "BSIT"
+  courseName: string;                      // e.g. "Bachelor of Science in Information Technology"
+  departmentId: string;                    // FK → /departments
+  departmentName: string;
+  yearLevel: '1st Year' | '2nd Year' | '3rd Year' | '4th Year';
+  section: string;                         // e.g. "BSIT 3101"
+  schoolYear: string;                      // e.g. "2026-2027"
+  semester: '1st Semester' | '2nd Semester';
+
+  // ─── Account & Media ───
+  authUid: string;
+  profilePhotoUrl: string;                 // Cloudinary profile/selfie URL
+  schoolIdPhotoUrl: string;                // Cloudinary physical school ID photo URL
+
+  // ─── Registry & Archival ───
+  status: StudentStatus;
+  registrationSource: 'MANUAL' | 'SELF_REGISTER';
+  addedBy: string;                         // Admin UID
+  rejectionReason?: string;
+  archiveReason?: string;                  // e.g. "Graduated", "Transferred", "Dropped Out"
+  archivedAt?: Timestamp;
+  archivedBy?: string;
+
+  // ─── Timestamps ───
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+```
+
+**Indexes Required:**
+- `status` ASC, `createdAt` DESC
+- `courseCode` ASC, `yearLevel` ASC, `section` ASC
+- `studentId` ASC
+
+

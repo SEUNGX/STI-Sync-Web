@@ -243,7 +243,7 @@ export async function reEnrollStudent(
   id: string,
   targetAcademicYear: string,
   targetSemester: StudentSemester,
-  updates?: Partial<Pick<StudentDocument, 'yearLevel' | 'section' | 'courseId' | 'courseName' | 'courseCode'>>
+  updates?: Partial<Pick<StudentDocument, 'yearLevel' | 'section' | 'courseId' | 'courseName' | 'courseCode' | 'departmentId' | 'departmentName'>>
 ): Promise<void> {
   const ref = doc(db, STUDENTS_COLLECTION, id);
   await updateDoc(ref, {
@@ -258,15 +258,34 @@ export async function reEnrollStudent(
 export async function bulkReEnrollStudents(
   studentIds: string[],
   targetAcademicYear: string,
-  targetSemester: StudentSemester
+  targetSemester: StudentSemester,
+  promotions?: {
+    targetYearLevel?: StudentYearLevel;
+    targetSection?: string;
+    courseId?: string;
+    courseCode?: string;
+    courseName?: string;
+    departmentId?: string;
+    departmentName?: string;
+  }
 ): Promise<void> {
   const batch = (await import('firebase/firestore')).writeBatch(db);
+  const extraUpdates: Record<string, any> = {};
+  if (promotions?.targetYearLevel) extraUpdates.yearLevel = promotions.targetYearLevel;
+  if (promotions?.targetSection) extraUpdates.section = promotions.targetSection.trim();
+  if (promotions?.courseId) extraUpdates.courseId = promotions.courseId;
+  if (promotions?.courseCode) extraUpdates.courseCode = promotions.courseCode;
+  if (promotions?.courseName) extraUpdates.courseName = promotions.courseName;
+  if (promotions?.departmentId) extraUpdates.departmentId = promotions.departmentId;
+  if (promotions?.departmentName) extraUpdates.departmentName = promotions.departmentName;
+
   for (const id of studentIds) {
     const ref = doc(db, STUDENTS_COLLECTION, id);
     batch.update(ref, {
       schoolYear: targetAcademicYear,
       semester: targetSemester,
       status: 'ACTIVE',
+      ...extraUpdates,
       updatedAt: Timestamp.now(),
     });
   }
@@ -284,4 +303,208 @@ export async function inactivateOverdueStudents(studentIds: string[]): Promise<v
   }
   await batch.commit();
 }
+
+// ─── Archival & Deletion ───────────────────────────────────────────────────────
+
+/**
+ * Pre-flight validation before archiving a student.
+ * Checks for:
+ *  1. Any unpaid or partially paid payables (fines, dues, event fees).
+ *  2. Any active officer positions held in student organizations.
+ */
+export async function validateStudentArchival(
+  studentDoc: StudentDocument
+): Promise<import('../types/student.types').StudentArchivalValidation> {
+  const blockers: string[] = [];
+  const unpaidPayables: import('../types/student.types').StudentArchivalValidation['unpaidPayables'] = [];
+  const activeOfficerRoles: import('../types/student.types').StudentArchivalValidation['activeOfficerRoles'] = [];
+
+  try {
+    // 1. Query payables for this student (by doc ID and school ID)
+    const payablesRef = collection(db, 'payables');
+    const [qById, qBySchoolId] = await Promise.all([
+      getDocs(query(payablesRef, where('studentId', '==', studentDoc.id))),
+      studentDoc.studentId 
+        ? getDocs(query(payablesRef, where('studentSchoolId', '==', studentDoc.studentId)))
+        : { docs: [] }
+    ]);
+
+    const seenPayableIds = new Set<string>();
+    const allPayableDocs = [...qById.docs, ...qBySchoolId.docs];
+
+    for (const pDoc of allPayableDocs) {
+      if (seenPayableIds.has(pDoc.id)) continue;
+      seenPayableIds.add(pDoc.id);
+
+      const data = pDoc.data() as import('../../finance/types/payable.types').PayableDocument;
+      const assigned = Number(data.assignedAmount || 0);
+      const paid = Number(data.paidAmount || 0);
+      const outstanding = assigned - paid;
+      const isSettled = data.status === 'paid' || data.status === 'waived' || outstanding <= 0;
+
+      if (!isSettled) {
+        unpaidPayables.push({
+          id: pDoc.id,
+          label: data.label || 'Payable',
+          type: data.type || 'custom',
+          organizationName: data.organizationName || 'SAO / Admin',
+          assignedAmount: assigned,
+          paidAmount: paid,
+          outstandingAmount: outstanding,
+          status: data.status || 'pending',
+          dueDate: data.dueDate?.toDate 
+            ? data.dueDate.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+            : null,
+        });
+      }
+    }
+
+    if (unpaidPayables.length > 0) {
+      const totalOutstanding = unpaidPayables.reduce((sum, p) => sum + p.outstandingAmount, 0);
+      blockers.push(
+        `Student has ${unpaidPayables.length} unpaid payable(s) amounting to ₱${totalOutstanding.toLocaleString()}. Settle or waive all payables before archiving.`
+      );
+    }
+
+    // 2. Query active officer roles
+    const officersRef = collection(db, 'organization_officers');
+    const [officersById, officersBySchoolId, officersByEmail] = await Promise.all([
+      getDocs(query(officersRef, where('studentId', '==', studentDoc.id), where('isActive', '==', true))),
+      studentDoc.studentId
+        ? getDocs(query(officersRef, where('studentId', '==', studentDoc.studentId), where('isActive', '==', true)))
+        : { docs: [] },
+      studentDoc.email
+        ? getDocs(query(officersRef, where('email', '==', studentDoc.email.trim().toLowerCase()), where('isActive', '==', true)))
+        : { docs: [] }
+    ]);
+
+    const seenOfficerIds = new Set<string>();
+    const allOfficerDocs = [...officersById.docs, ...officersBySchoolId.docs, ...officersByEmail.docs];
+
+    for (const oDoc of allOfficerDocs) {
+      if (seenOfficerIds.has(oDoc.id)) continue;
+      seenOfficerIds.add(oDoc.id);
+
+      const oData = oDoc.data();
+      activeOfficerRoles.push({
+        id: oDoc.id,
+        organizationId: oData.organizationId || '',
+        organizationName: oData.organizationName || 'Organization',
+        roleName: oData.roleId || 'Officer',
+      });
+    }
+
+  } catch (err: any) {
+    console.error('Error validating student archival:', err);
+    blockers.push(`Failed to verify student clearance status: ${err.message}`);
+  }
+
+  return {
+    canArchive: blockers.length === 0,
+    blockers,
+    unpaidPayables,
+    activeOfficerRoles,
+  };
+}
+
+/**
+ * Archives a student.
+ * Ensures pre-flight clearance, sets status to ARCHIVED, and deactivates any active officer positions.
+ */
+export async function archiveStudent(
+  studentDoc: StudentDocument,
+  reason: string,
+  adminUid: string
+): Promise<void> {
+  const validation = await validateStudentArchival(studentDoc);
+  if (!validation.canArchive) {
+    throw new Error(validation.blockers.join(' '));
+  }
+
+  const { writeBatch } = await import('firebase/firestore');
+  const batch = writeBatch(db);
+
+  // 1. Update student document to ARCHIVED
+  const studentRef = doc(db, STUDENTS_COLLECTION, studentDoc.id);
+  batch.update(studentRef, {
+    status: 'ARCHIVED',
+    archiveReason: reason.trim(),
+    archivedAt: Timestamp.now(),
+    archivedBy: adminUid,
+    updatedAt: Timestamp.now(),
+  });
+
+  // 2. Deactivate any active officer positions
+  for (const role of validation.activeOfficerRoles) {
+    const officerRef = doc(db, 'organization_officers', role.id);
+    batch.update(officerRef, {
+      isActive: false,
+      updatedAt: Timestamp.now(),
+    });
+  }
+
+  await batch.commit();
+}
+
+/**
+ * Restores an archived student back to ACTIVE status.
+ */
+export async function restoreStudent(studentId: string, _adminUid: string): Promise<void> {
+  const studentRef = doc(db, STUDENTS_COLLECTION, studentId);
+  await updateDoc(studentRef, {
+    status: 'ACTIVE',
+    updatedAt: Timestamp.now(),
+  });
+}
+
+/**
+ * Permanently deletes a student from the archive.
+ * Purges:
+ *  - `/students/{studentId}`
+ *  - Associated `/organization_members`
+ *  - Associated `/organization_officers`
+ */
+export async function deleteStudentPermanently(studentDoc: StudentDocument): Promise<void> {
+  const { writeBatch, deleteDoc } = await import('firebase/firestore');
+  const batch = writeBatch(db);
+
+  // 1. Find and delete organization_members
+  const membersRef = collection(db, 'organization_members');
+  const [membersById, membersBySchoolId, membersByEmail] = await Promise.all([
+    getDocs(query(membersRef, where('studentId', '==', studentDoc.id))),
+    studentDoc.studentId ? getDocs(query(membersRef, where('studentId', '==', studentDoc.studentId))) : { docs: [] },
+    studentDoc.email ? getDocs(query(membersRef, where('email', '==', studentDoc.email.trim().toLowerCase()))) : { docs: [] },
+  ]);
+
+  const seenMemberDocIds = new Set<string>();
+  for (const mDoc of [...membersById.docs, ...membersBySchoolId.docs, ...membersByEmail.docs]) {
+    if (!seenMemberDocIds.has(mDoc.id)) {
+      seenMemberDocIds.add(mDoc.id);
+      batch.delete(mDoc.ref);
+    }
+  }
+
+  // 2. Find and delete organization_officers
+  const officersRef = collection(db, 'organization_officers');
+  const [officersById, officersBySchoolId, officersByEmail] = await Promise.all([
+    getDocs(query(officersRef, where('studentId', '==', studentDoc.id))),
+    studentDoc.studentId ? getDocs(query(officersRef, where('studentId', '==', studentDoc.studentId))) : { docs: [] },
+    studentDoc.email ? getDocs(query(officersRef, where('email', '==', studentDoc.email.trim().toLowerCase()))) : { docs: [] },
+  ]);
+
+  const seenOfficerDocIds = new Set<string>();
+  for (const oDoc of [...officersById.docs, ...officersBySchoolId.docs, ...officersByEmail.docs]) {
+    if (!seenOfficerDocIds.has(oDoc.id)) {
+      seenOfficerDocIds.add(oDoc.id);
+      batch.delete(oDoc.ref);
+    }
+  }
+
+  // 3. Delete student doc
+  const studentRef = doc(db, STUDENTS_COLLECTION, studentDoc.id);
+  batch.delete(studentRef);
+
+  await batch.commit();
+}
+
 
