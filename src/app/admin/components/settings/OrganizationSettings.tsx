@@ -157,7 +157,7 @@ export default function OrganizationSettings({ onUnsavedChange }: OrganizationSe
           ].map((org, i) => (
             <div key={i} className="flex items-center justify-between p-4 border border-gray-100 rounded-lg hover:border-[#0E4EBD]/30 transition-colors">
               <div className="flex items-center gap-4">
-                <div className="w-10 h-10 bg-gradient-to-br from-[#0E4EBD] to-[#83358E] rounded-lg flex items-center justify-center text-white font-bold text-sm">
+                <div className="w-10 h-10 bg-gradient-to-br from-[#001A4D] to-[#0E4EBD] rounded-lg flex items-center justify-center text-white font-bold text-sm">
                   {org.acronym.slice(0,2)}
                 </div>
                 <div>
@@ -247,7 +247,7 @@ export default function OrganizationSettings({ onUnsavedChange }: OrganizationSe
                 setRulesForm({ ...rulesForm, minMembers: Number(e.target.value) });
                 onUnsavedChange();
               }}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
             />
             <p className="text-xs text-gray-500 mt-1">Organizations must have at least this many members to register</p>
           </div>
@@ -263,7 +263,7 @@ export default function OrganizationSettings({ onUnsavedChange }: OrganizationSe
                 setRulesForm({ ...rulesForm, minOfficers: Number(e.target.value) });
                 onUnsavedChange();
               }}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
             />
             <p className="text-xs text-gray-500 mt-1">Number of officer positions required</p>
           </div>

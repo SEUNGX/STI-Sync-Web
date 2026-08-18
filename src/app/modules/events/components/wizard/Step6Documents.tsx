@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Upload, FileText, Shield, CheckCircle, X, AlertCircle, Plus, Trash2 } from 'lucide-react';
 import type { EventFormData, EventDocumentFile } from '../../types/event.types';
 import { uploadToCloudinary } from '../../../../../services/cloudinary';
+import { formatAppDate } from '../../../../utils/date';
 
 interface Step6Props {
   data: EventFormData;
@@ -292,7 +293,7 @@ export default function Step6Documents({ data, onUpdate }: Step6Props) {
               </div>
               <div>
                 <div className="text-xs text-gray-400 mb-1">Authorization Date</div>
-                <div className="text-white font-medium">{new Date().toLocaleDateString()}</div>
+                <div className="text-white font-medium">{formatAppDate(new Date())}</div>
               </div>
             </div>
           </div>

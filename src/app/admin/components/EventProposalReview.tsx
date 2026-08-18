@@ -13,6 +13,8 @@ import { useAdviserProfile } from '../../modules/auth/hooks/useAdviserProfile';
 import { useOrganizationStream } from '../../modules/organizations/hooks/useOrganizationStream';
 import { useEventTypesStream, useVenuesStream } from '../../modules/events/hooks/useEventConfigStream';
 import { EventPayablesQRControl } from '../../modules/finance/components/EventPayablesQRControl';
+import { formatCurrency } from '../../utils/currency';
+import { formatAppDate, formatAppDateTime } from '../../utils/date';
 
 interface EventProposalReviewProps {
   event: EventDocument;
@@ -66,7 +68,7 @@ function SectionHeader({ title, status, subtitle }: { title: string; status: str
     <div className="mb-5">
       <div className="flex items-center justify-between mb-1">
         <div className="flex items-center gap-3">
-          <div className="w-1 h-6 bg-[#83358E] rounded-full" />
+          <div className="w-1 h-6 bg-[#0E4EBD] rounded-full" />
           <h2 className="text-[#001A4D] font-bold text-lg">{title}</h2>
         </div>
         <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
@@ -243,8 +245,8 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
   const eventTypeName = eventTypes.find(t => t.id === event.eventTypeId)?.name || 'Unknown Type';
   const venueName = venues.find(v => v.id === event.venueId)?.name || 'Unknown Venue';
   
-  const createdDate = event.createdAt && typeof event.createdAt.toDate === 'function' ? event.createdAt.toDate().toLocaleDateString() : 'N/A';
-  const firstSession = event.sessions && event.sessions.length > 0 ? event.sessions[0].date : 'TBD';
+  const createdDate = formatAppDate(event.createdAt, 'N/A');
+  const firstSession = event.sessions && event.sessions.length > 0 ? formatAppDate(event.sessions[0].date, 'TBD') : 'TBD';
 
   return (
     <div className="fixed inset-0 z-50 bg-white flex flex-col">
@@ -307,9 +309,9 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
                   const isVisited = visitedSections.has(s.id);
                   return (
                     <button key={s.id} onClick={() => scrollTo(s.id)}
-                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors relative ${isActive ? 'bg-[#F3E8FF] text-[#83358E] font-bold' : 'text-[#001A4D] hover:bg-gray-50'}`}>
-                      {isActive && <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-[#83358E] rounded-l-lg" />}
-                      <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-[#83358E]' : 'text-gray-400'}`} />
+                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors relative ${isActive ? 'bg-blue-50 text-[#0E4EBD] font-bold' : 'text-[#001A4D] hover:bg-gray-50'}`}>
+                      {isActive && <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-[#0E4EBD] rounded-l-lg" />}
+                      <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-[#0E4EBD]' : 'text-gray-400'}`} />
                       <span className="flex-1 text-left">{s.label}</span>
                       <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
                         s.status === 'complete' && isVisited ? 'bg-green-500' :
@@ -323,10 +325,10 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
             </div>
 
             {/* Review Progress */}
-            <div className="bg-[#F3E8FF] border border-[#83358E]/20 rounded-xl p-4">
+            <div className="bg-blue-50/70 border border-blue-200 rounded-xl p-4">
               <div className="flex items-center gap-2 mb-3">
-                <CheckCircle className="w-4 h-4 text-[#83358E]" />
-                <span className="text-[#83358E] font-bold text-sm">Review Progress</span>
+                <CheckCircle className="w-4 h-4 text-[#0E4EBD]" />
+                <span className="text-[#001A4D] font-bold text-sm">Review Progress</span>
               </div>
               <div className="space-y-2">
                 {[
@@ -335,10 +337,10 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
                   { label: 'Decision made', done: decision !== 'none' },
                 ].map(item => (
                   <div key={item.label} className="flex items-center gap-2">
-                    <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${item.done ? 'bg-[#83358E] border-[#83358E]' : 'border-gray-300'}`}>
+                    <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${item.done ? 'bg-[#0E4EBD] border-[#0E4EBD]' : 'border-gray-300'}`}>
                       {item.done && <Check className="w-2.5 h-2.5 text-white" />}
                     </div>
-                    <span className={`text-xs ${item.done ? 'text-[#83358E] font-medium' : 'text-gray-500'}`}>{item.label}</span>
+                    <span className={`text-xs ${item.done ? 'text-[#001A4D] font-semibold' : 'text-gray-500'}`}>{item.label}</span>
                   </div>
                 ))}
               </div>
@@ -348,7 +350,7 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
             <div className="bg-white border border-[#E0E0E0] rounded-xl p-4">
               <p className="text-[#001A4D] font-bold text-sm mb-3">Submitting Officer</p>
               <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 bg-[#7F77DD] rounded-full flex items-center justify-center text-white font-bold text-sm">{(event.createdBy || "O").charAt(0).toUpperCase()}</div>
+                <div className="w-10 h-10 bg-gradient-to-br from-[#001A4D] to-[#0E4EBD] rounded-full flex items-center justify-center text-white font-bold text-sm">{(event.createdBy || "O").charAt(0).toUpperCase()}</div>
                 <div>
                   <p className="font-bold text-[#001A4D] text-sm">UID: {event.createdBy || 'Unknown'}</p>
                   <p className="text-gray-400 text-xs">{orgAcronym}</p>
@@ -365,9 +367,9 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
             {isDecided && (
               <div className={`p-4 rounded-xl border-l-4 ${decision === 'approved' ? 'bg-green-50 border-green-500' : decision === 'rejected' ? 'bg-red-50 border-red-500' : 'bg-amber-50 border-amber-500'}`}>
                 <p className="text-sm font-bold text-gray-800">
-                  {decision === 'approved' ? `This proposal was Approved on ${event.approvedAt && typeof event.approvedAt.toDate === 'function' ? event.approvedAt.toDate().toLocaleDateString() : 'N/A'}.` :
-                   decision === 'rejected' ? `This proposal was Rejected on ${event.rejectedAt && typeof event.rejectedAt.toDate === 'function' ? event.rejectedAt.toDate().toLocaleDateString() : 'N/A'}. Reason: ${event.rejectionReason}` :
-                   `This proposal was Returned on ${event.returnedAt && typeof event.returnedAt.toDate === 'function' ? event.returnedAt.toDate().toLocaleDateString() : 'N/A'}.`}
+                  {decision === 'approved' ? `This proposal was Approved on ${formatAppDate(event.approvedAt, 'N/A')}.` :
+                   decision === 'rejected' ? `This proposal was Rejected on ${formatAppDate(event.rejectedAt, 'N/A')}. Reason: ${event.rejectionReason}` :
+                   `This proposal was Returned on ${formatAppDate(event.returnedAt, 'N/A')}.`}
                 </p>
               </div>
             )}
@@ -378,7 +380,7 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
               <SectionHeader title="Event Overview" status="complete" subtitle="Event identity, classification, and media assets submitted by the officer" />
               
               <div className="bg-white border border-[#E0E0E0] rounded-xl overflow-hidden mb-4">
-                <div className="h-44 bg-gradient-to-br from-[#7F77DD] to-[#83358E] flex items-center justify-center">
+                <div className="h-44 bg-gradient-to-br from-[#001A4D] via-[#002B7F] to-[#0E4EBD] flex items-center justify-center">
                   <div className="text-center">
                     <FileImage className="w-12 h-12 text-white/40 mx-auto mb-2" />
                     <p className="text-white/50 text-sm">No banner uploaded</p>
@@ -398,7 +400,7 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
                     </div>
                     <div className="space-y-3">
                       {[
-                        { label: 'Event Type', value: eventTypeName, pill: true, color: '#83358E' },
+                        { label: 'Event Type', value: eventTypeName, pill: true, color: '#0E4EBD' },
                         { label: 'Organization', value: orgName, pill: false },
                         { label: 'Event Format', value: event.eventFormat || 'N/A', pill: true, color: '#22C55E' },
                         { label: 'QR Tickets', value: event.enableQRTickets ? 'Enabled' : 'Disabled', pill: true, color: '#1E70E8' },
@@ -409,8 +411,8 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
                             <span className="px-2.5 py-1 rounded-full text-xs font-medium" style={{ backgroundColor: row.color + '20', color: row.color }}>{row.value}</span>
                           ) : (
                             <div className="flex items-center gap-2">
-                              <div className="w-5 h-5 bg-[#7F77DD] rounded-full flex items-center justify-center text-white text-xs font-bold">{(row.value as string)[0]}</div>
-                              <span className="text-[#83358E] font-bold text-sm">{row.value}</span>
+                              <div className="w-5 h-5 bg-[#001A4D] rounded-full flex items-center justify-center text-white text-xs font-bold">{(row.value as string)[0]}</div>
+                              <span className="text-[#001A4D] font-bold text-sm">{row.value}</span>
                             </div>
                           )}
                         </div>
@@ -422,12 +424,12 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
 
               {/* Objectives */}
               {event.objectives && event.objectives.length > 0 && (
-                <div className="bg-[#F3E8FF] border-l-4 border-[#83358E] rounded-xl p-4">
-                  <p className="text-[#83358E] font-bold text-sm mb-3">Event Objectives</p>
+                <div className="bg-blue-50/60 border-l-4 border-[#0E4EBD] rounded-xl p-4">
+                  <p className="text-[#001A4D] font-bold text-sm mb-3">Event Objectives</p>
                   <div className="space-y-2">
                     {event.objectives.map((obj, i) => (
                       <div key={i} className="flex items-start gap-3">
-                        <div className="w-6 h-6 bg-[#83358E] text-white rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">{i + 1}</div>
+                        <div className="w-6 h-6 bg-[#0E4EBD] text-white rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">{i + 1}</div>
                         <p className="text-[#001A4D] text-sm">{obj}</p>
                       </div>
                     ))}
@@ -459,13 +461,13 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
                 <div>
                   <div className="flex items-center gap-2 mb-3">
                     <p className="text-[#001A4D] font-bold text-sm">Event Sessions</p>
-                    <span className="px-2 py-0.5 bg-[#83358E] text-white text-xs rounded-full font-medium">{event.sessions?.length || 0} Sessions</span>
+                    <span className="px-2.5 py-0.5 bg-[#001A4D] text-[#FFD41C] text-xs rounded-full font-bold">{event.sessions?.length || 0} Sessions</span>
                   </div>
                   <div className="space-y-3">
                     {(event.sessions || []).map((s, i) => (
-                      <div key={s.id || i} className="border-l-[3px] border-[#83358E] bg-white border border-[#E0E0E0] rounded-xl p-4">
+                      <div key={s.id || i} className="border-l-[3px] border-[#0E4EBD] bg-white border border-[#E0E0E0] rounded-xl p-4">
                         <div className="flex items-center justify-between mb-3">
-                          <span className="text-[#83358E] font-bold text-xs">Session {i + 1}</span>
+                          <span className="text-[#0E4EBD] font-bold text-xs">Session {i + 1}</span>
                           <span className="text-[#001A4D] font-bold text-sm">{s.title}</span>
                         </div>
                         <div className="flex items-center gap-6 text-sm text-gray-600">
@@ -486,7 +488,7 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
                     </div>
                     <div>
                       <p className="text-xs uppercase text-gray-400 font-semibold mb-2">Event Format</p>
-                      <span className="px-3 py-1 bg-[#83358E]/10 text-[#83358E] rounded-full text-sm font-medium">{event.eventFormat}</span>
+                      <span className="px-3 py-1 bg-blue-50 text-[#0E4EBD] border border-blue-100 rounded-full text-sm font-semibold">{event.eventFormat}</span>
                     </div>
                   </div>
                 </div>
@@ -502,7 +504,7 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
                   <div className="grid grid-cols-2 divide-x divide-[#E0E0E0]">
                     {[
                       { label: 'Expected Attendance', value: event.expectedParticipantCount || 0 },
-                      { label: 'Student Payables', value: event.studentPayablesEnabled ? `₱${event.suggestedFeePerStudent || 0} / student` : 'Disabled' },
+                      { label: 'Student Payables', value: event.studentPayablesEnabled ? `${formatCurrency(event.suggestedFeePerStudent || 0)} / student` : 'Disabled' },
                     ].map(c => (
                       <div key={c.label} className="px-5 first:pl-0 last:pr-0 text-center">
                         <p className="text-xs uppercase text-gray-400 font-semibold mb-1">{c.label}</p>
@@ -533,7 +535,7 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
                   <div className="px-5 py-3 border-b border-[#E0E0E0] flex items-center justify-between">
                     <p className="text-[#001A4D] font-bold text-sm">Scanner Officers</p>
                     {event.enableQRTickets !== false && (event as any).enableQR !== false ? (
-                      <span className="px-2 py-0.5 bg-[#83358E] text-white text-xs rounded-full font-medium">{(event.scanners || []).length} Assigned</span>
+                      <span className="px-2.5 py-0.5 bg-[#001A4D] text-[#FFD41C] text-xs rounded-full font-bold">{(event.scanners || []).length} Assigned</span>
                     ) : (
                       <span className="px-2 py-0.5 bg-gray-200 text-gray-700 text-xs rounded-full font-medium uppercase">QR Disabled</span>
                     )}
@@ -548,7 +550,7 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
                               <p className="text-gray-400 text-xs mt-0.5">Student ID: {scanner.officerUserId || 'Not linked'}</p>
                             </div>
                             <div className="flex flex-wrap gap-1 justify-end">
-                              {scanner.fullAccess && <span className="px-2 py-0.5 bg-[#83358E]/10 text-[#83358E] text-xs rounded-full">Full Access</span>}
+                              {scanner.fullAccess && <span className="px-2 py-0.5 bg-blue-50 text-[#0E4EBD] border border-blue-100 text-xs font-semibold rounded-full">Full Access</span>}
                               {!scanner.fullAccess && scanner.canCheckIn && <span className="px-2 py-0.5 bg-blue-50 text-blue-600 text-xs rounded-full">Check-In</span>}
                               {!scanner.fullAccess && scanner.canCheckOut && <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 text-xs rounded-full">Check-Out</span>}
                               {!scanner.fullAccess && scanner.canViewList && <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">View List</span>}
@@ -584,21 +586,21 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
                     </thead>
                     <tbody className="divide-y divide-[#F0F0F0]">
                       {budgetItems.map((item, i) => (
-                        <tr key={i} className="hover:bg-[#F3E8FF]/30 transition-colors">
+                        <tr key={i} className="hover:bg-blue-50/50 transition-colors">
                           <td className="px-3 py-3 text-gray-400 text-xs">{i + 1}</td>
                           <td className="px-3 py-3">
                             <p className="text-[#001A4D] font-medium">{item.item}</p>
                             {item.description && <p className="text-gray-400 text-xs mt-0.5">{item.description}</p>}
                           </td>
-                          <td className="px-3 py-3 text-gray-600 text-sm">{item.quantity} × ₱{(item.unitCost || 0).toLocaleString()}</td>
-                          <td className="px-3 py-3 font-bold text-[#001A4D]">₱{((item.unitCost || 0) * (item.quantity || 0)).toLocaleString()}</td>
+                          <td className="px-3 py-3 text-gray-600 text-sm">{item.quantity} × {formatCurrency(item.unitCost || 0)}</td>
+                          <td className="px-3 py-3 font-bold text-[#001A4D]">{formatCurrency((item.unitCost || 0) * (item.quantity || 0))}</td>
                         </tr>
                       ))}
                     </tbody>
                     <tfoot>
                       <tr className="bg-[#001A4D]">
                         <td colSpan={3} className="px-3 py-3 text-white font-bold">Total Requested</td>
-                        <td className="px-3 py-3 text-[#FFD41C] font-bold">₱{totalRequested.toLocaleString()}</td>
+                        <td className="px-3 py-3 text-[#FFD41C] font-bold">{formatCurrency(totalRequested)}</td>
                       </tr>
                     </tfoot>
                   </table>
@@ -621,7 +623,7 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
                         <p className="text-[#001A4D] font-bold text-sm leading-tight">{doc.name}</p>
                         {doc.fileUrl ? (
                           <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer"
-                            className="text-[#83358E] text-xs mt-0.5 hover:underline block truncate">View file ↗</a>
+                            className="text-[#0E4EBD] text-xs mt-0.5 hover:underline block truncate font-medium">View file ↗</a>
                         ) : (
                           <span className={`text-xs mt-0.5 block ${doc.required ? 'text-red-400' : 'text-gray-400'}`}>
                             {doc.required ? 'Required — not yet uploaded' : 'Not uploaded'}
@@ -645,9 +647,7 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
                 {event.proposalHistory && event.proposalHistory.length > 0 ? (
                   <div className="relative pl-6 space-y-6 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-gray-200">
                     {event.proposalHistory.map((item, idx) => {
-                      const itemDate = item.performedAt && typeof item.performedAt.toDate === 'function'
-                        ? item.performedAt.toDate().toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-                        : '—';
+                      const itemDate = formatAppDateTime(item.performedAt, '—');
 
                       const isRejected = item.action === 'rejected';
                       const isApproved = item.action === 'approved';
@@ -657,8 +657,8 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
                       const dotBg = isApproved ? 'bg-green-500'
                         : isRejected ? 'bg-red-500'
                         : isReturned ? 'bg-amber-500'
-                        : isResubmitted ? 'bg-purple-600'
-                        : 'bg-blue-500';
+                        : isResubmitted ? 'bg-[#0E4EBD]'
+                        : 'bg-[#001A4D]';
 
                       return (
                         <div key={item.id || idx} className="relative flex items-start gap-3">
@@ -783,7 +783,7 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
             <div className={`bg-white border rounded-xl p-4 ${remarksError ? 'border-red-400' : 'border-[#E0E0E0]'}`}>
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
-                  <div className="w-1 h-4 bg-[#83358E] rounded-full" />
+                  <div className="w-1 h-4 bg-[#0E4EBD] rounded-full" />
                   <p className="text-[#001A4D] font-bold text-sm">Adviser Remarks</p>
                 </div>
               </div>
@@ -792,12 +792,12 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
                 onChange={e => { setRemarks(e.target.value); if (e.target.value) setRemarksError(false); }}
                 rows={5}
                 placeholder="Write your remarks, feedback, or instructions for the officer here..."
-                className="w-full text-sm resize-none border border-[#E0E0E0] rounded-lg p-3 focus:ring-2 focus:ring-[#83358E] focus:border-transparent outline-none leading-relaxed text-[#001A4D]"
+                className="w-full text-sm resize-none border border-[#E0E0E0] rounded-lg p-3 focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] outline-none leading-relaxed text-[#001A4D]"
               />
               <div className="flex justify-between items-center mt-2">
                 <div className="flex items-center gap-1.5">
-                  <Eye className="w-3 h-3 text-[#83358E]" />
-                  <span className="text-[#83358E] text-xs italic">Visible to submitting officer</span>
+                  <Eye className="w-3 h-3 text-[#0E4EBD]" />
+                  <span className="text-[#0E4EBD] text-xs italic font-medium">Visible to submitting officer</span>
                 </div>
                 <span className="text-gray-400 text-xs">{remarks.length} / 1000</span>
               </div>
@@ -904,7 +904,7 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
             <div className="p-6 space-y-4 overflow-y-auto flex-1">
               <div>
                 <div className="flex items-center gap-2 mb-2">
-                  <div className="w-1 h-4 bg-[#83358E] rounded-full" />
+                  <div className="w-1 h-4 bg-[#0E4EBD] rounded-full" />
                   <p className="text-[#001A4D] font-bold text-sm">Flagged Items to Correct (Grouped by Step) <span className="text-red-500">*</span></p>
                 </div>
                 <div className="space-y-2 bg-gray-50 p-3 rounded-xl border border-gray-200">
@@ -924,7 +924,7 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
 
               <div>
                 <div className="flex items-center gap-2 mb-2">
-                  <div className="w-1 h-4 bg-[#83358E] rounded-full" />
+                  <div className="w-1 h-4 bg-[#0E4EBD] rounded-full" />
                   <p className="text-[#001A4D] font-bold text-sm">Adviser Revision Remarks / Instructions <span className="text-red-500">*</span></p>
                 </div>
                 <textarea

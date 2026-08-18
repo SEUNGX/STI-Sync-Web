@@ -6,6 +6,7 @@ import type { OrganizationMemberDocument } from '../../organizations/types/membe
 import type { OrganizationDocument } from '../../organizations/types/organization.types';
 import type { PayableDocument } from '../../finance/types/payable.types';
 import type { AttendanceRecord } from '../../attendance/types/attendance.types';
+import { formatAppTime } from '../../../utils/date';
 
 export interface EnrichedClubMembership {
   id: string;
@@ -126,16 +127,7 @@ export function useStudentDetail(studentDocOrId: StudentDocument | string | null
 
     // 5. Subscribe to Attendance Records across collection group 'attendance' and top-level 'attendance'
     const formatTime = (timestamp: any): string => {
-      if (!timestamp) return '—';
-      try {
-        if (typeof timestamp.toDate === 'function') {
-          return timestamp.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        }
-        if (timestamp.seconds) {
-          return new Date(timestamp.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        }
-      } catch (_) {}
-      return '—';
+      return formatAppTime(timestamp, '—');
     };
 
     const unsubAttendance = onSnapshot(

@@ -227,9 +227,9 @@ export function DocumentPreviewModal({ doc, onClose }: DocumentPreviewModalProps
           
           <div className="flex items-center gap-2">
             {(doc.type === 'submission' && doc.remarks) && (
-              <div className="flex items-center gap-2 max-w-md bg-[#F3E8FF] px-3 py-1.5 rounded-lg border border-[#83358E]/20">
-                <AlertCircle className="w-4 h-4 text-[#83358E] flex-shrink-0" />
-                <p className="text-[#83358E] text-xs truncate" title={doc.remarks}>
+              <div className="flex items-center gap-2 max-w-md bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200">
+                <AlertCircle className="w-4 h-4 text-[#0E4EBD] flex-shrink-0" />
+                <p className="text-[#001A4D] text-xs truncate" title={doc.remarks}>
                   <span className="font-bold">Remarks:</span> {doc.remarks}
                 </p>
               </div>

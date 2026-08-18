@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Plus, Archive, RotateCcw, Trash2, Edit2, X, AlertTriangle, GripVertical } from 'lucide-react';
+import { formatAppDate } from '../../../utils/date';
 
 interface AcademicYearSemesterProps {
   onUnsavedChange: () => void;
@@ -283,11 +284,11 @@ export default function AcademicYearSemester({ onUnsavedChange }: AcademicYearSe
                     ))}
                   </div>
                 </div>
-                {semModal.type === 'edit' && <p className="text-xs text-gray-400 italic">Last modified: {new Date().toLocaleDateString()}</p>}
+                {semModal.type === 'edit' && <p className="text-xs text-gray-400 italic">Last modified: {formatAppDate(new Date())}</p>}
                 <div className="flex gap-3 pt-2">
                   <button onClick={closeSem} className="flex-1 py-2.5 border border-gray-300 text-gray-700 rounded-xl text-sm font-semibold hover:bg-gray-50">Cancel</button>
                   <button onClick={saveSem} disabled={!semForm.academicYear || !semForm.startDate || !semForm.endDate || !semForm.label}
-                    className={`flex-1 py-2.5 text-white rounded-xl text-sm font-bold disabled:opacity-40 ${semModal.type === 'edit' ? 'bg-[#83358E] hover:bg-[#6D2A78]' : 'bg-[#001A4D] hover:bg-[#001A4D]/90'}`}>
+                    className="flex-1 py-2.5 bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] text-white rounded-xl text-sm font-bold disabled:opacity-40 hover:opacity-90 transition-opacity cursor-pointer shadow-xs">
                     {semModal.type === 'add' ? 'Save' : 'Save Changes'}
                   </button>
                 </div>
@@ -399,7 +400,7 @@ export default function AcademicYearSemester({ onUnsavedChange }: AcademicYearSe
                 <div className="flex gap-3 pt-2">
                   <button onClick={closeGrade} className="flex-1 py-2.5 border border-gray-300 text-gray-700 rounded-xl text-sm font-semibold hover:bg-gray-50">Cancel</button>
                   <button onClick={saveGrade} disabled={!gradeForm.name}
-                    className={`flex-1 py-2.5 text-white rounded-xl text-sm font-bold disabled:opacity-40 ${gradeModal.type === 'edit' ? 'bg-[#83358E] hover:bg-[#6D2A78]' : 'bg-[#001A4D] hover:bg-[#001A4D]/90'}`}>
+                    className="flex-1 py-2.5 bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] text-white rounded-xl text-sm font-bold disabled:opacity-40 hover:opacity-90 transition-opacity cursor-pointer shadow-xs">
                     {gradeModal.type === 'add' ? 'Save' : 'Save Changes'}
                   </button>
                 </div>

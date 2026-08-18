@@ -2,6 +2,8 @@ import { useState, useMemo } from 'react';
 import { X, FileSpreadsheet, Check, Printer, Layers, Eye, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { LiquidationDocument } from '../types/liquidation.types';
+import { formatCurrency, formatVariance } from '../../../utils/currency';
+import { formatAppDateTime } from '../../../utils/date';
 
 interface LiquidationExportPreviewModalProps {
   isOpen: boolean;
@@ -68,11 +70,11 @@ export function LiquidationExportPreviewModal({
       case 'itemIndex': return (idx + 1).toString();
       case 'description': return item.description || '—';
       case 'category': return item.category || '—';
-      case 'allocatedCost': return allocated > 0 ? `₱${allocated.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : '—';
-      case 'totalCost': return `₱${(item.totalCost || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+      case 'allocatedCost': return allocated > 0 ? formatCurrency(allocated) : '—';
+      case 'totalCost': return formatCurrency(item.totalCost || 0);
       case 'variance':
         if (allocated === 0) return '—';
-        return variance < 0 ? `-₱${Math.abs(variance).toLocaleString('en-US', { minimumFractionDigits: 2 })} (Deficit)` : `+₱${variance.toLocaleString('en-US', { minimumFractionDigits: 2 })} (Surplus)`;
+        return variance < 0 ? `${formatCurrency(variance)} (Deficit)` : `+${formatCurrency(variance)} (Surplus)`;
       case 'vendorName': return item.vendorName || '—';
       case 'receiptNumber': return item.receiptNumber || '—';
       case 'hasReceiptImage': return item.receiptUrl ? 'Attached' : 'None';
@@ -100,7 +102,7 @@ export function LiquidationExportPreviewModal({
   const exportToExcelXML = () => {
     setIsExporting(true);
     try {
-      const now = new Date().toLocaleString();
+      const now = formatAppDateTime(new Date());
       const filename = `${sanitizeFileName(report.eventTitle)}_Financial_Liquidation.xls`;
 
       let xml = `<?xml version="1.0" encoding="UTF-8"?>
@@ -156,7 +158,7 @@ export function LiquidationExportPreviewModal({
     <Cell ss:MergeAcross="${Math.max(0, enabledColumns.length - 1)}" ss:StyleID="SubTitleStyle"><Data ss:Type="String">Event: ${report.eventTitle} | Organization: ${report.organizationName} | Submitted By: ${report.createdByName}</Data></Cell>
    </Row>
    <Row ss:Height="20">
-    <Cell ss:MergeAcross="${Math.max(0, enabledColumns.length - 1)}" ss:StyleID="SubTitleStyle"><Data ss:Type="String">Approved Budget: ₱${report.allocatedBudget.toLocaleString()} | Actual Spend: ₱${report.totalActualSpending.toLocaleString()} | Net Variance: ${isDeficit ? `-₱${varianceAmount.toLocaleString()} (Deficit)` : `+₱${varianceAmount.toLocaleString()} (Surplus)`} | Exported: ${now}</Data></Cell>
+    <Cell ss:MergeAcross="${Math.max(0, enabledColumns.length - 1)}" ss:StyleID="SubTitleStyle"><Data ss:Type="String">Approved Budget: ${formatCurrency(report.allocatedBudget)} | Actual Spend: ${formatCurrency(report.totalActualSpending)} | Net Variance: ${isDeficit ? `${formatCurrency(-varianceAmount)} (Deficit)` : `+${formatCurrency(varianceAmount)} (Surplus)`} | Exported: ${now}</Data></Cell>
    </Row>
    <Row ss:Height="10"></Row>
    <Row ss:Height="24">`;
@@ -182,9 +184,9 @@ export function LiquidationExportPreviewModal({
         let val = '';
         if (col.key === 'itemIndex') val = 'Total';
         else if (col.key === 'description') val = 'TOTAL SUMMARY';
-        else if (col.key === 'allocatedCost') val = `₱${report.allocatedBudget.toLocaleString()}`;
-        else if (col.key === 'totalCost') val = `₱${report.totalActualSpending.toLocaleString()}`;
-        else if (col.key === 'variance') val = isDeficit ? `-₱${varianceAmount.toLocaleString()}` : `+₱${varianceAmount.toLocaleString()}`;
+        else if (col.key === 'allocatedCost') val = formatCurrency(report.allocatedBudget);
+        else if (col.key === 'totalCost') val = formatCurrency(report.totalActualSpending);
+        else if (col.key === 'variance') val = isDeficit ? `${formatCurrency(-varianceAmount)} (Deficit)` : `+${formatCurrency(varianceAmount)} (Surplus)`;
         xml += `<Cell ss:StyleID="TotalStyle"><Data ss:Type="String">${escapeXml(val)}</Data></Cell>`;
       });
       xml += `</Row>`;
@@ -257,16 +259,16 @@ export function LiquidationExportPreviewModal({
           <div className="flex items-center gap-4 text-xs">
             <div className="bg-white px-3 py-1.5 rounded-lg border border-purple-200">
               <span className="text-gray-500 block text-[10px] uppercase font-bold">Approved Budget</span>
-              <span className="font-bold text-[#001A4D] text-sm">₱{report.allocatedBudget.toLocaleString()}</span>
+              <span className="font-bold text-[#001A4D] text-sm">{formatCurrency(report.allocatedBudget)}</span>
             </div>
             <div className="bg-white px-3 py-1.5 rounded-lg border border-purple-200">
               <span className="text-gray-500 block text-[10px] uppercase font-bold">Actual Spending</span>
-              <span className="font-bold text-[#83358E] text-sm">₱{report.totalActualSpending.toLocaleString()}</span>
+              <span className="font-bold text-[#83358E] text-sm">{formatCurrency(report.totalActualSpending)}</span>
             </div>
             <div className="bg-white px-3 py-1.5 rounded-lg border border-purple-200">
               <span className="text-gray-500 block text-[10px] uppercase font-bold">{isDeficit ? 'Net Deficit' : 'Net Surplus'}</span>
               <span className={`font-bold text-sm ${isDeficit ? 'text-red-600' : 'text-green-600'}`}>
-                {isDeficit ? `-₱${varianceAmount.toLocaleString()}` : `+₱${varianceAmount.toLocaleString()}`}
+                {formatVariance(isDeficit ? -varianceAmount : varianceAmount)}
               </span>
             </div>
           </div>
@@ -376,9 +378,9 @@ export function LiquidationExportPreviewModal({
                       let val = '';
                       if (col.key === 'itemIndex') val = 'Total';
                       else if (col.key === 'description') val = 'SUMMARY TOTALS';
-                      else if (col.key === 'allocatedCost') val = `₱${report.allocatedBudget.toLocaleString()}`;
-                      else if (col.key === 'totalCost') val = `₱${report.totalActualSpending.toLocaleString()}`;
-                      else if (col.key === 'variance') val = isDeficit ? `-₱${varianceAmount.toLocaleString()}` : `+₱${varianceAmount.toLocaleString()}`;
+                      else if (col.key === 'allocatedCost') val = formatCurrency(report.allocatedBudget);
+                      else if (col.key === 'totalCost') val = formatCurrency(report.totalActualSpending);
+                      else if (col.key === 'variance') val = isDeficit ? `${formatCurrency(-varianceAmount)}` : `+${formatCurrency(varianceAmount)}`;
 
                       return (
                         <td key={col.key} className="px-3 py-2.5 text-[#001A4D]">

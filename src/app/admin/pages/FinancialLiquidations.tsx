@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router';
 import { 
   Receipt, 
   CheckCircle2, 
@@ -27,13 +28,27 @@ import OfficerLiquidationModal from '../../officer/components/OfficerLiquidation
 import ReceiptLightboxModal from '../../modules/finance/components/ReceiptLightboxModal';
 import { LiquidationExportPreviewModal } from '../../modules/finance/components/LiquidationExportPreviewModal';
 import type { LiquidationDocument, LiquidationStatus } from '../../modules/finance/types/liquidation.types';
+import { formatCurrency, formatVariance } from '../../utils/currency';
+import { formatAppDateTime } from '../../utils/date';
 
 export function FinancialLiquidations() {
   const { liquidations, loading, error } = useAllLiquidations();
+  const [searchParams] = useSearchParams();
+  const targetId = searchParams.get('id') || searchParams.get('liquidationId');
+
   const [lightboxData, setLightboxData] = useState<{ url: string; title: string; vendor?: string; amount?: number } | null>(null);
 
   const [activeTab, setActiveTab] = useState<'pending' | 'approved' | 'returned' | 'all'>('pending');
   const [selectedReport, setSelectedReport] = useState<LiquidationDocument | null>(null);
+
+  useEffect(() => {
+    if (targetId && liquidations.length > 0) {
+      const found = liquidations.find((l) => l.id === targetId);
+      if (found) {
+        setSelectedReport(found);
+      }
+    }
+  }, [targetId, liquidations]);
   const [exportReport, setExportReport] = useState<LiquidationDocument | null>(null);
   const [reviewRemarks, setReviewRemarks] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -120,7 +135,7 @@ export function FinancialLiquidations() {
 
         <Button
           onClick={() => setShowAdminCreateModal(true)}
-          className="bg-gradient-to-r from-[#001A4D] to-[#83358E] text-white hover:opacity-90 font-bold"
+          className="bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] text-white hover:opacity-90 font-bold shadow-sm cursor-pointer"
         >
           <Plus className="w-4 h-4 mr-2" />
           Create Admin Liquidation
@@ -198,14 +213,14 @@ export function FinancialLiquidations() {
                           <div>
                             <span className="text-gray-500">Approved Budget:</span>
                             <div className="font-bold text-[#001A4D] text-sm">
-                              ₱{(liq.allocatedBudget || 0).toLocaleString()}
+                              {formatCurrency(liq.allocatedBudget)}
                             </div>
                           </div>
 
                           <div>
                             <span className="text-gray-500">Total Actual Spending:</span>
-                            <div className="font-bold text-[#83358E] text-sm">
-                              ₱{(liq.totalActualSpending || 0).toLocaleString()}
+                            <div className="font-bold text-[#0E4EBD] text-sm">
+                              {formatCurrency(liq.totalActualSpending)}
                             </div>
                           </div>
 
@@ -214,7 +229,7 @@ export function FinancialLiquidations() {
                               {isDeficit ? 'Deficit (Over Budget):' : 'Surplus (Remaining):'}
                             </span>
                             <div className={`font-bold text-sm ${isDeficit ? 'text-red-600' : 'text-green-600'}`}>
-                              {isDeficit ? `-₱${varianceAmount.toLocaleString()}` : `+₱${varianceAmount.toLocaleString()}`}
+                              {formatVariance(varianceAmount)}
                             </div>
                           </div>
                         </div>
@@ -231,7 +246,7 @@ export function FinancialLiquidations() {
                         {liq.status === 'approved' && (
                           <Button
                             onClick={() => setExportReport(liq)}
-                            className="bg-gradient-to-r from-[#83358E] to-[#001A4D] text-white font-bold text-xs hover:opacity-90 cursor-pointer"
+                            className="bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] text-white font-bold text-xs hover:opacity-90 cursor-pointer shadow-xs"
                           >
                             <FileSpreadsheet className="w-4 h-4 mr-1.5 text-[#FFC107]" />
                             Export Report
@@ -264,7 +279,7 @@ export function FinancialLiquidations() {
           <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden border border-gray-100">
             
             {/* Modal Header */}
-            <div className="px-6 py-4 bg-gradient-to-r from-[#001A4D] to-[#83358E] text-white flex items-center justify-between">
+            <div className="px-6 py-4 bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] text-white flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-bold">
                   {selectedReport.status === 'approved' ? 'Approved Liquidation Report' : 'Review Liquidation'}: {selectedReport.eventTitle}
@@ -295,14 +310,14 @@ export function FinancialLiquidations() {
                 <div>
                   <div className="text-xs text-gray-500 font-medium">Approved Event Budget</div>
                   <div className="text-lg font-bold text-[#001A4D] mt-0.5">
-                    ₱{selectedReport.allocatedBudget.toLocaleString()}
+                    {formatCurrency(selectedReport.allocatedBudget)}
                   </div>
                 </div>
 
                 <div>
                   <div className="text-xs text-gray-500 font-medium">Total Actual Spending</div>
-                  <div className="text-lg font-bold text-[#83358E] mt-0.5">
-                    ₱{selectedReport.totalActualSpending.toLocaleString()}
+                  <div className="text-lg font-bold text-[#0E4EBD] mt-0.5">
+                    {formatCurrency(selectedReport.totalActualSpending)}
                   </div>
                 </div>
 
@@ -315,9 +330,7 @@ export function FinancialLiquidations() {
                       selectedReport.surplusOrDeficit < 0 ? 'text-red-600' : 'text-green-600'
                     }`}
                   >
-                    {selectedReport.surplusOrDeficit < 0
-                      ? `-₱${Math.abs(selectedReport.surplusOrDeficit).toLocaleString()}`
-                      : `+₱${selectedReport.surplusOrDeficit.toLocaleString()}`}
+                    {formatVariance(selectedReport.surplusOrDeficit)}
                   </div>
                 </div>
               </div>
@@ -355,9 +368,9 @@ export function FinancialLiquidations() {
                             <td className="p-3">
                               {itemAllocated > 0 ? (
                                 <div>
-                                  <div className="font-bold text-gray-900">₱{itemAllocated.toLocaleString()}</div>
+                                  <div className="font-bold text-gray-900">{formatCurrency(itemAllocated)}</div>
                                   <div className="text-[10px] text-gray-500">
-                                    {item.proposedQuantity || 1} Qty × ₱{(item.proposedUnitCost || 0).toLocaleString()}
+                                    {item.proposedQuantity || 1} Qty × {formatCurrency(item.proposedUnitCost || 0)}
                                   </div>
                                 </div>
                               ) : (
@@ -366,9 +379,9 @@ export function FinancialLiquidations() {
                             </td>
                             <td className="p-3">
                               <div>
-                                <div className="font-bold text-[#83358E]">₱{item.totalCost.toLocaleString()}</div>
+                                <div className="font-bold text-[#0E4EBD]">{formatCurrency(item.totalCost)}</div>
                                 <div className="text-[10px] text-gray-500">
-                                  {item.quantity} Qty × ₱{item.unitCost.toLocaleString()}
+                                  {item.quantity} Qty × {formatCurrency(item.unitCost)}
                                 </div>
                               </div>
                             </td>
@@ -378,8 +391,8 @@ export function FinancialLiquidations() {
                                   itemVariance < 0 ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
                                 }`}>
                                   {itemVariance < 0
-                                    ? `Deficit -₱${Math.abs(itemVariance).toLocaleString()}`
-                                    : `Surplus +₱${itemVariance.toLocaleString()}`}
+                                    ? `Deficit -${formatCurrency(Math.abs(itemVariance))}`
+                                    : `Surplus +${formatCurrency(itemVariance)}`}
                                 </span>
                               ) : (
                                 <span className="text-gray-400">—</span>
@@ -424,7 +437,7 @@ export function FinancialLiquidations() {
                       <div key={rIdx} className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-xs space-y-1">
                         <div className="flex items-center justify-between text-gray-700 font-semibold">
                           <span>{rem.authorName} ({rem.authorRole === 'admin' ? 'SAO Adviser' : 'Officer'})</span>
-                          <span className="text-[10px] text-gray-500">{new Date(rem.timestamp).toLocaleString()}</span>
+                          <span className="text-[10px] text-gray-500">{formatAppDateTime(rem.timestamp)}</span>
                         </div>
                         <p className="text-gray-800">{rem.comment}</p>
                       </div>
@@ -443,7 +456,7 @@ export function FinancialLiquidations() {
                     value={reviewRemarks}
                     onChange={(e) => setReviewRemarks(e.target.value)}
                     placeholder="Enter approval notes or specific instructions if returning for revision..."
-                    className="w-full p-3 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-[#83358E] focus:border-transparent h-24"
+                    className="w-full p-3 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] h-24"
                   />
                 </div>
               )}
@@ -467,7 +480,7 @@ export function FinancialLiquidations() {
                   </Badge>
                   <Button
                     onClick={() => setExportReport(selectedReport)}
-                    className="bg-gradient-to-r from-[#83358E] to-[#001A4D] text-white font-bold text-xs hover:opacity-90 cursor-pointer"
+                    className="bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] text-white font-bold text-xs hover:opacity-90 cursor-pointer shadow-xs"
                   >
                     <FileSpreadsheet className="w-4 h-4 mr-1.5 text-[#FFC107]" />
                     Export Liquidation Report

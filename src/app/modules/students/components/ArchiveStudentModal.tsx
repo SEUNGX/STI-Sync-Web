@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { X, Archive, AlertTriangle, CheckCircle2, Loader2, DollarSign, ShieldAlert } from 'lucide-react';
 import type { StudentDocument, StudentArchivalValidation } from '../types/student.types';
 import { validateStudentArchival, archiveStudent } from '../services/student.service';
+import { formatCurrency } from '../../../utils/currency';
 
 interface ArchiveStudentModalProps {
   student: StudentDocument;
@@ -80,7 +81,7 @@ export default function ArchiveStudentModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-[#E0E0E0]">
         {/* Header */}
-        <div className="bg-gradient-to-r from-[#001A4D] to-[#83358E] px-6 py-5 text-white flex items-center justify-between">
+        <div className="bg-gradient-to-r from-[#001A4D] via-[#002B7F] to-[#0E4EBD] px-6 py-5 text-white flex items-center justify-between shadow-sm">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-white/10 rounded-lg">
               <Archive className="w-5 h-5 text-[#FFD41C]" />
@@ -134,7 +135,7 @@ export default function ArchiveStudentModal({
                               <span className="text-gray-400 block">{p.organizationName}</span>
                             </div>
                             <span className="font-mono font-bold text-red-600">
-                              ₱{p.outstandingAmount.toLocaleString()}
+                              {formatCurrency(p.outstandingAmount)}
                             </span>
                           </div>
                         ))}
@@ -175,7 +176,7 @@ export default function ArchiveStudentModal({
                     <select
                       value={reason}
                       onChange={(e) => setReason(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] outline-none"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] outline-none"
                     >
                       {ARCHIVE_REASONS.map((r) => (
                         <option key={r} value={r}>{r}</option>
@@ -192,7 +193,7 @@ export default function ArchiveStudentModal({
                       onChange={(e) => setCustomNote(e.target.value)}
                       placeholder="Add any internal documentation regarding this archival..."
                       rows={3}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] outline-none"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] outline-none"
                     />
                   </div>
 

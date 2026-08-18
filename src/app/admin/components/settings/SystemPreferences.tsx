@@ -21,7 +21,7 @@ export default function SystemPreferences({ onUnsavedChange }: SystemPreferences
             </label>
             <select
               onChange={onUnsavedChange}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
             >
               <option>Asia/Manila (GMT+8)</option>
               <option>Asia/Tokyo (GMT+9)</option>
@@ -36,8 +36,9 @@ export default function SystemPreferences({ onUnsavedChange }: SystemPreferences
             </label>
             <select
               onChange={onUnsavedChange}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
             >
+              <option>MMM D YYYY (Aug 9 2005)</option>
               <option>MM/DD/YYYY (05/31/2026)</option>
               <option>DD/MM/YYYY (31/05/2026)</option>
               <option>YYYY-MM-DD (2026-05-31)</option>
@@ -50,9 +51,9 @@ export default function SystemPreferences({ onUnsavedChange }: SystemPreferences
             </label>
             <select
               onChange={onUnsavedChange}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
             >
-              <option>12-hour (3:30 PM)</option>
+              <option>12-hour (12:49 PM)</option>
               <option>24-hour (15:30)</option>
             </select>
           </div>
@@ -63,7 +64,7 @@ export default function SystemPreferences({ onUnsavedChange }: SystemPreferences
             </label>
             <select
               onChange={onUnsavedChange}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
             >
               <option>PHP (₱) - Philippine Peso</option>
               <option>USD ($) - US Dollar</option>
@@ -77,7 +78,7 @@ export default function SystemPreferences({ onUnsavedChange }: SystemPreferences
             </label>
             <select
               onChange={onUnsavedChange}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
             >
               <option>English</option>
               <option>Filipino</option>
@@ -104,8 +105,8 @@ export default function SystemPreferences({ onUnsavedChange }: SystemPreferences
                   onClick={onUnsavedChange}
                   className={`p-4 border-2 rounded-lg text-center transition-all ${
                     theme.active
-                      ? 'border-[#83358E] bg-[#83358E]/5'
-                      : 'border-gray-200 hover:border-[#83358E]/50'
+                      ? 'border-[#001A4D] bg-[#001A4D]/5'
+                      : 'border-gray-200 hover:border-[#0E4EBD]/50'
                   }`}
                 >
                   <div className="text-3xl mb-2">{theme.icon}</div>
@@ -121,16 +122,16 @@ export default function SystemPreferences({ onUnsavedChange }: SystemPreferences
             </label>
             <div className="flex gap-3">
               {[
+                { color: '#001A4D', name: 'STI Midnight Navy' },
                 { color: '#0E4EBD', name: 'Cobalt Blue' },
-                { color: '#83358E', name: 'Violet' },
-                { color: '#1E70E8', name: 'Royal Blue' },
-                { color: '#22C55E', name: 'Green' },
-                { color: '#FFC107', name: 'Gold' },
+                { color: '#FFD41C', name: 'STI Gold' },
+                { color: '#10B981', name: 'Green' },
+                { color: '#002B7F', name: 'Royal Blue' },
               ].map((colorOption, index) => (
                 <button
                   key={index}
                   onClick={onUnsavedChange}
-                  className="w-12 h-12 rounded-lg border-2 border-gray-300 hover:border-[#83358E] transition-all"
+                  className="w-12 h-12 rounded-lg border-2 border-gray-300 hover:border-[#0E4EBD] transition-all cursor-pointer"
                   style={{ backgroundColor: colorOption.color }}
                   title={colorOption.name}
                 ></button>
@@ -143,7 +144,7 @@ export default function SystemPreferences({ onUnsavedChange }: SystemPreferences
               <span className="text-sm text-gray-700">Enable animations and transitions</span>
               <button
                 onClick={onUnsavedChange}
-                className="relative w-12 h-6 rounded-full bg-[#83358E]"
+                className="relative w-12 h-6 rounded-full bg-[#001A4D] cursor-pointer"
               >
                 <div className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full translate-x-6"></div>
               </button>
@@ -152,7 +153,7 @@ export default function SystemPreferences({ onUnsavedChange }: SystemPreferences
               <span className="text-sm text-gray-700">Show organization logos in navigation</span>
               <button
                 onClick={onUnsavedChange}
-                className="relative w-12 h-6 rounded-full bg-[#83358E]"
+                className="relative w-12 h-6 rounded-full bg-[#001A4D] cursor-pointer"
               >
                 <div className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full translate-x-6"></div>
               </button>
@@ -170,7 +171,7 @@ export default function SystemPreferences({ onUnsavedChange }: SystemPreferences
             </label>
             <select
               onChange={onUnsavedChange}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
             >
               <option>Calendar View</option>
               <option>List View</option>
@@ -184,7 +185,7 @@ export default function SystemPreferences({ onUnsavedChange }: SystemPreferences
             </label>
             <select
               onChange={onUnsavedChange}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
             >
               <option>10</option>
               <option>25</option>
@@ -198,7 +199,7 @@ export default function SystemPreferences({ onUnsavedChange }: SystemPreferences
               <span className="text-sm text-gray-700">Auto-save form drafts</span>
               <button
                 onClick={onUnsavedChange}
-                className="relative w-12 h-6 rounded-full bg-[#83358E]"
+                className="relative w-12 h-6 rounded-full bg-[#001A4D] cursor-pointer"
               >
                 <div className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full translate-x-6"></div>
               </button>
@@ -207,7 +208,7 @@ export default function SystemPreferences({ onUnsavedChange }: SystemPreferences
               <span className="text-sm text-gray-700">Confirm before deleting items</span>
               <button
                 onClick={onUnsavedChange}
-                className="relative w-12 h-6 rounded-full bg-[#83358E]"
+                className="relative w-12 h-6 rounded-full bg-[#001A4D] cursor-pointer"
               >
                 <div className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full translate-x-6"></div>
               </button>
@@ -216,7 +217,7 @@ export default function SystemPreferences({ onUnsavedChange }: SystemPreferences
               <span className="text-sm text-gray-700">Show tooltips and help text</span>
               <button
                 onClick={onUnsavedChange}
-                className="relative w-12 h-6 rounded-full bg-gray-300"
+                className="relative w-12 h-6 rounded-full bg-gray-300 cursor-pointer"
               >
                 <div className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full"></div>
               </button>
@@ -232,7 +233,7 @@ export default function SystemPreferences({ onUnsavedChange }: SystemPreferences
             <span className="text-sm text-gray-700">Enable data caching for faster load times</span>
             <button
               onClick={onUnsavedChange}
-              className="relative w-12 h-6 rounded-full bg-[#83358E]"
+              className="relative w-12 h-6 rounded-full bg-[#001A4D] cursor-pointer"
             >
               <div className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full translate-x-6"></div>
             </button>
@@ -241,7 +242,7 @@ export default function SystemPreferences({ onUnsavedChange }: SystemPreferences
             <span className="text-sm text-gray-700">Preload upcoming events</span>
             <button
               onClick={onUnsavedChange}
-              className="relative w-12 h-6 rounded-full bg-[#83358E]"
+              className="relative w-12 h-6 rounded-full bg-[#001A4D] cursor-pointer"
             >
               <div className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full translate-x-6"></div>
             </button>

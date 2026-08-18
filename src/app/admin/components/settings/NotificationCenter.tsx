@@ -35,8 +35,8 @@ export default function NotificationCenter({ onUnsavedChange }: NotificationCent
                   </div>
                   <button
                     onClick={onUnsavedChange}
-                    className={`relative w-12 h-6 rounded-full ${
-                      channel.enabled ? 'bg-[#83358E]' : 'bg-gray-300'
+                    className={`relative w-12 h-6 rounded-full cursor-pointer ${
+                      channel.enabled ? 'bg-[#001A4D]' : 'bg-gray-300'
                     }`}
                   >
                     <div
@@ -66,30 +66,30 @@ export default function NotificationCenter({ onUnsavedChange }: NotificationCent
             <div key={index} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
               <span className="text-sm text-gray-700 flex-1">{notif.event}</span>
               <div className="flex items-center gap-4">
-                <label className="flex items-center gap-2">
+                <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
                     defaultChecked={notif.email}
                     onChange={onUnsavedChange}
-                    className="text-[#83358E] focus:ring-[#83358E] rounded"
+                    className="text-[#0E4EBD] focus:ring-[#0E4EBD] rounded accent-[#0E4EBD]"
                   />
                   <span className="text-xs text-gray-600">Email</span>
                 </label>
-                <label className="flex items-center gap-2">
+                <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
                     defaultChecked={notif.inApp}
                     onChange={onUnsavedChange}
-                    className="text-[#83358E] focus:ring-[#83358E] rounded"
+                    className="text-[#0E4EBD] focus:ring-[#0E4EBD] rounded accent-[#0E4EBD]"
                   />
                   <span className="text-xs text-gray-600">In-App</span>
                 </label>
-                <label className="flex items-center gap-2">
+                <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
                     defaultChecked={notif.sms}
                     onChange={onUnsavedChange}
-                    className="text-[#83358E] focus:ring-[#83358E] rounded"
+                    className="text-[#0E4EBD] focus:ring-[#0E4EBD] rounded accent-[#0E4EBD]"
                   />
                   <span className="text-xs text-gray-600">SMS</span>
                 </label>
@@ -110,7 +110,7 @@ export default function NotificationCenter({ onUnsavedChange }: NotificationCent
               type="email"
               defaultValue="sao@sti.edu"
               onChange={onUnsavedChange}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
             />
           </div>
 
@@ -122,7 +122,7 @@ export default function NotificationCenter({ onUnsavedChange }: NotificationCent
               type="text"
               defaultValue="STI College Ormoc - Student Affairs Office"
               onChange={onUnsavedChange}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
             />
           </div>
 
@@ -131,7 +131,7 @@ export default function NotificationCenter({ onUnsavedChange }: NotificationCent
               <span className="text-sm text-gray-700">Batch notifications to reduce email volume</span>
               <button
                 onClick={onUnsavedChange}
-                className="relative w-12 h-6 rounded-full bg-[#83358E]"
+                className="relative w-12 h-6 rounded-full bg-[#001A4D] cursor-pointer"
               >
                 <div className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full translate-x-6"></div>
               </button>

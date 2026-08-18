@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { useOutletContext } from "react-router";
+import { useOutletContext, useSearchParams } from "react-router";
 import {
   CheckCircle2, XCircle, Calendar, Plus, Eye,
   Search, ChevronLeft, ChevronRight, FileEdit, Clock,
@@ -19,6 +19,8 @@ import { useEventCategoriesStream } from "../../modules/events/hooks/useEventCon
 import { approveEvent, rejectEvent } from "../../modules/events/services/event.service";
 import { useAdviserProfile } from "../../modules/auth/hooks/useAdviserProfile";
 import type { EventDocument } from "../../modules/events/types/event.types";
+import { formatCurrency } from "../../utils/currency";
+import { formatAppDateTime } from "../../utils/date";
 
 const ITEMS_PER_PAGE = 10;
 
@@ -103,16 +105,7 @@ function getDraftProgress(draft: EventDocument): { label: string; step: number }
 }
 
 function formatTimestamp(ts: any): string {
-  if (!ts) return "Unknown";
-  try {
-    const date = ts.toDate ? ts.toDate() : new Date(ts);
-    return date.toLocaleDateString("en-PH", {
-      month: "short", day: "numeric", year: "numeric",
-      hour: "2-digit", minute: "2-digit"
-    });
-  } catch {
-    return "Unknown";
-  }
+  return formatAppDateTime(ts, "Unknown");
 }
 
 // ─── Dropdown helper ────────────────────────────────────────────────────────
@@ -174,6 +167,9 @@ export function EventApprovals() {
   const { globalSearch } = useOutletContext<{ globalSearch: string }>();
   const searchQuery = globalSearch || "";
 
+  const [searchParams] = useSearchParams();
+  const targetId = searchParams.get("id") || searchParams.get("eventId");
+
   const [activeTab, setActiveTab] = useState<TabValue>("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageInput, setPageInput] = useState("1");
@@ -188,6 +184,15 @@ export function EventApprovals() {
 
   // ── Data streams ─────────────────────────────────────────────────────────
   const { events, loading: eventsLoading } = useAllEvents();
+
+  useEffect(() => {
+    if (targetId && events.length > 0) {
+      const target = events.find((e) => e.id === targetId);
+      if (target) {
+        setSelectedEvent(target);
+      }
+    }
+  }, [targetId, events]);
   const { drafts, loading: draftsLoading } = useDraftEvents();
   const { data: orgs } = useOrganizationStream();
   const { categories } = useEventCategoriesStream();
@@ -382,7 +387,7 @@ export function EventApprovals() {
         </div>
         <Button
           onClick={() => { setResumeDraft(null); setModalKey(Date.now()); setIsModalOpen(true); }}
-          className="bg-gradient-to-r from-[#001A4D] to-[#83358E] hover:from-[#001A4D]/90 hover:to-[#83358E]/90 text-white"
+          className="bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] hover:opacity-90 text-white font-bold shadow-sm"
         >
           <Plus className="w-4 h-4 mr-2" />
           Create Event (SAO)
@@ -541,7 +546,7 @@ export function EventApprovals() {
                           <div className="flex items-center gap-2">
                             <Button
                               onClick={() => handleResumeDraft(draft)}
-                              className="bg-gradient-to-r from-[#001A4D] to-[#83358E] hover:from-[#001A4D]/90 hover:to-[#83358E]/90 text-white"
+                              className="bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] hover:opacity-90 text-white font-bold shadow-xs"
                             >
                               <RotateCcw className="w-4 h-4 mr-2" />
                               Resume Draft
@@ -619,7 +624,7 @@ export function EventApprovals() {
                               <span className="font-medium">Format:</span> {event.eventFormat}
                             </div>
                             <div className="text-sm text-gray-600">
-                              <span className="font-medium">Budget:</span> ₱{(event.totalApprovedBudget || 0).toLocaleString()}
+                              <span className="font-medium">Budget:</span> {formatCurrency(event.totalApprovedBudget || 0)}
                             </div>
                           </div>
 

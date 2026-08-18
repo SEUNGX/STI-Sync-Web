@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { X, Download, ZoomIn, ZoomOut, RotateCw, ExternalLink } from 'lucide-react';
+import { formatCurrency } from '../../../utils/currency';
 
 interface ReceiptLightboxModalProps {
   isOpen: boolean;
@@ -37,7 +38,7 @@ export default function ReceiptLightboxModal({
             <h3 className="font-bold text-base">Receipt Evidence Lightbox</h3>
             {itemTitle && (
               <p className="text-xs text-white/70 mt-0.5">
-                {itemTitle} {vendorName ? `• Vendor: ${vendorName}` : ''} {amount ? `• ₱${amount.toLocaleString()}` : ''}
+                {itemTitle} {vendorName ? `• Vendor: ${vendorName}` : ''} {amount ? `• ${formatCurrency(amount)}` : ''}
               </p>
             )}
           </div>

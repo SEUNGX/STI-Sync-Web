@@ -6,6 +6,7 @@ import { useOrgEvents } from '../../modules/events/hooks/useEventStream';
 import { useOrgLiquidations } from '../../modules/finance/hooks/useLiquidationStream';
 import { useOrgMembers } from '../../modules/organizations/hooks/useOrgMembers';
 import { useAttendanceStream } from '../../modules/attendance/hooks/useAttendanceStream';
+import { formatAppDate } from '../../utils/date';
 
 export default function OfficerDashboardPage() {
   const { profile } = useOfficerProfile();
@@ -189,7 +190,7 @@ export default function OfficerDashboardPage() {
               ) : (
                 upcomingEventsList.slice(0, 4).map((event) => {
                   const firstSession = event.sessions && event.sessions[0];
-                  const dateStr = firstSession ? firstSession.date : 'TBD';
+                  const dateStr = firstSession ? formatAppDate(firstSession.date, 'TBD') : 'TBD';
                   const timeStr = firstSession ? `${firstSession.startTime} - ${firstSession.endTime}` : '';
                   const statusKey = (event.proposalStatus || 'draft').toLowerCase();
 

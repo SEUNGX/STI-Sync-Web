@@ -119,8 +119,8 @@ const STEPS = [
 ];
 
 // ─── Shared input style ───────────────────────────────────────────────────────
-const inputCls = (hasError?: boolean) =>
-  `w-full px-4 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#83358E] focus:border-transparent transition-colors ${hasError ? 'border-red-400 bg-red-50' : 'border-gray-300 bg-white'
+const inputCls = (hasError: boolean) =>
+  `w-full px-4 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] transition-colors ${hasError ? 'border-red-400 bg-red-50' : 'border-gray-300 bg-white'
   }`;
 
 // ─── Label helper ─────────────────────────────────────────────────────────────
@@ -318,7 +318,7 @@ export default function AddStudentManuallyModal({ onClose, onSuccess }: Props) {
           <div className="flex gap-3">
             <button
               onClick={() => { setForm(INITIAL_FORM); setStep(0); setDone(false); }}
-              className="flex-1 px-4 py-3 border border-[#83358E] text-[#83358E] rounded-xl font-medium text-sm hover:bg-purple-50 transition-colors flex items-center justify-center gap-2"
+              className="flex-1 px-4 py-3 border border-[#0E4EBD] text-[#0E4EBD] rounded-xl font-medium text-sm hover:bg-blue-50 transition-colors flex items-center justify-center gap-2"
             >
               <RefreshCw className="w-4 h-4" />
               Add Another
@@ -342,7 +342,7 @@ export default function AddStudentManuallyModal({ onClose, onSuccess }: Props) {
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-[620px] flex flex-col max-h-[92vh] overflow-hidden">
 
         {/* ── Header ── */}
-        <div className="bg-gradient-to-r from-[#001A4D] to-[#83358E] px-6 py-5 flex items-center justify-between flex-shrink-0">
+        <div className="bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] px-6 py-5 flex items-center justify-between flex-shrink-0">
           <div>
             <h2 className="text-white font-bold text-lg">Add Student Manually</h2>
             <p className="text-white/70 text-xs mt-0.5">
@@ -493,7 +493,7 @@ export default function AddStudentManuallyModal({ onClose, onSuccess }: Props) {
                   <input
                     type="tel"
                     placeholder="9XX XXX XXXX"
-                    className={`flex-1 px-4 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#83358E] focus:border-transparent ${errors.contactNumber ? 'border-red-400 bg-red-50' : 'border-gray-300'}`}
+                    className={`flex-1 px-4 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] ${errors.contactNumber ? 'border-red-400 bg-red-50' : 'border-gray-300'}`}
                     value={form.contactNumber}
                     onChange={(e) => set('contactNumber', e.target.value.replace(/[^\d\s]/g, ''))}
                     maxLength={12}
@@ -530,7 +530,7 @@ export default function AddStudentManuallyModal({ onClose, onSuccess }: Props) {
                 </div>
                 {errors.courseId && <p className="text-red-500 text-xs mt-1">{errors.courseId}</p>}
                 {form.courseId && (
-                  <div className="mt-1.5 inline-flex items-center gap-1.5 px-2 py-1 bg-[#F3E8FF] text-[#83358E] rounded-full text-xs font-medium">
+                  <div className="mt-1.5 inline-flex items-center gap-1.5 px-2 py-1 bg-blue-50 text-[#0E4EBD] rounded-full text-xs font-medium border border-blue-100">
                     <Check className="w-3 h-3" /> {form.courseCode}
                   </div>
                 )}
@@ -625,9 +625,9 @@ export default function AddStudentManuallyModal({ onClose, onSuccess }: Props) {
               {errors.semester && <p className="text-red-500 text-xs mt-1">{errors.semester}</p>}
 
               {/* Info card */}
-              <div className="p-3 bg-[#F3E8FF] border border-[#83358E]/30 rounded-xl flex items-start gap-2">
-                <Info className="w-4 h-4 text-[#83358E] flex-shrink-0 mt-0.5" />
-                <p className="text-[#83358E] text-xs italic leading-relaxed">
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl flex items-start gap-2">
+                <Info className="w-4 h-4 text-[#0E4EBD] flex-shrink-0 mt-0.5" />
+                <p className="text-[#001A4D] text-xs italic leading-relaxed">
                   Your year level and section will need to be re-confirmed at the start of each new semester.
                 </p>
               </div>
@@ -740,9 +740,9 @@ export default function AddStudentManuallyModal({ onClose, onSuccess }: Props) {
               </div>
 
               {/* Security info card */}
-              <div className="p-3 bg-[#F3E8FF] border border-[#83358E]/30 rounded-xl flex items-start gap-2">
-                <Shield className="w-4 h-4 text-[#83358E] flex-shrink-0 mt-0.5" />
-                <p className="text-[#83358E] text-xs italic leading-relaxed">
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl flex items-start gap-2">
+                <Shield className="w-4 h-4 text-[#0E4EBD] flex-shrink-0 mt-0.5" />
+                <p className="text-[#001A4D] text-xs italic leading-relaxed">
                   The password is encrypted. STI staff will never ask for the student's password. A welcome email will be sent so they can reset it.
                 </p>
               </div>
@@ -815,7 +815,7 @@ export default function AddStudentManuallyModal({ onClose, onSuccess }: Props) {
               type="button"
               onClick={goNext}
               disabled={photoUploading}
-              className="flex items-center gap-1.5 px-5 py-2.5 bg-[#83358E] text-white rounded-lg text-sm font-medium hover:bg-[#6D2A78] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              className="flex items-center gap-1.5 px-5 py-2.5 bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] text-white rounded-lg text-sm font-bold hover:opacity-90 transition-opacity disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer shadow-sm"
             >
               {photoUploading ? 'Uploading…' : 'Next'}
               {photoUploading ? <Loader className="w-4 h-4 animate-spin" /> : <ChevronRight className="w-4 h-4" />}
@@ -825,7 +825,7 @@ export default function AddStudentManuallyModal({ onClose, onSuccess }: Props) {
               type="button"
               onClick={handleSubmit}
               disabled={saving || photoUploading}
-              className="flex items-center gap-2 px-6 py-2.5 bg-[#001A4D] text-[#FFD41C] rounded-lg text-sm font-bold hover:bg-[#001A4D]/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] text-white rounded-lg text-sm font-bold hover:opacity-90 transition-opacity disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer shadow-sm"
             >
               {saving ? <Loader className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
               {saving ? 'Registering…' : photoUploading ? 'Uploading…' : 'Register Student'}
@@ -887,18 +887,18 @@ function PhotoStep({ title, subtitle, circle, value, onChange, folder, onUploadi
         {circle ? (
           /* Profile photo — circle */
           <div className="relative">
-            <div className="w-52 h-52 rounded-full border-2 border-dashed border-[#83358E] bg-[#F3E8FF] flex items-center justify-center overflow-hidden ring-4 ring-[#83358E]/20">
+            <div className="w-52 h-52 rounded-full border-2 border-dashed border-[#0E4EBD] bg-blue-50/50 flex items-center justify-center overflow-hidden ring-4 ring-[#0E4EBD]/20">
               {uploading ? (
                 <div className="text-center">
-                  <Loader className="w-10 h-10 text-[#83358E] mx-auto mb-2 animate-spin" />
-                  <p className="text-[#83358E] font-bold text-sm">Uploading… {progress}%</p>
+                  <Loader className="w-10 h-10 text-[#0E4EBD] mx-auto mb-2 animate-spin" />
+                  <p className="text-[#0E4EBD] font-bold text-sm">Uploading… {progress}%</p>
                 </div>
               ) : value ? (
                 <img src={value} alt="Profile" className="w-full h-full object-cover" />
               ) : (
                 <div className="text-center">
-                  <Camera className="w-12 h-12 text-[#83358E] mx-auto mb-2" />
-                  <p className="text-[#83358E] font-bold text-sm">Tap to capture</p>
+                  <Camera className="w-12 h-12 text-[#0E4EBD] mx-auto mb-2" />
+                  <p className="text-[#001A4D] font-bold text-sm">Tap to capture</p>
                 </div>
               )}
             </div>
@@ -911,14 +911,14 @@ function PhotoStep({ title, subtitle, circle, value, onChange, folder, onUploadi
         ) : (
           /* School ID — landscape rectangle */
           <div
-            className="relative w-full border-2 border-dashed border-[#83358E] bg-[#F3E8FF] rounded-xl overflow-hidden cursor-pointer"
+            className="relative w-full border-2 border-dashed border-[#0E4EBD] bg-blue-50/50 rounded-xl overflow-hidden cursor-pointer"
             style={{ height: 180 }}
             onClick={() => !uploading && fileRef.current?.click()}
           >
             {uploading ? (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
-                <Loader className="w-10 h-10 text-[#83358E] animate-spin" />
-                <p className="text-[#83358E] font-bold text-sm">Uploading… {progress}%</p>
+                <Loader className="w-10 h-10 text-[#0E4EBD] animate-spin" />
+                <p className="text-[#0E4EBD] font-bold text-sm">Uploading… {progress}%</p>
               </div>
             ) : value ? (
               <>
@@ -930,8 +930,8 @@ function PhotoStep({ title, subtitle, circle, value, onChange, folder, onUploadi
               </>
             ) : (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-1">
-                <CreditCard className="w-12 h-12 text-[#83358E]" />
-                <p className="text-[#83358E] font-bold text-sm">Tap to photograph your ID</p>
+                <CreditCard className="w-12 h-12 text-[#0E4EBD]" />
+                <p className="text-[#001A4D] font-bold text-sm">Tap to photograph your ID</p>
                 <p className="text-gray-400 text-xs">or upload from gallery</p>
               </div>
             )}
@@ -949,7 +949,7 @@ function PhotoStep({ title, subtitle, circle, value, onChange, folder, onUploadi
           <button
             type="button"
             onClick={() => onChange('')}
-            className="text-[#83358E] text-sm hover:underline"
+            className="text-[#0E4EBD] text-sm hover:underline"
           >
             {circle ? 'Retake' : 'Re-upload'}
           </button>
@@ -961,7 +961,7 @@ function PhotoStep({ title, subtitle, circle, value, onChange, folder, onUploadi
             type="button"
             disabled={uploading}
             onClick={() => fileRef.current?.click()}
-            className="flex-1 h-11 bg-[#83358E] text-white rounded-lg text-sm font-bold flex items-center justify-center gap-2 hover:bg-[#6D2A78] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            className="flex-1 h-11 bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] text-white rounded-lg text-sm font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-opacity disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer shadow-sm"
           >
             <Camera className="w-4 h-4" />
             {circle ? 'Take Selfie' : 'Take Photo'}
@@ -970,7 +970,7 @@ function PhotoStep({ title, subtitle, circle, value, onChange, folder, onUploadi
             type="button"
             disabled={uploading}
             onClick={() => fileRef.current?.click()}
-            className="flex-1 h-11 border border-[#83358E] text-[#83358E] rounded-lg text-sm font-medium flex items-center justify-center gap-2 hover:bg-[#F3E8FF] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            className="flex-1 h-11 border border-[#0E4EBD] text-[#0E4EBD] rounded-lg text-sm font-bold flex items-center justify-center gap-2 hover:bg-blue-50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
           >
             <Upload className="w-4 h-4" />
             Upload from Gallery

@@ -5,7 +5,7 @@ interface MetricCardProps {
   title: string;
   value: string | number;
   icon: LucideIcon;
-  gradient: "blue" | "green" | "gold" | "red-orange" | "purple";
+  gradient: "blue" | "green" | "gold" | "red-orange" | "navy";
   change?: string;
   badge?: ReactNode;
   trending?: "up" | "down";
@@ -17,7 +17,7 @@ const gradients = {
   green: "from-[#22C55E] to-[#16A34A]",
   gold: "from-[#FFC107] to-[#F59E0B]",
   "red-orange": "from-[#EF4444] to-[#F97316]",
-  purple: "from-[#83358E] to-[#A855F7]",
+  navy: "from-[#001A4D] to-[#0E4EBD]",
 };
 
 export function MetricCard({

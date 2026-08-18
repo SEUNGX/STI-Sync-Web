@@ -1,4 +1,4 @@
-import { createBrowserRouter } from "react-router";
+import { createBrowserRouter, Navigate } from "react-router";
 import { Layout } from "./admin/components/layout/Layout";
 import { Dashboard } from "./admin/pages/Dashboard";
 import { Organizations } from "./admin/pages/Organizations";
@@ -17,7 +17,6 @@ import { AdminDocuments } from "./admin/pages/AdminDocuments";
 import { AdminDocumentReview } from "./admin/pages/AdminDocumentReview";
 
 // Auth Pages
-import LandingPage from "./auth/LandingPage";
 import SASAdminLogin from "./auth/SASAdminLogin";
 import OfficerLogin from "./auth/OfficerLogin";
 
@@ -39,10 +38,10 @@ import OfficerSettings from "./officer/pages/OfficerSettings";
 import ErrorPage from "./ErrorPage";
 
 export const router = createBrowserRouter([
-  // Global Routes - Landing & Auth
+  // Global Routes - Default to SAS Admin Login
   {
     path: "/",
-    Component: LandingPage,
+    element: <Navigate to="/admin/login" replace />,
     ErrorBoundary: ErrorPage,
   },
   {

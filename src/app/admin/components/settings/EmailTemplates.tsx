@@ -85,7 +85,7 @@ export default function EmailTemplates({ onUnsavedChange }: EmailTemplatesProps)
               type="url"
               placeholder="https://example.com/logo.png"
               onChange={onUnsavedChange}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
             />
           </div>
 
@@ -96,15 +96,15 @@ export default function EmailTemplates({ onUnsavedChange }: EmailTemplatesProps)
             <div className="flex gap-2">
               <input
                 type="color"
-                defaultValue="#0E4EBD"
+                defaultValue="#001A4D"
                 onChange={onUnsavedChange}
                 className="w-16 h-10 border border-gray-300 rounded cursor-pointer"
               />
               <input
                 type="text"
-                defaultValue="#0E4EBD"
+                defaultValue="#001A4D"
                 onChange={onUnsavedChange}
-                className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent font-mono"
+                className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] font-mono"
               />
             </div>
           </div>
@@ -117,7 +117,7 @@ export default function EmailTemplates({ onUnsavedChange }: EmailTemplatesProps)
               defaultValue="STI College Ormoc - Student Affairs Office&#10;Ormoc City, Leyte&#10;© 2026 All Rights Reserved"
               onChange={onUnsavedChange}
               rows={3}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
             />
           </div>
         </div>

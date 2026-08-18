@@ -45,6 +45,7 @@ interface Event {
   flagged: number;
   status: "Ongoing" | "Completed" | "Upcoming";
   sessions: EventSession[];
+  records: EnrichedAttendanceRecord[];
 }
 
 const INITIAL_FILTERS: AttendanceFilterState = {
@@ -111,7 +112,7 @@ function EventDetail({
     }
   };
 
-  const allRecords = useMemo(() => event.sessions.flatMap((s) => s.records), [event]);
+  const allRecords = useMemo(() => event.records || event.sessions.flatMap((s) => s.records), [event]);
 
   const complete = allRecords.filter((r) => r.status === "Complete" || r.status === "Checked In").length;
   const absent = allRecords.filter((r) => r.status === "Absent").length;
@@ -218,14 +219,14 @@ function EventDetail({
       <div>
         <button
           onClick={onBack}
-          className="flex items-center gap-2 text-[#001A4D] text-sm font-medium hover:text-[#83358E] transition-colors mb-4 cursor-pointer"
+          className="flex items-center gap-2 text-[#001A4D] text-sm font-medium hover:text-[#0E4EBD] transition-colors mb-4 cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4" />
           Back to All Events
         </button>
 
         <div className="flex items-start gap-4">
-          <div className="w-14 h-14 bg-gradient-to-br from-[#001A4D] to-[#83358E] rounded-2xl flex items-center justify-center text-white font-bold text-lg flex-shrink-0 shadow-sm">
+          <div className="w-14 h-14 bg-gradient-to-br from-[#001A4D] to-[#0E4EBD] rounded-2xl flex items-center justify-center text-white font-bold text-lg flex-shrink-0 shadow-sm">
             {event.orgInitials}
           </div>
           <div>
@@ -262,7 +263,7 @@ function EventDetail({
       </div>
 
       {/* Attendance Fine Control Bar */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-purple-50 border border-purple-200 rounded-2xl p-4 shadow-xs">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-blue-50 border border-blue-200 rounded-2xl p-4 shadow-xs">
         <div>
           <h3 className="font-bold text-[#001A4D] text-sm flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 text-amber-600" />
@@ -275,7 +276,7 @@ function EventDetail({
         <button
           disabled={isRecordingFines}
           onClick={handleRecordFines}
-          className="px-4 py-2 bg-gradient-to-r from-[#001A4D] to-[#83358E] text-white rounded-xl text-xs font-bold hover:opacity-90 transition-all flex items-center gap-2 disabled:opacity-50 cursor-pointer flex-shrink-0 shadow-sm"
+          className="px-4 py-2 bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] text-white rounded-xl text-xs font-bold hover:opacity-90 transition-all flex items-center gap-2 disabled:opacity-50 cursor-pointer flex-shrink-0 shadow-sm"
         >
           {isRecordingFines ? <Loader2 className="w-4 h-4 animate-spin" /> : <DollarSign className="w-4 h-4 text-[#FFD41C]" />}
           <span>Record Event Fines</span>
@@ -319,7 +320,7 @@ function EventDetail({
               {filteredRecords.map((rec, i) => (
                 <tr
                   key={rec.id || i}
-                  className={`hover:bg-purple-50/40 transition-colors ${
+                  className={`hover:bg-blue-50/40 transition-colors ${
                     rec.status === "Absent" ? "bg-red-50/20" :
                     rec.status === "Flagged" ? "bg-amber-50/30" :
                     rec.status === "Late" ? "bg-orange-50/20" : ""
@@ -333,8 +334,8 @@ function EventDetail({
                       {rec.departmentCode || rec.departmentName || 'N/A'}
                     </span>
                   </td>
-                  <td className="px-4 py-3 font-semibold text-purple-900">{rec.courseCode || rec.courseName || 'N/A'}</td>
-                  <td className="px-4 py-3 font-semibold text-[#83358E]">{rec.section || 'N/A'}</td>
+                  <td className="px-4 py-3 font-semibold text-[#0E4EBD]">{rec.courseCode || rec.courseName || 'N/A'}</td>
+                  <td className="px-4 py-3 font-semibold text-[#0E4EBD]">{rec.section || 'N/A'}</td>
                   <td className="px-4 py-3 text-gray-600">{rec.yearLevel || 'N/A'}</td>
                   <td className="px-4 py-3 font-mono text-green-700">{rec.checkIn || '—'}</td>
                   <td className="px-4 py-3 font-mono text-blue-700">{rec.checkOut || '—'}</td>
@@ -433,73 +434,53 @@ export function AttendanceMonitoring() {
       const absent = evtAttendance.filter(a => a.status === "Absent").length;
       const flagged = evtAttendance.filter(a => a.status === "Flagged").length;
 
-      const sessions: EventSession[] = (evt.sessions && evt.sessions.length > 0) ? evt.sessions.map((s, i) => ({
-        id: s.id || `session-${i}`,
-        label: s.title || `Session ${i + 1}`,
-        date: s.date || "TBA",
-        timeStart: s.startTime || "8:00 AM",
-        timeEnd: s.endTime || "5:00 PM",
-        records: evtAttendance.map((rec) => {
-          const matchedStudent = studentMap.get((rec.studentId || '').trim().toLowerCase());
-          const deptObj = (departments || []).find(d => d.id === matchedStudent?.departmentId || d.code === matchedStudent?.departmentId);
-          const courseObj = (courses || []).find(c => c.id === matchedStudent?.courseId || c.code === matchedStudent?.courseCode);
+      const enrichedRecords: EnrichedAttendanceRecord[] = evtAttendance.map((rec) => {
+        const matchedStudent = studentMap.get((rec.studentId || '').trim().toLowerCase());
+        const deptObj = (departments || []).find(d => d.id === matchedStudent?.departmentId || d.code === matchedStudent?.departmentId);
+        const courseObj = (courses || []).find(c => c.id === matchedStudent?.courseId || c.code === matchedStudent?.courseCode);
+        const sessionObj = evt.sessions?.find(s => s.id === rec.sessionId);
 
-          return {
-            ...rec,
-            id: rec.id,
-            studentId: rec.studentId || matchedStudent?.studentId || 'N/A',
-            name: rec.name || (matchedStudent ? `${matchedStudent.firstName} ${matchedStudent.lastName}` : 'Unknown Student'),
-            departmentId: matchedStudent?.departmentId,
-            departmentName: matchedStudent?.departmentName || deptObj?.name || 'N/A',
-            departmentCode: deptObj?.code || matchedStudent?.departmentId || 'N/A',
-            courseId: matchedStudent?.courseId,
-            courseCode: matchedStudent?.courseCode || courseObj?.code || 'N/A',
-            courseName: matchedStudent?.courseName || courseObj?.name || 'N/A',
-            section: matchedStudent?.section || 'N/A',
-            yearLevel: matchedStudent?.yearLevel || 'N/A',
-            sessionTitle: s.title || 'Main Session',
-            sessionId: s.id || `session-${i}`,
-            checkIn: rec.checkIn === '—' ? '' : rec.checkIn,
-            checkOut: rec.checkOut === '—' ? '' : rec.checkOut,
-            duration: rec.checkIn && rec.checkOut && rec.checkIn !== '—' && rec.checkOut !== '—' ? 'Active' : null,
-            status: rec.status as any,
-            flaggedReason: rec.flaggedReason,
-          };
-        })
-      })) : [
+        return {
+          ...rec,
+          id: rec.id,
+          studentId: rec.studentId || matchedStudent?.studentId || 'N/A',
+          name: rec.name || (matchedStudent ? `${matchedStudent.firstName} ${matchedStudent.lastName}` : 'Unknown Student'),
+          departmentId: matchedStudent?.departmentId,
+          departmentName: matchedStudent?.departmentName || deptObj?.name || 'N/A',
+          departmentCode: deptObj?.code || matchedStudent?.departmentId || 'N/A',
+          courseId: matchedStudent?.courseId,
+          courseCode: matchedStudent?.courseCode || courseObj?.code || 'N/A',
+          courseName: matchedStudent?.courseName || courseObj?.name || 'N/A',
+          section: matchedStudent?.section || 'N/A',
+          yearLevel: matchedStudent?.yearLevel || 'N/A',
+          sessionTitle: sessionObj?.title || 'Main Session',
+          sessionId: rec.sessionId || (evt.sessions?.[0]?.id || `${evt.id}-main`),
+          checkIn: rec.checkIn === '—' ? '' : rec.checkIn,
+          checkOut: rec.checkOut === '—' ? '' : rec.checkOut,
+          duration: rec.checkIn && rec.checkOut && rec.checkIn !== '—' && rec.checkOut !== '—' ? 'Active' : null,
+          status: rec.status as any,
+          flaggedReason: rec.flaggedReason,
+        };
+      });
+
+      const sessions: EventSession[] = (evt.sessions && evt.sessions.length > 0) ? evt.sessions.map((s, i) => {
+        const sId = s.id || `session-${i}`;
+        return {
+          id: sId,
+          label: s.title || `Session ${i + 1}`,
+          date: s.date || "TBA",
+          timeStart: s.startTime || "8:00 AM",
+          timeEnd: s.endTime || "5:00 PM",
+          records: enrichedRecords.filter(r => r.sessionId === sId || (!r.sessionId && i === 0)),
+        };
+      }) : [
         {
           id: `${evt.id}-main`,
           label: "Main Session",
           date: "TBA",
           timeStart: "TBA",
           timeEnd: "TBA",
-          records: evtAttendance.map(rec => {
-            const matchedStudent = studentMap.get((rec.studentId || '').trim().toLowerCase());
-            const deptObj = (departments || []).find(d => d.id === matchedStudent?.departmentId || d.code === matchedStudent?.departmentId);
-            const courseObj = (courses || []).find(c => c.id === matchedStudent?.courseId || c.code === matchedStudent?.courseCode);
-
-            return {
-              ...rec,
-              id: rec.id,
-              studentId: rec.studentId || matchedStudent?.studentId || 'N/A',
-              name: rec.name || (matchedStudent ? `${matchedStudent.firstName} ${matchedStudent.lastName}` : 'Unknown Student'),
-              departmentId: matchedStudent?.departmentId,
-              departmentName: matchedStudent?.departmentName || deptObj?.name || 'N/A',
-              departmentCode: deptObj?.code || matchedStudent?.departmentId || 'N/A',
-              courseId: matchedStudent?.courseId,
-              courseCode: matchedStudent?.courseCode || courseObj?.code || 'N/A',
-              courseName: matchedStudent?.courseName || courseObj?.name || 'N/A',
-              section: matchedStudent?.section || 'N/A',
-              yearLevel: matchedStudent?.yearLevel || 'N/A',
-              sessionTitle: 'Main Session',
-              sessionId: `${evt.id}-main`,
-              checkIn: rec.checkIn === '—' ? '' : rec.checkIn,
-              checkOut: rec.checkOut === '—' ? '' : rec.checkOut,
-              duration: rec.checkIn && rec.checkOut && rec.checkIn !== '—' && rec.checkOut !== '—' ? 'Active' : null,
-              status: rec.status as any,
-              flaggedReason: rec.flaggedReason,
-            };
-          })
+          records: enrichedRecords,
         }
       ];
 
@@ -540,6 +521,7 @@ export function AttendanceMonitoring() {
         flagged,
         status: eventStatus,
         sessions,
+        records: enrichedRecords,
       };
     });
   }, [dbEvents, dbAttendance, venues, dbCategories, studentMap, departments, courses, rawOrganizations]);
@@ -638,7 +620,7 @@ export function AttendanceMonitoring() {
       <div>
         <div className="flex items-center gap-3">
           <h2 className="text-2xl font-bold text-[#001A4D]">Attendance Monitoring</h2>
-          {loading && <Loader2 className="w-4 h-4 animate-spin text-[#83358E]" />}
+          {loading && <Loader2 className="w-4 h-4 animate-spin text-[#0E4EBD]" />}
         </div>
         <p className="text-gray-500 text-sm">Track and monitor event attendance across campus with section and department filters.</p>
       </div>
@@ -683,7 +665,7 @@ export function AttendanceMonitoring() {
                 <YAxis tick={{ fontSize: 11, fill: '#6B7280' }} />
                 <Tooltip />
                 <Bar dataKey="registered" fill="#E2E8F0" radius={[4, 4, 0, 0]} name="Registered" />
-                <Bar dataKey="checkedIn" fill="#83358E" radius={[4, 4, 0, 0]} name="Attended" />
+                <Bar dataKey="checkedIn" fill="#0E4EBD" radius={[4, 4, 0, 0]} name="Attended" />
                 <Bar dataKey="absent" fill="#EF4444" radius={[4, 4, 0, 0]} name="Absent" />
               </BarChart>
             </ResponsiveContainer>
@@ -695,9 +677,9 @@ export function AttendanceMonitoring() {
       <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Filter className="w-4 h-4 text-[#83358E]" />
+            <Filter className="w-4 h-4 text-[#0E4EBD]" />
             <h3 className="font-bold text-sm text-[#001A4D]">Event Filters</h3>
-            <span className="px-2 py-0.5 bg-purple-50 text-[#83358E] rounded-full text-xs font-semibold">
+            <span className="px-2 py-0.5 bg-blue-50 text-[#0E4EBD] rounded-full text-xs font-semibold">
               Showing {filteredEvents.length} of {mappedEvents.length} events
             </span>
           </div>
@@ -720,7 +702,7 @@ export function AttendanceMonitoring() {
               placeholder="Search event, org, venue..."
               value={eventSearch}
               onChange={e => setEventSearch(e.target.value)}
-              className="w-full pl-8 pr-3 py-2 bg-gray-50 border border-gray-300 rounded-xl text-xs focus:ring-2 focus:ring-[#83358E] focus:bg-white outline-none"
+              className="w-full pl-8 pr-3 py-2 bg-gray-50 border border-gray-300 rounded-xl text-xs focus:ring-2 focus:ring-[#0E4EBD] focus:bg-white outline-none"
             />
             <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
           </div>
@@ -730,7 +712,7 @@ export function AttendanceMonitoring() {
             <select
               value={statusFilter}
               onChange={e => setStatusFilter(e.target.value)}
-              className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-xl text-xs font-medium text-gray-700 focus:ring-2 focus:ring-[#83358E] focus:bg-white outline-none"
+              className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-xl text-xs font-medium text-gray-700 focus:ring-2 focus:ring-[#0E4EBD] focus:bg-white outline-none"
             >
               <option value="all">All Event Statuses</option>
               <option value="Ongoing">Ongoing</option>
@@ -744,7 +726,7 @@ export function AttendanceMonitoring() {
             <select
               value={orgFilter}
               onChange={e => setOrgFilter(e.target.value)}
-              className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-xl text-xs font-medium text-gray-700 focus:ring-2 focus:ring-[#83358E] focus:bg-white outline-none"
+              className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-xl text-xs font-medium text-gray-700 focus:ring-2 focus:ring-[#0E4EBD] focus:bg-white outline-none"
             >
               <option value="all">All Organizations</option>
               {availableOrgs.map(org => (
@@ -758,7 +740,7 @@ export function AttendanceMonitoring() {
             <select
               value={categoryFilter}
               onChange={e => setCategoryFilter(e.target.value)}
-              className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-xl text-xs font-medium text-gray-700 focus:ring-2 focus:ring-[#83358E] focus:bg-white outline-none"
+              className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-xl text-xs font-medium text-gray-700 focus:ring-2 focus:ring-[#0E4EBD] focus:bg-white outline-none"
             >
               <option value="all">All Categories</option>
               {availableCategories.map(cat => (
@@ -772,7 +754,7 @@ export function AttendanceMonitoring() {
             <select
               value={venueFilter}
               onChange={e => setVenueFilter(e.target.value)}
-              className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-xl text-xs font-medium text-gray-700 focus:ring-2 focus:ring-[#83358E] focus:bg-white outline-none"
+              className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-xl text-xs font-medium text-gray-700 focus:ring-2 focus:ring-[#0E4EBD] focus:bg-white outline-none"
             >
               <option value="all">All Venues</option>
               {availableVenues.map(ven => (
@@ -789,7 +771,7 @@ export function AttendanceMonitoring() {
           <div
             key={evt.id}
             onClick={() => setSelectedEvent(evt)}
-            className="bg-white border border-gray-200 hover:border-[#83358E] rounded-2xl p-5 shadow-xs hover:shadow-md transition-all cursor-pointer space-y-4"
+            className="bg-white border border-gray-200 hover:border-[#0E4EBD] rounded-2xl p-5 shadow-xs hover:shadow-md transition-all cursor-pointer space-y-4"
           >
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-3">
@@ -821,7 +803,7 @@ export function AttendanceMonitoring() {
 
             <div className="flex items-center justify-between text-xs text-gray-500 pt-1">
               <span>{evt.date}</span>
-              <span className="font-semibold text-[#83358E]">View Logs &rarr;</span>
+              <span className="font-semibold text-[#0E4EBD]">View Logs &rarr;</span>
             </div>
           </div>
         ))}
@@ -832,7 +814,7 @@ export function AttendanceMonitoring() {
             {hasActiveEventFilters && (
               <button
                 onClick={handleResetEventFilters}
-                className="px-4 py-2 bg-[#001A4D] text-white text-xs font-bold rounded-xl hover:bg-[#83358E] transition-colors"
+                className="px-4 py-2 bg-[#001A4D] text-white text-xs font-bold rounded-xl hover:bg-[#0E4EBD] transition-colors"
               >
                 Reset Event Filters
               </button>

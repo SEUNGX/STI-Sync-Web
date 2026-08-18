@@ -90,8 +90,8 @@ export const DOCUMENT_MAX_BYTES = 25 * 1024 * 1024;
 export interface DocumentCategoryDocument {
   id: string;                              // Auto-generated Firestore document ID
   name: string;                            // e.g., "Activity Letter"
-  color: string;                           // Tailwind classes e.g., "bg-[#F3E8FF] text-[#83358E]"
-  colorDot: string;                        // Dot color e.g., "bg-[#83358E]"
+  color: string;                           // Tailwind classes e.g., "bg-blue-50 text-[#0E4EBD]"
+  colorDot: string;                        // Dot color e.g., "bg-[#0E4EBD]"
   requiresRemarks: boolean;                // SAS must provide remarks when rejecting
   officerCanSubmit: boolean;               // Category visible in officer submission form
   active: boolean;                         // Whether category is enabled

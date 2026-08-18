@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Megaphone, Pin, Plus, Users, Building2, Globe } from 'lucide-react';
-import { format } from 'date-fns';
+import { formatAppDateTime } from '../../../utils/date';
 import { Card, CardContent } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
@@ -83,9 +83,7 @@ export function AnnouncementsDashboard() {
                             <span className="font-medium">{announcement.authorName}</span>
                             <span>•</span>
                             <span>
-                              {announcement.createdAt?.toDate 
-                                ? format(announcement.createdAt.toDate(), 'MMM dd, yyyy') + ' at ' + format(announcement.createdAt.toDate(), 'h:mm a')
-                                : 'Just now'}
+                              {formatAppDateTime(announcement.createdAt, 'Just now', ' at ')}
                             </span>
                           </div>
                         </div>

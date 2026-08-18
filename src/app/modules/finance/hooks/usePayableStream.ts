@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { collection, query, where, onSnapshot, doc } from 'firebase/firestore';
 import { db } from '../../../../services/firebase';
 import type { PayableDocument } from '../types/payable.types';
+import { formatAppDate } from '../../../utils/date';
 
 export function useOrgPayables(organizationId: string | null, semesterId?: string | null) {
   const [data, setData] = useState<PayableDocument[]>([]);
@@ -206,15 +207,11 @@ export function useAllEventPayablesStream() {
               id: eId,
               eventId: eId,
               eventName: doc.label || doc.description || 'Event Payable',
-              eventDate: doc.createdAt?.toDate 
-                ? doc.createdAt.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-                : '—',
+              eventDate: formatAppDate(doc.createdAt, '—'),
               payablePerStudent: doc.assignedAmount || 0,
               totalStudents: 0,
               transferredToBudget: Boolean(doc.transferredToBudget),
-              transferredDate: doc.transferredAt?.toDate 
-                ? doc.transferredAt.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-                : undefined,
+              transferredDate: doc.transferredAt ? formatAppDate(doc.transferredAt) : undefined,
               payments: [],
             });
           }
@@ -223,8 +220,8 @@ export function useAllEventPayablesStream() {
           group.totalStudents += 1;
           if (doc.transferredToBudget) {
             group.transferredToBudget = true;
-            if (doc.transferredAt?.toDate && !group.transferredDate) {
-              group.transferredDate = doc.transferredAt.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            if (doc.transferredAt && !group.transferredDate) {
+              group.transferredDate = formatAppDate(doc.transferredAt);
             }
           }
 
@@ -234,9 +231,7 @@ export function useAllEventPayablesStream() {
             name: doc.studentName || 'Student',
             studentId: doc.studentSchoolId || doc.studentId,
             amount: doc.paidAmount || 0,
-            paidDate: doc.paidAt?.toDate 
-              ? doc.paidAt.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-              : '—',
+            paidDate: formatAppDate(doc.paidAt, '—'),
             status: isPaid ? 'Paid' : 'Pending',
           });
         }

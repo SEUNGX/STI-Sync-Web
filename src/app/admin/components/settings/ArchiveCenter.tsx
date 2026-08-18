@@ -19,8 +19,8 @@ interface ArchivedItem {
 
 const TYPE_COLORS: Record<string, string> = {
   'Department': '#1E70E8',
-  'Course': '#83358E',
-  'Section': '#7F77DD',
+  'Course': '#0E4EBD',
+  'Section': '#002B7F',
   'Event Type': '#F97316',
   'Event Category': '#FFC107',
   'Venue': '#22C55E',
@@ -209,7 +209,7 @@ export default function ArchiveCenter({ onUnsavedChange }: ArchiveCenterProps) {
       </div>
 
       {/* AUTO-PURGE CONFIG */}
-      <div className="bg-white border-l-4 border-[#83358E] border border-[#E0E0E0] rounded-xl p-5">
+      <div className="bg-white border-l-4 border-[#0E4EBD] border border-[#E0E0E0] rounded-xl p-5 shadow-xs">
         <h3 className="font-bold text-[#001A4D] mb-4">Auto-Purge Settings</h3>
         <div className="space-y-4">
           <div className="flex items-center gap-4">
@@ -217,7 +217,7 @@ export default function ArchiveCenter({ onUnsavedChange }: ArchiveCenterProps) {
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Auto-Permanently Delete After</label>
               <div className="flex items-center gap-2">
                 <input type="number" value={autoPurgeDays} onChange={e => setAutoPurgeDays(Number(e.target.value))}
-                  className="w-24 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] focus:border-transparent" min={30} />
+                  className="w-24 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]" min={30} />
                 <span className="text-sm text-gray-500">days after archiving</span>
               </div>
               <p className="text-xs text-gray-400 mt-1">Items archived longer than this will be flagged for permanent deletion review.</p>
@@ -229,12 +229,12 @@ export default function ArchiveCenter({ onUnsavedChange }: ArchiveCenterProps) {
               <p className="text-xs text-gray-400 mt-0.5">Receive a summary of archived items and pending deletions.</p>
             </div>
             <button onClick={() => setWeeklyReport(!weeklyReport)}
-              className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${weeklyReport ? 'bg-[#83358E]' : 'bg-gray-300'}`}>
+              className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 cursor-pointer ${weeklyReport ? 'bg-[#001A4D]' : 'bg-gray-300'}`}>
               <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${weeklyReport ? 'translate-x-5' : ''}`} />
             </button>
           </label>
           <div className="flex justify-end">
-            <button onClick={() => onUnsavedChange()} className="px-5 py-2 bg-[#83358E] text-white rounded-lg text-sm font-semibold hover:bg-[#6D2A78] transition-colors">
+            <button onClick={() => onUnsavedChange()} className="px-5 py-2 bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] text-white rounded-lg text-sm font-bold hover:opacity-90 transition-opacity cursor-pointer shadow-xs">
               Save Auto-Purge Settings
             </button>
           </div>

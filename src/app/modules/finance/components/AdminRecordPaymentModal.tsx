@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { X, CheckCircle, Lock, Unlock, Loader2, Coins } from 'lucide-react';
 import type { PayableDocument } from '../types/payable.types';
 import { recordPayment } from '../services/payable.service';
+import { formatCurrency } from '../../../utils/currency';
 
 interface AdminRecordPaymentModalProps {
   payable: PayableDocument;
@@ -80,9 +81,9 @@ export function AdminRecordPaymentModal({
               STI Student ID: {displaySchoolId}
             </p>
             <div className="flex items-center justify-between mt-2 pt-2 border-t border-[#7F77DD]/20 text-xs">
-              <span className="text-gray-600">Total Fee: ₱{payable.assignedAmount}</span>
-              <span className="text-gray-600">Already Paid: ₱{payable.paidAmount || 0}</span>
-              <span className="font-bold text-[#001A4D]">Remaining: ₱{remaining}</span>
+              <span className="text-gray-600">Total Fee: {formatCurrency(payable.assignedAmount)}</span>
+              <span className="text-gray-600">Already Paid: {formatCurrency(payable.paidAmount || 0)}</span>
+              <span className="font-bold text-[#001A4D]">Remaining: {formatCurrency(remaining)}</span>
             </div>
           </div>
 
@@ -110,7 +111,7 @@ export function AdminRecordPaymentModal({
               onClick={() => setPaymentAmount(remaining)}
               className="text-[11px] text-[#7F77DD] font-medium hover:underline mt-1 block"
             >
-              Fill full remaining balance (₱{remaining})
+              Fill full remaining balance ({formatCurrency(remaining)})
             </button>
           </div>
 

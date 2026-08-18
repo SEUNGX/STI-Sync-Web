@@ -23,7 +23,9 @@ import {
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
 } from 'firebase/auth';
-import { db, auth } from '../../../../services/firebase';
+import { auth, db } from '../../../../services/firebase';
+import { formatCurrency } from '../../../utils/currency';
+import { formatAppDate } from '../../../utils/date';
 import { syncStudentPayablesForActiveEvents } from '../../finance/services/payable.service';
 import type {
   StudentDocument,
@@ -352,9 +354,7 @@ export async function validateStudentArchival(
           paidAmount: paid,
           outstandingAmount: outstanding,
           status: data.status || 'pending',
-          dueDate: data.dueDate?.toDate 
-            ? data.dueDate.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-            : null,
+          dueDate: formatAppDate(data.dueDate, null as any),
         });
       }
     }
@@ -362,7 +362,7 @@ export async function validateStudentArchival(
     if (unpaidPayables.length > 0) {
       const totalOutstanding = unpaidPayables.reduce((sum, p) => sum + p.outstandingAmount, 0);
       blockers.push(
-        `Student has ${unpaidPayables.length} unpaid payable(s) amounting to ₱${totalOutstanding.toLocaleString()}. Settle or waive all payables before archiving.`
+        `Student has ${unpaidPayables.length} unpaid payable(s) amounting to ${formatCurrency(totalOutstanding)}. Settle or waive all payables before archiving.`
       );
     }
 

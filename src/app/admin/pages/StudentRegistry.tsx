@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'react-router';
 import { Clock, RefreshCw, UserCheck, UserX, Archive, Loader2 } from 'lucide-react';
 import RegistryDashboard from '../components/student-registry/RegistryDashboard';
 import PendingVerification from '../components/student-registry/PendingVerification';
@@ -14,6 +15,15 @@ type RegistryView = 'dashboard' | 'pending' | 'reenrollment' | 'active' | 'inact
 
 export function StudentRegistry() {
   const [activeView, setActiveView] = useState<RegistryView>('dashboard');
+  const [searchParams] = useSearchParams();
+
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    const id = searchParams.get('id') || searchParams.get('studentId');
+    if (tab === 'pending' || id) {
+      setActiveView('pending');
+    }
+  }, [searchParams]);
 
   const { data: students, loading: loadingStudents, error: errorStudents } = useStudents();
   const { data: semesters, loading: loadingSemesters, error: errorSemesters } = useSemesters();

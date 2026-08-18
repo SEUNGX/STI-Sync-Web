@@ -23,6 +23,8 @@ import { collection, query, where, onSnapshot, collectionGroup } from 'firebase/
 import { db } from '../../../services/firebase';
 import type { OrganizationMemberDocument } from '../../modules/organizations/types/member.types';
 import type { OrganizationOfficerDocument } from '../../modules/organizations/hooks/useOrgOfficers';
+import { formatCurrency } from '../../utils/currency';
+import { formatAppDate, formatAppDateTime } from '../../utils/date';
 import type { PayableDocument } from '../../modules/finance/types/payable.types';
 import { updateMemberStatus } from '../../modules/organizations/services/member.service';
 import { useOfficerProfile } from '../../auth/hooks/useOfficerProfile';
@@ -63,13 +65,7 @@ export function MemberProfilePanel({
       .substring(0, 2)
       .toUpperCase();
 
-  const formattedDateJoined = member.dateJoined?.toDate
-    ? member.dateJoined.toDate().toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-      })
-    : 'Recently Joined';
+  const formattedDateJoined = formatAppDate(member.dateJoined, 'Recently Joined');
 
   // ─── Real-time Payables & Financial Ledger Listener (Scoped to Student) ────
   useEffect(() => {
@@ -283,7 +279,7 @@ export function MemberProfilePanel({
                 totalOutstanding > 0 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-800'
               }`}
             >
-              ₱{totalOutstanding.toLocaleString()}
+              {formatCurrency(totalOutstanding)}
             </span>
           </div>
         </div>
@@ -300,7 +296,7 @@ export function MemberProfilePanel({
                     Total Assigned Dues
                   </span>
                   <div className="text-2xl font-bold font-mono text-[#001A4D] mt-1">
-                    ₱{totalAssigned.toLocaleString()}
+                    {formatCurrency(totalAssigned)}
                   </div>
                   <span className="text-[11px] text-gray-400">Club dues, fines & event fees</span>
                 </div>
@@ -310,7 +306,7 @@ export function MemberProfilePanel({
                     Total Paid
                   </span>
                   <div className="text-2xl font-bold font-mono text-green-700 mt-1">
-                    ₱{totalPaid.toLocaleString()}
+                    {formatCurrency(totalPaid)}
                   </div>
                   <span className="text-[11px] text-green-600">Recorded club payments</span>
                 </div>
@@ -334,7 +330,7 @@ export function MemberProfilePanel({
                       totalOutstanding > 0 ? 'text-red-700' : 'text-emerald-700'
                     }`}
                   >
-                    ₱{totalOutstanding.toLocaleString()}
+                    {formatCurrency(totalOutstanding)}
                   </div>
                   <span className="text-[11px] text-gray-500">
                     {totalOutstanding > 0 ? 'Payment required' : 'Fully settled'}
@@ -401,17 +397,17 @@ export function MemberProfilePanel({
                                 </span>
                               </td>
                               <td className="px-5 py-3.5 font-mono font-semibold text-gray-800 text-right">
-                                ₱{assigned.toLocaleString()}
+                                {formatCurrency(assigned)}
                               </td>
                               <td className="px-5 py-3.5 font-mono text-green-700 font-semibold text-right">
-                                ₱{paid.toLocaleString()}
+                                {formatCurrency(paid)}
                               </td>
                               <td
                                 className={`px-5 py-3.5 font-mono font-bold text-right ${
                                   bal > 0 ? 'text-red-600' : 'text-gray-400'
                                 }`}
                               >
-                                ₱{bal.toLocaleString()}
+                                {formatCurrency(bal)}
                               </td>
                               <td className="px-5 py-3.5 text-center">
                                 <span
@@ -536,13 +532,8 @@ export function MemberProfilePanel({
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {attendances.map((att) => {
-                        const scanTime = att.scannedAt?.toDate
-                          ? att.scannedAt.toDate().toLocaleString('en-US', {
-                              month: 'short',
-                              day: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })
+                        const scanTime = att.scannedAt
+                          ? formatAppDateTime(att.scannedAt)
                           : att.checkIn || 'Logged';
 
                         return (

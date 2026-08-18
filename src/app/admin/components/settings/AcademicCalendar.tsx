@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Plus, Archive, RotateCcw, Trash2, Edit2, X, AlertTriangle } from 'lucide-react';
+import { formatAppDate } from '../../../utils/date';
 
 interface AcademicCalendarProps {
   onUnsavedChange: () => void;
@@ -32,8 +33,8 @@ const ENTRY_TYPES = [
   { label: 'Class Day', color: '#22C55E' },
   { label: 'No Class', color: '#EF4444' },
   { label: 'Exam Period', color: '#F97316' },
-  { label: 'Event Blackout', color: '#83358E' },
-  { label: 'Designated Event Day', color: '#1E70E8' },
+  { label: 'Event Blackout', color: '#001A4D' },
+  { label: 'Designated Event Day', color: '#0E4EBD' },
 ];
 
 const INIT_ENTRIES: CalendarEntry[] = [
@@ -270,12 +271,12 @@ export default function AcademicCalendar({ onUnsavedChange }: AcademicCalendarPr
                   )}
                 </div>
 
-                {modal.type === 'edit' && <p className="text-xs text-gray-400 italic">Last modified: {new Date().toLocaleDateString()}</p>}
+                {modal.type === 'edit' && <p className="text-xs text-gray-400 italic">Last modified: {formatAppDate(new Date())}</p>}
 
                 <div className="flex gap-3 pt-2">
                   <button onClick={close} className="flex-1 py-2.5 border border-gray-300 text-gray-700 rounded-xl text-sm font-semibold hover:bg-gray-50">Cancel</button>
                   <button onClick={save} disabled={!form.label || !form.dateStart}
-                    className={`flex-1 py-2.5 text-white rounded-xl text-sm font-bold disabled:opacity-40 ${modal.type === 'edit' ? 'bg-[#83358E] hover:bg-[#6D2A78]' : 'bg-[#001A4D] hover:bg-[#001A4D]/90'}`}>
+                    className="flex-1 py-2.5 bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] text-white rounded-xl text-sm font-bold disabled:opacity-40 hover:opacity-90 transition-opacity cursor-pointer shadow-xs">
                     {modal.type === 'add' ? 'Save' : 'Save Changes'}
                   </button>
                 </div>

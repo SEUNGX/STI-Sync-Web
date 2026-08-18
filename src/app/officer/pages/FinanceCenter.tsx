@@ -13,6 +13,8 @@ import { Timestamp } from 'firebase/firestore';
 import { GenerateDuesModal } from '../components/GenerateDuesModal';
 import { AddPayableModal } from '../components/AddPayableModal';
 import { RecordPaymentModal } from '../components/RecordPaymentModal';
+import { formatCurrency, formatVariance } from '../../utils/currency';
+import { formatAppDate, formatAppDateTime } from '../../utils/date';
 
 import {
   Building2,
@@ -85,12 +87,12 @@ function MetricsRow({
   const currentBalance = totalIncome - totalExpenses;
 
   const cards = [
-    { label: "Club Total Funds (Income)", value: `₱${totalIncome.toLocaleString()}`, note: "this semester", color: "text-[#83358E]", icon: Building2 },
-    { label: "Total Club Expenditures", value: `₱${totalExpenses.toLocaleString()}`, note: "this semester", color: "text-blue-600", icon: TrendingUp },
-    { label: "Current Club Balance", value: `₱${currentBalance.toLocaleString()}`, note: "available funds", color: "text-green-600", icon: Wallet },
-    { label: "Total Payables Assigned", value: `₱${totalPayables.toLocaleString()}`, note: `across ${payablesData.length} payable doc(s)`, color: "text-[#001A4D]", icon: Coins },
-    { label: "Total Collected", value: `₱${totalCollected.toLocaleString()}`, note: "collected payments", color: "text-green-600", icon: CheckCircle },
-    { label: "Total Outstanding", value: `₱${totalOutstanding.toLocaleString()}`, note: `outstanding balance`, color: "text-red-600", icon: AlertCircle },
+    { label: "Club Total Funds (Income)", value: formatCurrency(totalIncome), note: "this semester", color: "text-[#83358E]", icon: Building2 },
+    { label: "Total Club Expenditures", value: formatCurrency(totalExpenses), note: "this semester", color: "text-blue-600", icon: TrendingUp },
+    { label: "Current Club Balance", value: formatCurrency(currentBalance), note: "available funds", color: "text-green-600", icon: Wallet },
+    { label: "Total Payables Assigned", value: formatCurrency(totalPayables), note: `across ${payablesData.length} payable doc(s)`, color: "text-[#001A4D]", icon: Coins },
+    { label: "Total Collected", value: formatCurrency(totalCollected), note: "collected payments", color: "text-green-600", icon: CheckCircle },
+    { label: "Total Outstanding", value: formatCurrency(totalOutstanding), note: `outstanding balance`, color: "text-red-600", icon: AlertCircle },
   ];
 
   return (
@@ -409,17 +411,17 @@ function BudgetTrackerTab({
               ) : (
                 tableRows.map((item) => (
                   <tr key={item.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-3 text-gray-500 text-sm">
-                      {item.date?.toDate ? item.date.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Unknown'}
+                    <td className="px-5 py-3.5 text-gray-500 font-mono text-xs">
+                      {formatAppDate(item.date, 'Unknown')}
                     </td>
                     <td className="px-4 py-3 text-[#001A4D] text-sm">{item.description}</td>
                     <td className="px-4 py-3">
                       <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded font-medium capitalize">{item.source.replace('_', ' ')}</span>
                     </td>
                     <td className={`px-4 py-3 text-sm font-medium ${item.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
-                      {item.type === 'income' ? '+' : '-'}₱{item.amount.toLocaleString()}
+                      {item.type === 'income' ? `+${formatCurrency(item.amount)}` : `-${formatCurrency(item.amount)}`}
                     </td>
-                    <td className="px-4 py-3 text-gray-900 font-bold text-sm">₱{item.runningBalance.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-gray-900 font-bold text-sm">{formatCurrency(item.runningBalance)}</td>
                   </tr>
                 ))
               )}
@@ -592,9 +594,9 @@ function StudentPayablesTab({
 
         <div className="grid grid-cols-4 divide-x divide-gray-200">
           {[
-            { label: "Total Payables Assigned", value: `₱${totalAssigned.toLocaleString()}`, color: "text-[#001A4D]" },
-            { label: "Total Collected", value: `₱${totalCollected.toLocaleString()}`, color: "text-green-600" },
-            { label: "Total Outstanding", value: `₱${totalOutstanding.toLocaleString()}`, color: "text-red-600" },
+            { label: "Total Payables Assigned", value: formatCurrency(totalAssigned), color: "text-[#001A4D]" },
+            { label: "Total Collected", value: formatCurrency(totalCollected), color: "text-green-600" },
+            { label: "Total Outstanding", value: formatCurrency(totalOutstanding), color: "text-red-600" },
             { label: "Collection Rate", value: `${collectionRate}%`, color: "text-[#83358E]" },
           ].map((s) => (
             <div key={s.label} className="px-5 first:pl-0 last:pr-0 text-center">
@@ -717,13 +719,13 @@ function StudentPayablesTab({
                           {m.payables.map((p) => (
                             <div key={p.id} className="flex items-center justify-between gap-2 border-b border-gray-100 last:border-0 pb-0.5">
                               <span className="truncate max-w-[160px]" title={p.label}>{p.label}</span>
-                              <span className="font-semibold text-gray-800">₱{p.assignedAmount}</span>
+                              <span className="font-semibold text-gray-800">{formatCurrency(p.assignedAmount)}</span>
                             </div>
                           ))}
                         </td>
-                        <td className="px-4 py-3 text-gray-700 text-sm font-semibold">₱{assigned.toLocaleString()}</td>
-                        <td className="px-4 py-3 text-green-600 font-semibold text-sm">₱{paid.toLocaleString()}</td>
-                        <td className="px-4 py-3 text-red-600 font-bold text-sm">₱{outstanding.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-gray-700 text-sm font-semibold">{formatCurrency(assigned)}</td>
+                        <td className="px-4 py-3 text-green-600 font-semibold text-sm">{formatCurrency(paid)}</td>
+                        <td className="px-4 py-3 text-red-600 font-bold text-sm">{formatCurrency(outstanding)}</td>
                         <td className="px-4 py-3">
                           <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${statusColor}`}>
                             {statusText}
@@ -773,10 +775,10 @@ function StudentPayablesTab({
                     <p className="text-[#001A4D] font-bold text-sm truncate" title={pt.label}>{pt.label}</p>
                     <span className="px-2 py-0.5 bg-blue-50 text-blue-700 text-xs rounded font-medium capitalize">{pt.type}</span>
                   </div>
-                  <p className="text-[#83358E] font-bold text-lg">₱{pt.totalAssigned.toLocaleString()}</p>
+                  <p className="text-[#83358E] font-bold text-lg">{formatCurrency(pt.totalAssigned)}</p>
                   <div className="flex justify-between text-xs mt-1 mb-2">
-                    <span className="text-green-600">₱{pt.collected.toLocaleString()} collected</span>
-                    <span className="text-red-600">₱{pt.outstanding.toLocaleString()} outstanding</span>
+                    <span className="text-green-600">{formatCurrency(pt.collected)} collected</span>
+                    <span className="text-red-600">{formatCurrency(pt.outstanding)} outstanding</span>
                   </div>
                   <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mb-2">
                     <div className="h-full bg-[#83358E]" style={{ width: `${pct}%` }} />
@@ -823,7 +825,7 @@ function StudentPayablesTab({
                 ) : (
                   overduePayables.map((p) => {
                     const outstanding = (p.assignedAmount || 0) - (p.paidAmount || 0);
-                    const dueStr = p.dueDate?.toDate ? p.dueDate.toDate().toLocaleDateString('en-US') : 'Overdue';
+                    const dueStr = formatAppDate(p.dueDate, 'Overdue');
 
                     return (
                       <tr key={p.id} className="hover:bg-red-50/30 transition-colors">
@@ -832,7 +834,7 @@ function StudentPayablesTab({
                           <p className="text-gray-400 text-xs">{p.studentSchoolId || p.studentId}</p>
                         </td>
                         <td className="px-4 py-3 text-gray-700 text-sm font-medium">{p.label}</td>
-                        <td className="px-4 py-3 text-red-600 font-bold text-sm">₱{outstanding.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-red-600 font-bold text-sm">{formatCurrency(outstanding)}</td>
                         <td className="px-4 py-3 text-[#001A4D] text-sm">{dueStr}</td>
                         {!isPast && (
                           <td className="px-4 py-3">
@@ -981,18 +983,14 @@ function LiquidationTab({
               </tr>
             ) : (
               liquidations.map((l) => {
-                const submittedDate = l.submittedAt?.toDate
-                  ? l.submittedAt.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-                  : l.createdAt?.toDate
-                  ? l.createdAt.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-                  : 'Draft';
+                const submittedDate = formatAppDate(l.submittedAt || l.createdAt, 'Draft');
 
                 return (
                   <tr key={l.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-4 py-3 text-[#001A4D] font-bold text-sm">{l.eventTitle}</td>
                     <td className="px-4 py-3 text-gray-500 text-sm">{submittedDate}</td>
-                    <td className="px-4 py-3 text-gray-700 font-semibold text-sm">₱{(l.allocatedBudget || 0).toLocaleString()}</td>
-                    <td className="px-4 py-3 text-[#83358E] font-bold text-sm">₱{(l.totalActualSpending || 0).toLocaleString()}</td>
+                    <td className="px-4 py-3 text-gray-700 font-semibold text-sm">{formatCurrency(l.allocatedBudget)}</td>
+                    <td className="px-4 py-3 text-[#83358E] font-bold text-sm">{formatCurrency(l.totalActualSpending)}</td>
                     <td className="px-4 py-3">{statusBadge(l.status)}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
@@ -1062,19 +1060,19 @@ function LiquidationTab({
                 <div>
                   <div className="text-xs text-gray-500">Allocated Budget</div>
                   <div className="font-bold text-sm text-[#001A4D]">
-                    ₱{viewingDetailReport.allocatedBudget.toLocaleString()}
+                    {formatCurrency(viewingDetailReport.allocatedBudget)}
                   </div>
                 </div>
                 <div>
                   <div className="text-xs text-gray-500">Actual Spending</div>
                   <div className="font-bold text-sm text-[#83358E]">
-                    ₱{viewingDetailReport.totalActualSpending.toLocaleString()}
+                    {formatCurrency(viewingDetailReport.totalActualSpending)}
                   </div>
                 </div>
                 <div>
                   <div className="text-xs text-gray-500">Surplus / Deficit</div>
                   <div className={`font-bold text-sm ${viewingDetailReport.surplusOrDeficit < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                    ₱{viewingDetailReport.surplusOrDeficit.toLocaleString()}
+                    {formatVariance(viewingDetailReport.surplusOrDeficit)}
                   </div>
                 </div>
               </div>
@@ -1092,12 +1090,12 @@ function LiquidationTab({
                   <div key={idx} className="p-3 border border-gray-200 rounded-lg text-xs space-y-1.5 bg-gray-50/50">
                     <div className="flex items-center justify-between font-bold text-gray-900">
                       <span>{item.description} ({item.category})</span>
-                      <span className="text-[#83358E]">Actual Cost: ₱{item.totalCost.toLocaleString()}</span>
+                      <span className="text-[#83358E]">Actual Cost: {formatCurrency(item.totalCost)}</span>
                     </div>
 
                     <div className="flex flex-wrap items-center justify-between text-gray-600 gap-2">
                       <span>
-                        <strong>Actual:</strong> {item.quantity} Qty × ₱{item.unitCost.toLocaleString()}
+                        <strong>Actual:</strong> {item.quantity} Qty × {formatCurrency(item.unitCost)}
                       </span>
                     </div>
 
@@ -1130,7 +1128,7 @@ function LiquidationTab({
                       <div key={rIdx} className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-xs space-y-1">
                         <div className="flex items-center justify-between text-gray-700 font-semibold">
                           <span>{rem.authorName} ({rem.authorRole === 'admin' ? 'SAO Adviser' : 'Officer'})</span>
-                          <span className="text-[10px] text-gray-500">{new Date(rem.timestamp).toLocaleString()}</span>
+                          <span className="text-[10px] text-gray-500">{formatAppDateTime(rem.timestamp)}</span>
                         </div>
                         <p className="text-gray-800">{rem.comment}</p>
                       </div>
@@ -1303,8 +1301,8 @@ function HistoricalSummaryCard() {
       <div className="grid grid-cols-4 gap-4">
         {[
           { label: "Final Budget Utilization", value: "91%" },
-          { label: "Total Collections", value: "₱21,250" },
-          { label: "Total Outstanding", value: "₱3,500" },
+          { label: "Total Collections", value: "₱21,250.00" },
+          { label: "Total Outstanding", value: "₱3,500.00" },
           { label: "Total Liquidations Filed", value: "6" },
         ].map((s) => (
           <div key={s.label} className="text-center">

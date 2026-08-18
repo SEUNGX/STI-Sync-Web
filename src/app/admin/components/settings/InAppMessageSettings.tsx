@@ -23,7 +23,7 @@ export default function InAppMessageSettings({ onUnsavedChange }: InAppMessageSe
               type="number"
               defaultValue={30}
               onChange={onUnsavedChange}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
             />
             <p className="text-xs text-gray-500 mt-1">Messages older than this will be automatically archived</p>
           </div>
@@ -36,7 +36,7 @@ export default function InAppMessageSettings({ onUnsavedChange }: InAppMessageSe
               type="number"
               defaultValue={100}
               onChange={onUnsavedChange}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
             />
             <p className="text-xs text-gray-500 mt-1">Older unread messages will be marked as read automatically</p>
           </div>
@@ -46,7 +46,7 @@ export default function InAppMessageSettings({ onUnsavedChange }: InAppMessageSe
               <span className="text-sm text-gray-700">Show desktop notifications for new messages</span>
               <button
                 onClick={onUnsavedChange}
-                className="relative w-12 h-6 rounded-full bg-[#83358E]"
+                className="relative w-12 h-6 rounded-full bg-[#001A4D] cursor-pointer"
               >
                 <div className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full translate-x-6"></div>
               </button>
@@ -55,7 +55,7 @@ export default function InAppMessageSettings({ onUnsavedChange }: InAppMessageSe
               <span className="text-sm text-gray-700">Play sound for high-priority messages</span>
               <button
                 onClick={onUnsavedChange}
-                className="relative w-12 h-6 rounded-full bg-[#83358E]"
+                className="relative w-12 h-6 rounded-full bg-[#001A4D] cursor-pointer"
               >
                 <div className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full translate-x-6"></div>
               </button>
@@ -109,7 +109,7 @@ export default function InAppMessageSettings({ onUnsavedChange }: InAppMessageSe
               type="number"
               defaultValue={5}
               onChange={onUnsavedChange}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
             />
             <p className="text-xs text-gray-500 mt-1">How long notification banners stay visible</p>
           </div>
@@ -120,7 +120,7 @@ export default function InAppMessageSettings({ onUnsavedChange }: InAppMessageSe
             </label>
             <select
               onChange={onUnsavedChange}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
             >
               <option>Top Right</option>
               <option>Top Center</option>

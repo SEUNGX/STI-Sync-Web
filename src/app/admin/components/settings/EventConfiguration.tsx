@@ -26,7 +26,7 @@ type ModalState =
   | { type: 'restore-venue'; item: VenueDocument }
   | { type: 'delete-venue'; item: VenueDocument };
 
-const COLORS = ['#001A4D', '#1E70E8', '#83358E', '#22C55E', '#FFC107', '#EF4444', '#F97316', '#0EA5E9'];
+const COLORS = ['#001A4D', '#002B7F', '#0E4EBD', '#1E70E8', '#22C55E', '#FFD41C', '#EF4444', '#0EA5E9'];
 const FACILITY_OPTIONS = ['Projector', 'Sound System', 'Air Conditioning', 'Stage', 'Whiteboard', 'Podium', 'Lighting', 'Tables & Chairs'];
 
 function ActiveArchivedTabs({ active, onChange }: { active: boolean; onChange: (v: boolean) => void }) {
@@ -340,7 +340,7 @@ export default function EventConfiguration({ onUnsavedChange }: EventConfigurati
                 <div className="flex gap-3 pt-2">
                   <button onClick={close} className="flex-1 py-2.5 border border-gray-300 text-gray-700 rounded-xl text-sm font-semibold hover:bg-gray-50">Cancel</button>
                   <button onClick={saveType} disabled={!typeForm.name || mutations.loading}
-                    className={`flex-1 py-2.5 text-white rounded-xl text-sm font-bold disabled:opacity-40 ${modal.type === 'edit-type' ? 'bg-[#83358E] hover:bg-[#6D2A78]' : 'bg-[#001A4D] hover:bg-[#001A4D]/90'}`}>
+                    className="flex-1 py-2.5 bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] text-white rounded-xl text-sm font-bold disabled:opacity-40 hover:opacity-90 transition-opacity cursor-pointer">
                     {mutations.loading ? 'Saving...' : (modal.type === 'add-type' ? 'Save' : 'Save Changes')}
                   </button>
                 </div>
@@ -382,7 +382,7 @@ export default function EventConfiguration({ onUnsavedChange }: EventConfigurati
                 <div className="flex gap-3 pt-2">
                   <button onClick={close} className="flex-1 py-2.5 border border-gray-300 text-gray-700 rounded-xl text-sm font-semibold hover:bg-gray-50">Cancel</button>
                   <button onClick={saveCat} disabled={!catForm.name || (!catForm.typeId && modal.type === 'add-cat') || mutations.loading}
-                    className={`flex-1 py-2.5 text-white rounded-xl text-sm font-bold disabled:opacity-40 ${modal.type === 'edit-cat' ? 'bg-[#83358E] hover:bg-[#6D2A78]' : 'bg-[#001A4D] hover:bg-[#001A4D]/90'}`}>
+                    className="flex-1 py-2.5 bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] text-white rounded-xl text-sm font-bold disabled:opacity-40 hover:opacity-90 transition-opacity cursor-pointer">
                     {mutations.loading ? 'Saving...' : (modal.type === 'add-cat' ? 'Save' : 'Save Changes')}
                   </button>
                 </div>
@@ -446,7 +446,7 @@ export default function EventConfiguration({ onUnsavedChange }: EventConfigurati
                 <div className="flex gap-3 pt-2">
                   <button onClick={close} className="flex-1 py-2.5 border border-gray-300 text-gray-700 rounded-xl text-sm font-semibold hover:bg-gray-50">Cancel</button>
                   <button onClick={saveVenue} disabled={!venueForm.name || mutations.loading}
-                    className={`flex-1 py-2.5 text-white rounded-xl text-sm font-bold disabled:opacity-40 ${modal.type === 'edit-venue' ? 'bg-[#83358E] hover:bg-[#6D2A78]' : 'bg-[#001A4D] hover:bg-[#001A4D]/90'}`}>
+                    className="flex-1 py-2.5 bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] text-white rounded-xl text-sm font-bold disabled:opacity-40 hover:opacity-90 transition-opacity cursor-pointer">
                     {mutations.loading ? 'Saving...' : (modal.type === 'add-venue' ? 'Save' : 'Save Changes')}
                   </button>
                 </div>

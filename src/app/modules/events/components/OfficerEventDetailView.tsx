@@ -11,6 +11,8 @@ import { useOrganizationStream } from '../../organizations/hooks/useOrganization
 import { useEventTypesStream, useVenuesStream } from '../hooks/useEventConfigStream';
 import { useDepartments } from '../../academic/hooks/useAcademicStream';
 import { EventPayablesQRControl } from '../../finance/components/EventPayablesQRControl';
+import { formatCurrency } from '../../../utils/currency';
+import { formatAppDate, formatAppDateTime } from '../../../utils/date';
 
 interface OfficerEventDetailViewProps {
   event: EventDocument;
@@ -449,7 +451,7 @@ export default function OfficerEventDetailView({
                         </div>
                         <span className="text-xs font-medium text-gray-600 flex items-center gap-1.5">
                           <Calendar className="w-3.5 h-3.5 text-gray-400" />
-                          {session.date}
+                          {formatAppDate(session.date)}
                         </span>
                       </div>
 
@@ -504,7 +506,7 @@ export default function OfficerEventDetailView({
                 <div className="p-3.5 bg-gray-50 border border-gray-200 rounded-xl">
                   <span className="text-[11px] font-bold text-gray-400 uppercase">Late / Absent Penalty</span>
                   <p className="text-sm font-bold text-red-600 mt-0.5">
-                    {event.latePenaltyAmount ? `₱${event.latePenaltyAmount}.00` : 'None / Default'}
+                    {event.latePenaltyAmount ? formatCurrency(event.latePenaltyAmount) : 'None / Default'}
                   </p>
                 </div>
               </div>
@@ -644,20 +646,20 @@ export default function OfficerEventDetailView({
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="p-3.5 bg-gray-50 border border-gray-200 rounded-xl">
                   <span className="text-[11px] font-bold text-gray-400 uppercase">Total Proposed Budget</span>
-                  <p className="text-xl font-bold text-emerald-700 mt-0.5">₱{totalRequested.toLocaleString()}</p>
+                  <p className="text-xl font-bold text-emerald-700 mt-0.5">{formatCurrency(totalRequested)}</p>
                 </div>
                 <div className="p-3.5 bg-gray-50 border border-gray-200 rounded-xl">
                   <span className="text-[11px] font-bold text-gray-400 uppercase">Student Payables Fee</span>
                   <p className="text-sm font-bold text-[#83358E] mt-0.5">
                     {event.studentPayablesEnabled !== false
-                      ? `₱${event.adminFeeOverride || event.suggestedFeePerStudent || 0} / student`
+                      ? `${formatCurrency(event.adminFeeOverride || event.suggestedFeePerStudent || 0)} / student`
                       : 'Free / Disabled'}
                   </p>
                 </div>
                 <div className="p-3.5 bg-gray-50 border border-gray-200 rounded-xl">
                   <span className="text-[11px] font-bold text-gray-400 uppercase">Approved Budget Ceiling</span>
                   <p className="text-sm font-bold text-[#001A4D] mt-0.5">
-                    ₱{(event.totalApprovedBudget || totalRequested).toLocaleString()}
+                    {formatCurrency(event.totalApprovedBudget || totalRequested)}
                   </p>
                 </div>
               </div>
@@ -683,9 +685,9 @@ export default function OfficerEventDetailView({
                           {bi.description && <p className="text-[11px] text-gray-500">{bi.description}</p>}
                         </td>
                         <td className="p-3 text-center">{bi.quantity}</td>
-                        <td className="p-3 text-right">₱{(bi.unitCost || 0).toLocaleString()}</td>
+                        <td className="p-3 text-right">{formatCurrency(bi.unitCost || 0)}</td>
                         <td className="p-3 text-right font-bold text-[#83358E]">
-                          ₱{(bi.approvedAmount || bi.unitCost * bi.quantity || 0).toLocaleString()}
+                          {formatCurrency(bi.approvedAmount || bi.unitCost * bi.quantity || 0)}
                         </td>
                       </tr>
                     ))}
@@ -701,7 +703,7 @@ export default function OfficerEventDetailView({
                     <tfoot className="bg-[#001A4D] text-white font-bold">
                       <tr>
                         <td colSpan={4} className="p-3">Total Requested Budget</td>
-                        <td className="p-3 text-right text-[#FFD41C]">₱{totalRequested.toLocaleString()}</td>
+                        <td className="p-3 text-right text-[#FFD41C]">{formatCurrency(totalRequested)}</td>
                       </tr>
                     </tfoot>
                   )}
@@ -798,16 +800,7 @@ export default function OfficerEventDetailView({
               {event.proposalHistory && event.proposalHistory.length > 0 ? (
                 <div className="relative pl-6 space-y-6 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-gray-200">
                   {event.proposalHistory.map((item, idx) => {
-                    const itemDate =
-                      item.performedAt && typeof item.performedAt.toDate === 'function'
-                        ? item.performedAt.toDate().toLocaleString('en-PH', {
-                            month: 'short',
-                            day: 'numeric',
-                            year: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })
-                        : '—';
+                    const itemDate = formatAppDateTime(item.performedAt, '—');
 
                     return (
                       <div key={item.id || idx} className="relative space-y-1.5 text-xs">

@@ -87,7 +87,7 @@ export default function AdviserProfile({ onUnsavedChange }: AdviserProfileProps)
         <button 
           onClick={handleSave}
           disabled={isSaving}
-          className="px-6 py-2.5 bg-[#83358E] text-white rounded-lg font-medium hover:bg-[#83358E]/90 flex items-center gap-2 disabled:opacity-70 transition-colors"
+          className="px-6 py-2.5 bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] text-white rounded-lg font-bold hover:opacity-90 flex items-center gap-2 disabled:opacity-70 transition-opacity cursor-pointer shadow-sm"
         >
           {isSaving ? 'Saving...' : 'Save Profile'}
         </button>
@@ -115,7 +115,7 @@ export default function AdviserProfile({ onUnsavedChange }: AdviserProfileProps)
             {profile.avatarUrl ? (
               <img src={profile.avatarUrl} alt={profile.displayName} className="w-20 h-20 rounded-full object-cover" />
             ) : (
-              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#0E4EBD] to-[#83358E] flex items-center justify-center text-white font-bold text-2xl">
+              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#001A4D] to-[#0E4EBD] flex items-center justify-center text-white font-bold text-2xl">
                 {initials || '?'}
               </div>
             )}
@@ -126,7 +126,7 @@ export default function AdviserProfile({ onUnsavedChange }: AdviserProfileProps)
 
           <div className="flex-1">
             <h3 className="text-xl font-bold text-[#001A4D]">{profile.displayName}</h3>
-            <p className="text-[#83358E] font-medium">{profile.position}</p>
+            <p className="text-[#0E4EBD] font-medium">{profile.position}</p>
             <span className="inline-block mt-2 px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
               {profile.isActive ? 'Active' : 'Inactive'}
             </span>
@@ -143,7 +143,7 @@ export default function AdviserProfile({ onUnsavedChange }: AdviserProfileProps)
               type="text"
               value={firstName}
               onChange={handleChange(setFirstName)}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
             />
           </div>
 
@@ -155,7 +155,7 @@ export default function AdviserProfile({ onUnsavedChange }: AdviserProfileProps)
               type="text"
               value={middleName}
               onChange={handleChange(setMiddleName)}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
             />
           </div>
 
@@ -167,7 +167,7 @@ export default function AdviserProfile({ onUnsavedChange }: AdviserProfileProps)
               type="text"
               value={lastName}
               onChange={handleChange(setLastName)}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
             />
           </div>
 
@@ -195,7 +195,7 @@ export default function AdviserProfile({ onUnsavedChange }: AdviserProfileProps)
               type="tel"
               value={phoneNumber}
               onChange={handleChange(setPhoneNumber)}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
             />
           </div>
 
@@ -207,7 +207,7 @@ export default function AdviserProfile({ onUnsavedChange }: AdviserProfileProps)
               type="text"
               value={department}
               onChange={handleChange(setDepartment)}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
             />
           </div>
 
@@ -219,7 +219,7 @@ export default function AdviserProfile({ onUnsavedChange }: AdviserProfileProps)
               type="text"
               value={position}
               onChange={handleChange(setPosition)}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
             />
           </div>
         </div>

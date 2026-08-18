@@ -19,6 +19,7 @@ import { useState, useMemo } from 'react';
 import { StudentDocument, StudentYearLevel } from '../../../modules/students/types/student.types';
 import { SemesterDocument, CourseDocument, SectionDocument } from '../../../modules/academic/types/academic.types';
 import { formatTimestampDate } from '../../../modules/students/utils/date.utils';
+import { formatAppDate } from '../../../utils/date';
 import {
   reEnrollStudent,
   bulkReEnrollStudents,
@@ -326,7 +327,7 @@ export default function ReEnrollmentManagement({ students, activeSemester }: ReE
 
       {/* Semester Re-enrollment Progress Card */}
       <div className="bg-white border border-[#E0E0E0] rounded-2xl overflow-hidden shadow-sm">
-        <div className="bg-gradient-to-r from-[#001A4D] via-[#0C3C8A] to-[#83358E] px-6 py-4 flex items-center justify-between">
+        <div className="bg-gradient-to-r from-[#001A4D] via-[#002B7F] to-[#0E4EBD] px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <h3 className="text-white font-bold text-lg">{activeSemester.label} Re-enrollment</h3>
             <span className="px-3 py-1 bg-[#FFD41C] text-[#001A4D] rounded-full text-xs font-bold">
@@ -341,7 +342,7 @@ export default function ReEnrollmentManagement({ students, activeSemester }: ReE
         <div className="p-6">
           <div className="bg-gray-200 rounded-full h-5 mb-4 overflow-hidden shadow-inner">
             <div
-              className="bg-gradient-to-r from-[#0E4EBD] to-[#83358E] h-full transition-all flex items-center justify-between px-3"
+              className="bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] h-full transition-all flex items-center justify-between px-3"
               style={{ width: `${Math.max(5, progressPercent)}%` }}
             >
               {progressPercent > 10 && (
@@ -376,13 +377,7 @@ export default function ReEnrollmentManagement({ students, activeSemester }: ReE
             <div className="flex items-center gap-2">
               <span className="text-gray-600 font-medium">Re-enrollment Deadline:</span>
               <span className="font-bold text-[#001A4D]">
-                {activeSemester.reenrollDeadline
-                  ? new Date(activeSemester.reenrollDeadline).toLocaleDateString('en-US', {
-                      month: 'long',
-                      day: 'numeric',
-                      year: 'numeric',
-                    })
-                  : '—'}
+                {formatAppDate(activeSemester.reenrollDeadline, '—')}
               </span>
               {!isOverdueGlobally ? (
                 <span className="px-2.5 py-0.5 bg-amber-100 text-amber-800 rounded-full font-semibold">
@@ -402,13 +397,13 @@ export default function ReEnrollmentManagement({ students, activeSemester }: ReE
       <div className="bg-white border border-[#E0E0E0] rounded-2xl p-5 shadow-sm space-y-4">
         <div className="flex items-center justify-between border-b border-gray-100 pb-3">
           <div className="flex items-center gap-2">
-            <Filter className="w-4 h-4 text-[#83358E]" />
+            <Filter className="w-4 h-4 text-[#0E4EBD]" />
             <h4 className="font-bold text-[#001A4D] text-sm">Academic Hierarchy Cascade Filters</h4>
           </div>
           {(selectedCourseCode !== 'All Courses' || selectedYearLevel !== 'All Year Levels' || selectedSectionName !== 'All Sections' || searchQuery) && (
             <button
               onClick={handleResetCascadeFilters}
-              className="text-xs text-[#0E4EBD] hover:underline font-semibold"
+              className="text-xs text-[#0E4EBD] hover:underline font-semibold cursor-pointer"
             >
               Reset Filters
             </button>
@@ -427,7 +422,7 @@ export default function ReEnrollmentManagement({ students, activeSemester }: ReE
                 setSelectedCourseCode(e.target.value);
                 setSelectedSectionName('All Sections'); // reset section on course change
               }}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] outline-none bg-white text-gray-800 font-medium"
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] outline-none bg-white text-gray-800 font-medium"
             >
               <option value="All Courses">All Courses</option>
               {activeCourses.map((c) => (
@@ -449,7 +444,7 @@ export default function ReEnrollmentManagement({ students, activeSemester }: ReE
                 setSelectedYearLevel(e.target.value);
                 setSelectedSectionName('All Sections'); // reset section on year change
               }}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] outline-none bg-white text-gray-800 font-medium"
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] outline-none bg-white text-gray-800 font-medium"
             >
               <option value="All Year Levels">All Year Levels</option>
               <option value="1st Year">1st Year</option>
@@ -467,7 +462,7 @@ export default function ReEnrollmentManagement({ students, activeSemester }: ReE
             <select
               value={selectedSectionName}
               onChange={(e) => setSelectedSectionName(e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] outline-none bg-white text-gray-800 font-medium"
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] outline-none bg-white text-gray-800 font-medium"
             >
               <option value="All Sections">All Sections</option>
               {availableFilterSections.map((secName) => (
@@ -490,7 +485,7 @@ export default function ReEnrollmentManagement({ students, activeSemester }: ReE
                 placeholder="Search name, ID, email..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] outline-none"
+                className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] outline-none"
               />
             </div>
           </div>
@@ -502,7 +497,7 @@ export default function ReEnrollmentManagement({ students, activeSemester }: ReE
             Displaying <strong>{filteredStudents.length}</strong> student(s) matching your academic filters.
           </span>
           {selectedSectionName !== 'All Sections' && (
-            <span className="text-[#83358E] font-semibold bg-[#F3E8FF] px-2.5 py-0.5 rounded-full">
+            <span className="text-[#0E4EBD] font-semibold bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-100">
               Section Scope: {selectedSectionName}
             </span>
           )}
@@ -571,13 +566,13 @@ export default function ReEnrollmentManagement({ students, activeSemester }: ReE
 
         {/* TARGETED BATCH ACTION TOOLBAR (When students are selected) */}
         {selectedIds.length > 0 && (
-          <div className="bg-gradient-to-r from-[#F3E8FF] via-purple-50 to-white px-6 py-4 border-b border-[#83358E]/30 flex flex-wrap items-center justify-between gap-4 animate-in slide-in-from-top-2">
+          <div className="bg-gradient-to-r from-blue-50 via-slate-50 to-white px-6 py-4 border-b border-[#0E4EBD]/30 flex flex-wrap items-center justify-between gap-4 animate-in slide-in-from-top-2">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-[#83358E] text-white font-bold flex items-center justify-center text-xs shadow-xs">
+              <div className="w-8 h-8 rounded-full bg-[#001A4D] text-[#FFD41C] font-bold flex items-center justify-center text-xs shadow-xs">
                 {selectedIds.length}
               </div>
               <div>
-                <span className="text-xs font-bold text-[#83358E] block">
+                <span className="text-xs font-bold text-[#001A4D] block">
                   {selectedIds.length} student(s) selected for batch actions
                 </span>
                 <span className="text-[11px] text-gray-500">
@@ -596,7 +591,7 @@ export default function ReEnrollmentManagement({ students, activeSemester }: ReE
                     setTargetYearLevel(e.target.value);
                     setTargetSectionName('');
                   }}
-                  className="px-2.5 py-1.5 text-xs font-bold border border-purple-300 rounded-lg bg-white text-[#001A4D] focus:ring-2 focus:ring-[#83358E]"
+                  className="px-2.5 py-1.5 text-xs font-bold border border-blue-300 rounded-lg bg-white text-[#001A4D] focus:ring-2 focus:ring-[#0E4EBD]"
                 >
                   <option value="1st Year">1st Year</option>
                   <option value="2nd Year">2nd Year</option>
@@ -611,7 +606,7 @@ export default function ReEnrollmentManagement({ students, activeSemester }: ReE
                 <select
                   value={targetSectionName}
                   onChange={(e) => setTargetSectionName(e.target.value)}
-                  className="px-2.5 py-1.5 text-xs font-bold border border-purple-300 rounded-lg bg-white text-[#001A4D] focus:ring-2 focus:ring-[#83358E]"
+                  className="px-2.5 py-1.5 text-xs font-bold border border-blue-300 rounded-lg bg-white text-[#001A4D] focus:ring-2 focus:ring-[#0E4EBD]"
                 >
                   <option value="">Keep / Inherit Section</option>
                   {availableTargetSections.map((s) => (
@@ -663,7 +658,7 @@ export default function ReEnrollmentManagement({ students, activeSemester }: ReE
                     type="checkbox"
                     checked={filteredStudents.length > 0 && selectedIds.length === filteredStudents.length}
                     onChange={toggleSelectAll}
-                    className="w-4 h-4 rounded accent-[#83358E] cursor-pointer"
+                    className="w-4 h-4 rounded accent-[#0E4EBD] cursor-pointer"
                     title="Select / Deselect all visible students"
                   />
                 </th>
@@ -682,8 +677,8 @@ export default function ReEnrollmentManagement({ students, activeSemester }: ReE
                 return (
                   <tr
                     key={student.id}
-                    className={`hover:bg-[#F3E8FF]/30 transition-colors ${
-                      isSelected ? 'bg-[#F3E8FF]/40' : ''
+                    className={`hover:bg-blue-50/30 transition-colors ${
+                      isSelected ? 'bg-blue-50/50' : ''
                     }`}
                   >
                     <td className="px-6 py-4 text-center">
@@ -691,12 +686,12 @@ export default function ReEnrollmentManagement({ students, activeSemester }: ReE
                         type="checkbox"
                         checked={isSelected}
                         onChange={() => toggleSelectOne(student.id)}
-                        className="w-4 h-4 rounded accent-[#83358E] cursor-pointer"
+                        className="w-4 h-4 rounded accent-[#0E4EBD] cursor-pointer"
                       />
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 bg-gradient-to-br from-[#0E4EBD] to-[#83358E] rounded-full flex items-center justify-center text-white font-bold text-xs uppercase overflow-hidden flex-shrink-0 shadow-xs">
+                        <div className="w-9 h-9 bg-gradient-to-br from-[#001A4D] to-[#0E4EBD] rounded-full flex items-center justify-center text-white font-bold text-xs uppercase overflow-hidden flex-shrink-0 shadow-xs">
                           {student.profilePhotoUrl ? (
                             <img
                               src={student.profilePhotoUrl}
@@ -880,12 +875,12 @@ function IndividualReEnrollModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-[500px] overflow-hidden border border-[#E0E0E0]">
         {/* Header */}
-        <div className="bg-gradient-to-r from-[#001A4D] via-[#0E4EBD] to-[#83358E] px-6 py-4 flex items-center justify-between text-white">
+        <div className="bg-gradient-to-r from-[#001A4D] via-[#002B7F] to-[#0E4EBD] px-6 py-4 flex items-center justify-between text-white">
           <div className="flex items-center gap-2.5">
             <UserCheck className="w-5 h-5 text-[#FFD41C]" />
             <h3 className="font-bold text-base">Individual Student Re-enrollment</h3>
           </div>
-          <button onClick={onClose} className="p-1 rounded-lg text-white/80 hover:text-white hover:bg-white/10">
+          <button onClick={onClose} className="p-1 rounded-lg text-white/80 hover:text-white hover:bg-white/10 cursor-pointer">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -902,9 +897,9 @@ function IndividualReEnrollModal({
             </p>
           </div>
 
-          <div className="p-3 bg-purple-50 rounded-xl border border-purple-200 text-xs text-[#83358E] flex items-center justify-between">
+          <div className="p-3 bg-blue-50 rounded-xl border border-blue-200 text-xs text-[#0E4EBD] flex items-center justify-between">
             <span>Enrolling for Active Term:</span>
-            <strong>{activeSemester.label} ({activeSemester.semester})</strong>
+            <strong className="text-[#001A4D]">{activeSemester.label} ({activeSemester.semester})</strong>
           </div>
 
           {/* 1. Course Selector (Supports Program Shifting) */}
@@ -918,7 +913,7 @@ function IndividualReEnrollModal({
                 setSelectedCourseId(e.target.value);
                 setSectionName(''); // clear section on course change
               }}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-[#83358E] outline-none"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] outline-none"
             >
               {courses.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -939,7 +934,7 @@ function IndividualReEnrollModal({
                 setYearLevelNumber(Number(e.target.value));
                 setSectionName(''); // clear section on year change
               }}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-[#83358E] outline-none"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] outline-none"
             >
               <option value={1}>1st Year</option>
               <option value={2}>2nd Year</option>
@@ -957,7 +952,7 @@ function IndividualReEnrollModal({
               <select
                 value={sectionName}
                 onChange={(e) => setSectionName(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-[#83358E] outline-none"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] outline-none"
               >
                 <option value="">Select Section</option>
                 {availableSections.map((s) => (
@@ -972,7 +967,7 @@ function IndividualReEnrollModal({
                 value={sectionName}
                 onChange={(e) => setSectionName(e.target.value)}
                 placeholder="e.g. BSIT 2101 (Manual input)"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-[#83358E] outline-none"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] outline-none"
               />
             )}
             {availableSections.length === 0 && (

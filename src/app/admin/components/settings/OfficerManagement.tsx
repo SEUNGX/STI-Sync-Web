@@ -26,10 +26,10 @@ export default function OfficerManagement({ onUnsavedChange }: OfficerManagement
               type="text"
               placeholder="Search officers by name, organization, or position..."
               onChange={onUnsavedChange}
-              className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+              className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
             />
           </div>
-          <select className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent">
+          <select className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]">
             <option>All Organizations</option>
             <option>JPIA</option>
             <option>CSS</option>
@@ -46,7 +46,7 @@ export default function OfficerManagement({ onUnsavedChange }: OfficerManagement
           ].map((officer, index) => (
             <div key={index} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50">
               <div className="flex items-center gap-4 flex-1">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#0E4EBD] to-[#83358E] flex items-center justify-center text-white font-bold text-sm">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#001A4D] to-[#0E4EBD] flex items-center justify-center text-white font-bold text-sm">
                   {officer.name.split(' ').map(n => n[0]).join('')}
                 </div>
                 <div className="flex-1">
@@ -79,7 +79,7 @@ export default function OfficerManagement({ onUnsavedChange }: OfficerManagement
             <span className="text-sm text-gray-700">Require minimum GPA for officer positions</span>
             <button
               onClick={onUnsavedChange}
-              className="relative w-12 h-6 rounded-full bg-[#83358E]"
+              className="relative w-12 h-6 rounded-full bg-[#001A4D] cursor-pointer"
             >
               <div className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full translate-x-6"></div>
             </button>

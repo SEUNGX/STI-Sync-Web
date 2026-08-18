@@ -6,6 +6,8 @@ import ReceiptLightboxModal from '../../modules/finance/components/ReceiptLightb
 import OfficerLiquidationModal from '../components/OfficerLiquidationModal';
 import { LiquidationExportPreviewModal } from '../../modules/finance/components/LiquidationExportPreviewModal';
 import type { LiquidationDocument, LiquidationStatus } from '../../modules/finance/types/liquidation.types';
+import { formatCurrency, formatVariance } from '../../utils/currency';
+import { formatAppDateTime } from '../../utils/date';
 
 type FilterTab = 'all' | 'draft' | 'pending' | 'approved' | 'returned';
 
@@ -190,14 +192,14 @@ export default function FinancialLiquidation() {
                   <div>
                     <div className="text-xs text-gray-500 font-medium">Approved Event Budget</div>
                     <div className="text-base font-bold text-[#001A4D] mt-0.5">
-                      ₱{(report.allocatedBudget || 0).toLocaleString()}
+                      {formatCurrency(report.allocatedBudget)}
                     </div>
                   </div>
 
                   <div>
                     <div className="text-xs text-gray-500 font-medium">Total Actual Spending</div>
                     <div className="text-base font-bold text-[#83358E] mt-0.5">
-                      ₱{(report.totalActualSpending || 0).toLocaleString()}
+                      {formatCurrency(report.totalActualSpending)}
                     </div>
                   </div>
 
@@ -210,7 +212,7 @@ export default function FinancialLiquidation() {
                         isDeficit ? 'text-red-600' : 'text-green-600'
                       }`}
                     >
-                      {isDeficit ? `-₱${varianceAmount.toLocaleString()}` : `+₱${varianceAmount.toLocaleString()}`}
+                      {formatVariance(varianceAmount)}
                     </div>
                   </div>
                 </div>
@@ -291,19 +293,19 @@ export default function FinancialLiquidation() {
                 <div>
                   <div className="text-xs text-gray-500">Allocated Budget</div>
                   <div className="font-bold text-sm text-[#001A4D]">
-                    ₱{viewingDetailReport.allocatedBudget.toLocaleString()}
+                    {formatCurrency(viewingDetailReport.allocatedBudget)}
                   </div>
                 </div>
                 <div>
                   <div className="text-xs text-gray-500">Actual Spending</div>
                   <div className="font-bold text-sm text-[#83358E]">
-                    ₱{viewingDetailReport.totalActualSpending.toLocaleString()}
+                    {formatCurrency(viewingDetailReport.totalActualSpending)}
                   </div>
                 </div>
                 <div>
                   <div className="text-xs text-gray-500">Surplus / Deficit</div>
-                  <div className="font-bold text-sm text-green-600">
-                    ₱{viewingDetailReport.surplusOrDeficit.toLocaleString()}
+                  <div className={`font-bold text-sm ${viewingDetailReport.surplusOrDeficit < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                    {formatVariance(viewingDetailReport.surplusOrDeficit)}
                   </div>
                 </div>
               </div>
@@ -325,18 +327,18 @@ export default function FinancialLiquidation() {
                     <div key={idx} className="p-3 border border-gray-200 rounded-lg text-xs space-y-1.5 bg-gray-50/50">
                       <div className="flex items-center justify-between font-bold text-gray-900">
                         <span>{item.description} ({item.category})</span>
-                        <span className="text-[#83358E]">Actual Cost: ₱{item.totalCost.toLocaleString()}</span>
+                        <span className="text-[#83358E]">Actual Cost: {formatCurrency(item.totalCost)}</span>
                       </div>
 
                       <div className="flex flex-wrap items-center justify-between text-gray-600 gap-2">
                         <div className="flex items-center gap-3">
                           {itemAllocated > 0 && (
                             <span>
-                              <strong>Proposed:</strong> {item.proposedQuantity || 1} Qty × ₱{(item.proposedUnitCost || 0).toLocaleString()} (₱{itemAllocated.toLocaleString()})
+                              <strong>Proposed:</strong> {item.proposedQuantity || 1} Qty × {formatCurrency(item.proposedUnitCost || 0)} ({formatCurrency(itemAllocated)})
                             </span>
                           )}
                           <span>
-                            <strong>Actual:</strong> {item.quantity} Qty × ₱{item.unitCost.toLocaleString()}
+                            <strong>Actual:</strong> {item.quantity} Qty × {formatCurrency(item.unitCost)}
                           </span>
                         </div>
 
@@ -345,8 +347,8 @@ export default function FinancialLiquidation() {
                             itemVariance < 0 ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
                           }`}>
                             {itemVariance < 0
-                              ? `Deficit -₱${Math.abs(itemVariance).toLocaleString()}`
-                              : `Surplus +₱${itemVariance.toLocaleString()}`}
+                              ? `Deficit -${formatCurrency(Math.abs(itemVariance))}`
+                              : `Surplus +${formatCurrency(itemVariance)}`}
                           </span>
                         )}
                       </div>
@@ -382,7 +384,7 @@ export default function FinancialLiquidation() {
                       <div key={rIdx} className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-xs space-y-1">
                         <div className="flex items-center justify-between text-gray-700 font-semibold">
                           <span>{rem.authorName} ({rem.authorRole === 'admin' ? 'SAO Adviser' : 'Officer'})</span>
-                          <span className="text-[10px] text-gray-500">{new Date(rem.timestamp).toLocaleString()}</span>
+                          <span className="text-[10px] text-gray-500">{formatAppDateTime(rem.timestamp)}</span>
                         </div>
                         <p className="text-gray-800">{rem.comment}</p>
                       </div>

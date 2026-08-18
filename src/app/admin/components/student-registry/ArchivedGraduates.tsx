@@ -72,7 +72,7 @@ export default function ArchivedGraduates({ students: archivedStudents }: Archiv
       {/* Info Card */}
       <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-3">
-          <GraduationCap className="w-5 h-5 text-[#83358E] flex-shrink-0" />
+          <GraduationCap className="w-5 h-5 text-[#0E4EBD] flex-shrink-0" />
           <p className="text-sm text-gray-700">
             Records here are preserved for historical logs. Students cannot log in to the mobile app. You can restore accounts to Active status or permanently delete records.
           </p>
@@ -88,7 +88,7 @@ export default function ArchivedGraduates({ students: archivedStudents }: Archiv
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search archived students by name, student ID, or course..."
-            className="w-full pl-9 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] outline-none"
+            className="w-full pl-9 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] outline-none"
           />
         </div>
       </div>

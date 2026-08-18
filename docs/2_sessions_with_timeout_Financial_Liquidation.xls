@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+ <Styles>
+  <Style ss:ID="Default" ss:Name="Normal">
+   <Alignment ss:Vertical="Center"/>
+   <Font ss:FontName="Calibri" ss:Size="11" ss:Color="#000000"/>
+  </Style>
+  <Style ss:ID="TitleStyle">
+   <Font ss:FontName="Calibri" ss:Size="16" ss:Bold="1" ss:Color="#001A4D"/>
+   <Alignment ss:Horizontal="Left" ss:Vertical="Center"/>
+  </Style>
+  <Style ss:ID="SubTitleStyle">
+   <Font ss:FontName="Calibri" ss:Size="11" ss:Italic="1" ss:Color="#555555"/>
+   <Alignment ss:Horizontal="Left" ss:Vertical="Center"/>
+  </Style>
+  <Style ss:ID="HeaderStyle">
+   <Font ss:FontName="Calibri" ss:Size="11" ss:Bold="1" ss:Color="#FFFFFF"/>
+   <Interior ss:Color="#83358E" ss:Pattern="Solid"/>
+   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+  </Style>
+  <Style ss:ID="RowEven">
+   <Interior ss:Color="#F9FAFB" ss:Pattern="Solid"/>
+  </Style>
+  <Style ss:ID="RowOdd">
+   <Interior ss:Color="#FFFFFF" ss:Pattern="Solid"/>
+  </Style>
+  <Style ss:ID="TotalStyle">
+   <Font ss:FontName="Calibri" ss:Size="11" ss:Bold="1" ss:Color="#001A4D"/>
+   <Interior ss:Color="#FEF3C7" ss:Pattern="Solid"/>
+  </Style>
+ </Styles>
+ <Worksheet ss:Name="Liquidation Report">
+  <Table>
+   <Column ss:Width="40"/>
+   <Column ss:Width="200"/>
+   <Column ss:Width="140"/>
+   <Column ss:Width="120"/>
+   <Column ss:Width="120"/>
+   <Column ss:Width="130"/>
+   <Column ss:Width="140"/>
+   <Column ss:Width="120"/>
+   <Column ss:Width="90"/>
+   <Row ss:Height="26">
+    <Cell ss:MergeAcross="8" ss:StyleID="TitleStyle"><Data ss:Type="String">STI Sync — Approved Financial Liquidation Report</Data></Cell>
+   </Row>
+   <Row ss:Height="20">
+    <Cell ss:MergeAcross="8" ss:StyleID="SubTitleStyle"><Data ss:Type="String">Event: 2 sessions with timeout | Organization: Student Affairs Office | Submitted By: SAO Adviser</Data></Cell>
+   </Row>
+   <Row ss:Height="20">
+    <Cell ss:MergeAcross="8" ss:StyleID="SubTitleStyle"><Data ss:Type="String">Approved Budget: ₱2,000 | Actual Spend: ₱2,000 | Net Variance: +₱0 (Surplus) | Exported: 8/17/2026, 10:23:17 AM</Data></Cell>
+   </Row>
+   <Row ss:Height="10"></Row>
+   <Row ss:Height="24"><Cell ss:StyleID="HeaderStyle"><Data ss:Type="String">#</Data></Cell><Cell ss:StyleID="HeaderStyle"><Data ss:Type="String">Item Description</Data></Cell><Cell ss:StyleID="HeaderStyle"><Data ss:Type="String">Expense Category</Data></Cell><Cell ss:StyleID="HeaderStyle"><Data ss:Type="String">Allocated Budget (₱)</Data></Cell><Cell ss:StyleID="HeaderStyle"><Data ss:Type="String">Actual Cost (₱)</Data></Cell><Cell ss:StyleID="HeaderStyle"><Data ss:Type="String">Variance (₱)</Data></Cell><Cell ss:StyleID="HeaderStyle"><Data ss:Type="String">Vendor Name</Data></Cell><Cell ss:StyleID="HeaderStyle"><Data ss:Type="String">Receipt / Invoice #</Data></Cell><Cell ss:StyleID="HeaderStyle"><Data ss:Type="String">Receipt Image</Data></Cell></Row><Row ss:Height="20"><Cell ss:StyleID="RowEven"><Data ss:Type="String">1</Data></Cell><Cell ss:StyleID="RowEven"><Data ss:Type="String">Food &amp; Catering</Data></Cell><Cell ss:StyleID="RowEven"><Data ss:Type="String">Food &amp; Catering</Data></Cell><Cell ss:StyleID="RowEven"><Data ss:Type="String">₱2,000.00</Data></Cell><Cell ss:StyleID="RowEven"><Data ss:Type="String">₱2,000.00</Data></Cell><Cell ss:StyleID="RowEven"><Data ss:Type="String">+₱0.00 (Surplus)</Data></Cell><Cell ss:StyleID="RowEven"><Data ss:Type="String">Jollibee</Data></Cell><Cell ss:StyleID="RowEven"><Data ss:Type="String">—</Data></Cell><Cell ss:StyleID="RowEven"><Data ss:Type="String">Attached</Data></Cell></Row><Row ss:Height="24"><Cell ss:StyleID="TotalStyle"><Data ss:Type="String">Total</Data></Cell><Cell ss:StyleID="TotalStyle"><Data ss:Type="String">TOTAL SUMMARY</Data></Cell><Cell ss:StyleID="TotalStyle"><Data ss:Type="String"></Data></Cell><Cell ss:StyleID="TotalStyle"><Data ss:Type="String">₱2,000</Data></Cell><Cell ss:StyleID="TotalStyle"><Data ss:Type="String">₱2,000</Data></Cell><Cell ss:StyleID="TotalStyle"><Data ss:Type="String">+₱0</Data></Cell><Cell ss:StyleID="TotalStyle"><Data ss:Type="String"></Data></Cell><Cell ss:StyleID="TotalStyle"><Data ss:Type="String"></Data></Cell><Cell ss:StyleID="TotalStyle"><Data ss:Type="String"></Data></Cell></Row>  </Table>
+ </Worksheet>
+</Workbook>

@@ -1,3 +1,5 @@
+import { formatAppDate, formatAppDateTime } from '../../../utils/date';
+
 /**
  * Safely extracts timestamp in milliseconds from various possible formats:
  * Firestore Timestamp, JS Date, ISO String, Number, or object with seconds.
@@ -17,19 +19,15 @@ export function getMillis(ts: any): number {
 }
 
 /**
- * Safely formats a timestamp to a local date string (e.g. "8/11/2026").
+ * Safely formats a timestamp to a standardized date string: `Aug 9 2005`.
  */
 export function formatTimestampDate(ts: any, fallback = 'N/A'): string {
-  const ms = getMillis(ts);
-  if (!ms) return fallback;
-  return new Date(ms).toLocaleDateString();
+  return formatAppDate(ts, fallback);
 }
 
 /**
- * Safely formats a timestamp to a local date and time string.
+ * Safely formats a timestamp to a standardized date & time string: `Aug 9 2005 • 12:49 PM`.
  */
 export function formatTimestampDateTime(ts: any, fallback = 'N/A'): string {
-  const ms = getMillis(ts);
-  if (!ms) return fallback;
-  return new Date(ms).toLocaleString();
+  return formatAppDateTime(ts, fallback);
 }

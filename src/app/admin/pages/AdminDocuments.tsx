@@ -21,7 +21,7 @@ import { Timestamp } from 'firebase/firestore';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const CATEGORY_COLORS: Record<string, string> = {
-  "Activity Letter": "bg-[#F3E8FF] text-[#83358E]",
+  "Activity Letter": "bg-blue-50 text-[#0E4EBD]",
   "Accreditation Paper": "bg-blue-100 text-blue-700",
   "Waiver": "bg-amber-100 text-amber-700",
   "Financial Report": "bg-green-100 text-green-700",
@@ -77,7 +77,7 @@ function QuickApprovePopover({ doc, onClose, onApprove }: { doc: DocumentDocumen
       </div>
       <div className="p-3 space-y-3">
         <p className="text-[#001A4D] text-xs">Approve <strong>{doc.title.slice(0, 30)}...</strong> from <strong>{doc.submittedByOrgName}</strong>?</p>
-        <textarea rows={3} placeholder="Optional approval remarks..." className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-[#83358E] focus:border-transparent resize-none" value={remarks} onChange={(e) => setRemarks(e.target.value)} />
+        <textarea rows={3} placeholder="Optional approval remarks..." className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] resize-none" value={remarks} onChange={(e) => setRemarks(e.target.value)} />
         <div className="flex items-center justify-between">
           <button onClick={onClose} className="text-gray-500 text-xs hover:text-gray-700">Cancel</button>
           <button disabled={saving} onClick={async () => { setSaving(true); await onApprove(remarks); setSaving(false); }} className="px-3 py-1.5 bg-gradient-to-r from-green-500 to-green-400 text-white text-xs font-bold rounded-lg disabled:opacity-50">
@@ -101,7 +101,7 @@ function QuickRejectPopover({ doc, onClose, onReject }: { doc: DocumentDocument;
       </div>
       <div className="p-3 space-y-3">
         <p className="text-[#001A4D] text-xs"><strong>{doc.title.slice(0, 30)}...</strong> · {doc.submittedByOrgName}</p>
-        <textarea rows={3} placeholder="Rejection reason — required..." className="w-full px-3 py-2 border rounded-lg text-xs focus:ring-2 focus:ring-[#83358E] focus:border-transparent resize-none border-gray-300" value={remarks} onChange={(e) => setRemarks(e.target.value)} />
+        <textarea rows={3} placeholder="Rejection reason — required..." className="w-full px-3 py-2 border rounded-lg text-xs focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] resize-none border-gray-300" value={remarks} onChange={(e) => setRemarks(e.target.value)} />
         <div className="flex items-center justify-between">
           <button onClick={onClose} className="text-gray-500 text-xs hover:text-gray-700">Cancel</button>
           <button
@@ -275,17 +275,17 @@ function BroadcastModal({ onClose }: { onClose: () => void }) {
             <div className="flex-1 overflow-y-auto p-6 space-y-5">
               {/* Section A — Document Details */}
               <div>
-                <div className="border-l-4 border-[#83358E] pl-3 mb-4">
+                <div className="border-l-4 border-[#0E4EBD] pl-3 mb-4">
                   <p className="text-[#001A4D] font-bold text-sm">Document Details</p>
                 </div>
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1.5">Document Title <span className="text-red-500">*</span></label>
-                    <input type="text" placeholder="e.g. Updated Activity Letter Template / Campus Policy Memo No. 12-2026" className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] focus:border-transparent" value={title} onChange={(e) => setTitle(e.target.value)} />
+                    <input type="text" placeholder="e.g. Updated Activity Letter Template / Campus Policy Memo No. 12-2026" className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]" value={title} onChange={(e) => setTitle(e.target.value)} />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1.5">Category</label>
-                    <select className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] focus:border-transparent" value={category} onChange={(e) => {
+                    <select className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]" value={category} onChange={(e) => {
                       setCategory(e.target.value);
                       const cat = activeCategories.find(c => c.name === e.target.value);
                       setCategoryId(cat?.id ?? '');
@@ -298,19 +298,19 @@ function BroadcastModal({ onClose }: { onClose: () => void }) {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1.5">Description / Message to Clubs</label>
-                    <textarea rows={3} placeholder="Add a message to accompany this document — clubs will see this in their inbox alongside the file." className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] focus:border-transparent resize-none" value={description} onChange={(e) => setDescription(e.target.value)} />
+                    <textarea rows={3} placeholder="Add a message to accompany this document — clubs will see this in their inbox alongside the file." className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] resize-none" value={description} onChange={(e) => setDescription(e.target.value)} />
                   </div>
                 </div>
               </div>
 
               {/* Section B — File */}
               <div>
-                <div className="border-l-4 border-[#83358E] pl-3 mb-3">
+                <div className="border-l-4 border-[#0E4EBD] pl-3 mb-3">
                   <p className="text-[#001A4D] font-bold text-sm">File Attachment</p>
                 </div>
                 <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx,.xlsx,.xls,.jpg,.jpeg,.png" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileSelect(f); e.target.value = ''; }} />
                 {uploadedFile ? (
-                  <div className="flex items-center gap-4 p-4 bg-white border-2 border-[#83358E] rounded-xl">
+                  <div className="flex items-center gap-4 p-4 bg-white border-2 border-[#0E4EBD] rounded-xl">
                     <div className="w-12 h-12 bg-red-500 rounded-xl flex items-center justify-center flex-shrink-0">
                       <FileText className="w-6 h-6 text-white" />
                     </div>
@@ -324,13 +324,13 @@ function BroadcastModal({ onClose }: { onClose: () => void }) {
                     <button onClick={() => setUploadedFile(null)} className="text-red-500 p-1"><X className="w-4 h-4" /></button>
                   </div>
                 ) : uploading ? (
-                  <div className="w-full h-28 flex flex-col items-center justify-center border-2 border-dashed border-[#83358E]/40 bg-[#F3E8FF]/40 rounded-xl">
-                    <Loader2 className="w-8 h-8 text-[#83358E] mb-1 animate-spin" />
+                  <div className="w-full h-28 flex flex-col items-center justify-center border-2 border-dashed border-[#0E4EBD]/40 bg-blue-50/40 rounded-xl">
+                    <Loader2 className="w-8 h-8 text-[#0E4EBD] mb-1 animate-spin" />
                     <p className="text-sm text-gray-600">Uploading...</p>
                   </div>
                 ) : (
-                  <div onClick={() => fileInputRef.current?.click()} className="w-full h-28 flex flex-col items-center justify-center border-2 border-dashed border-[#83358E]/40 bg-[#F3E8FF]/40 rounded-xl cursor-pointer hover:border-[#83358E] hover:bg-[#F3E8FF] transition-colors">
-                    <Upload className="w-8 h-8 text-[#83358E] mb-1" />
+                  <div onClick={() => fileInputRef.current?.click()} className="w-full h-28 flex flex-col items-center justify-center border-2 border-dashed border-[#0E4EBD]/40 bg-blue-50/40 rounded-xl cursor-pointer hover:border-[#0E4EBD] hover:bg-blue-50 transition-colors">
+                    <Upload className="w-8 h-8 text-[#0E4EBD] mb-1" />
                     <p className="text-sm text-gray-600">Click to upload or drag and drop</p>
                     <p className="text-gray-400 text-xs italic">PDF, DOCX, XLSX, JPG, PNG · Max 25MB</p>
                   </div>
@@ -340,21 +340,21 @@ function BroadcastModal({ onClose }: { onClose: () => void }) {
 
               {/* Section C — Distribution */}
               <div>
-                <div className="border-l-4 border-[#83358E] pl-3 mb-3">
+                <div className="border-l-4 border-[#0E4EBD] pl-3 mb-3">
                   <p className="text-[#001A4D] font-bold text-sm">Send To</p>
                 </div>
                 <div className="space-y-2">
                   {([
-                    { key: "all" as const, icon: Building2, label: "All Organizations", desc: `Broadcast to all ${activeOrgs.length} active student organizations`, borderColor: "border-[#83358E]", bg: "bg-[#F3E8FF]" },
+                    { key: "all" as const, icon: Building2, label: "All Organizations", desc: `Broadcast to all ${activeOrgs.length} active student organizations`, borderColor: "border-[#0E4EBD]", bg: "bg-[#E8F0FF]" },
                     { key: "specific" as const, icon: Building2, label: "Specific Organizations", desc: "Choose which clubs receive this document", borderColor: "border-blue-500", bg: "bg-blue-50" },
-                    { key: "type" as const, icon: Users, label: "By Organization Type", desc: "Filter by type, then pick clubs", borderColor: "border-amber-500", bg: "bg-amber-50" },
+                    { key: "type" as const, icon: Users, label: "By Organization Type", desc: "Filter by type, then pick clubs", borderColor: "border-[#0E4EBD]", bg: "bg-[#E8F0FF]" },
                   ]).map((opt) => (
                     <div key={opt.key}>
                       <button
                         onClick={() => { setDistribution(opt.key); setSelectedOrgs([]); setSelectedTypeId(""); }}
                         className={`w-full flex items-center gap-4 p-4 rounded-xl border-2 text-left transition-colors ${distribution === opt.key ? `${opt.borderColor} ${opt.bg}` : "border-gray-200 hover:border-gray-300"}`}
                       >
-                        <opt.icon className={`w-5 h-5 flex-shrink-0 ${distribution === opt.key ? "text-[#83358E]" : "text-gray-400"}`} />
+                        <opt.icon className={`w-5 h-5 flex-shrink-0 ${distribution === opt.key ? "text-[#0E4EBD]" : "text-gray-400"}`} />
                         <div>
                           <p className="text-[#001A4D] font-bold text-sm">{opt.label}</p>
                           <p className="text-gray-500 text-xs">{opt.desc}</p>
@@ -365,7 +365,7 @@ function BroadcastModal({ onClose }: { onClose: () => void }) {
                       {opt.key === "type" && distribution === "type" && (
                         <div className="mt-2 space-y-2">
                           <select
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD] focus:border-transparent"
                             value={selectedTypeId}
                             onChange={(e) => { setSelectedTypeId(e.target.value); setSelectedOrgs([]); }}
                           >
@@ -392,13 +392,13 @@ function BroadcastModal({ onClose }: { onClose: () => void }) {
               </div>
 
               {/* Preview */}
-              <div className="p-3 bg-[#F3E8FF] border border-[#83358E]/30 rounded-xl">
+              <div className="p-3 bg-[#E8F0FF] border border-[#0E4EBD]/30 rounded-xl">
                 <div className="flex items-center gap-2 mb-2">
-                  <Eye className="w-4 h-4 text-[#83358E]" />
-                  <p className="text-[#83358E] font-bold text-xs">Broadcast Preview</p>
+                  <Eye className="w-4 h-4 text-[#0E4EBD]" />
+                  <p className="text-[#0E4EBD] font-bold text-xs">Broadcast Preview</p>
                 </div>
                 <div className="flex items-center gap-3 bg-white rounded-lg p-3 border border-gray-100">
-                  <div className="w-6 h-6 bg-gradient-to-br from-[#0E4EBD] to-[#1E70E8] rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                  <div className="w-6 h-6 bg-gradient-to-br from-[#001A4D] to-[#0E4EBD] rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
                     {adminProfile ? adminProfile.firstName.charAt(0) + adminProfile.lastName.charAt(0) : 'SA'}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -406,13 +406,13 @@ function BroadcastModal({ onClose }: { onClose: () => void }) {
                     <p className="text-gray-400 text-[10px]">SAS Admin · {adminProfile?.displayName ?? 'Admin'} · Just now</p>
                   </div>
                   {category && <CategoryPill category={category} />}
-                  <span className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0" />
+                  <span className="w-2 h-2 bg-[#0E4EBD] rounded-full flex-shrink-0" />
                 </div>
               </div>
             </div>
 
             <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between flex-shrink-0">
-              <button className="flex items-center gap-2 px-4 py-2 border border-[#83358E] text-[#83358E] rounded-lg text-sm font-medium hover:bg-[#83358E]/5 transition-colors">
+              <button className="flex items-center gap-2 px-4 py-2 border border-[#0E4EBD] text-[#0E4EBD] rounded-lg text-sm font-medium hover:bg-[#0E4EBD]/5 transition-colors">
                 <Save className="w-4 h-4" />
                 Save as Draft
               </button>
@@ -451,8 +451,8 @@ function OrgChecklist({ orgs, selectedOrgs, toggleOrg, setSelectedOrgs, search, 
           <p className="px-4 py-3 text-gray-400 text-sm text-center">No organizations found</p>
         ) : orgs.map((org) => (
           <label key={org.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 cursor-pointer">
-            <input type="checkbox" checked={selectedOrgs.includes(org.id)} onChange={() => toggleOrg(org.id)} className="accent-[#83358E]" />
-            <div className="w-7 h-7 bg-gradient-to-br from-[#83358E] to-[#A855F7] rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0">{org.acronym.slice(0, 2)}</div>
+            <input type="checkbox" checked={selectedOrgs.includes(org.id)} onChange={() => toggleOrg(org.id)} className="accent-[#0E4EBD]" />
+            <div className="w-7 h-7 bg-gradient-to-br from-[#001A4D] to-[#0E4EBD] rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0">{org.acronym.slice(0, 2)}</div>
             <div>
               <p className="text-sm text-[#001A4D] font-medium">{org.name}</p>
               <p className="text-xs text-gray-400">{org.acronym}</p>
@@ -462,7 +462,7 @@ function OrgChecklist({ orgs, selectedOrgs, toggleOrg, setSelectedOrgs, search, 
       </div>
       {selectedOrgs.length > 0 && (
         <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-t border-gray-100">
-          <span className="text-[#83358E] text-xs font-medium">{selectedOrgs.length} organizations selected</span>
+          <span className="text-[#0E4EBD] text-xs font-medium">{selectedOrgs.length} organizations selected</span>
           <button onClick={() => setSelectedOrgs([])} className="text-gray-400 text-xs hover:text-gray-600">Clear All</button>
         </div>
       )}
@@ -515,7 +515,7 @@ function IncomingQueueTab() {
     return Array.from(map.entries());
   }, [incoming]);
 
-  if (loading) return <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 text-[#83358E] animate-spin" /></div>;
+  if (loading) return <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 text-[#0E4EBD] animate-spin" /></div>;
 
   return (
     <div className="space-y-4">
@@ -523,9 +523,9 @@ function IncomingQueueTab() {
       <div className="bg-white border border-[#E0E0E0] rounded-xl p-4 flex items-center gap-3 flex-wrap">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input type="text" placeholder="Search document title, org name, or reference..." className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] focus:border-transparent" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+          <input type="text" placeholder="Search document title, org name, or reference..." className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD] focus:border-transparent" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
         </div>
-        <select className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] focus:border-transparent" value={orgFilter} onChange={(e) => setOrgFilter(e.target.value)}>
+        <select className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD] focus:border-transparent" value={orgFilter} onChange={(e) => setOrgFilter(e.target.value)}>
           <option value="All">All Organizations</option>
           {uniqueOrgs.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
         </select>
@@ -553,7 +553,7 @@ function IncomingQueueTab() {
               <thead className="bg-gray-50 border-b border-[#E0E0E0]">
                 <tr>
                   <th className="px-4 py-3 w-10">
-                    <input type="checkbox" className="accent-[#83358E]" onChange={(e) => setSelected(e.target.checked ? filtered.map(d => d.id) : [])} />
+                    <input type="checkbox" className="accent-[#0E4EBD]" onChange={(e) => setSelected(e.target.checked ? filtered.map(d => d.id) : [])} />
                   </th>
                   {["Reference #", "Document Title", "Organization", "Category", "Submitted By", "Date Submitted", "Status", "Actions"].map((h) => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
@@ -566,9 +566,9 @@ function IncomingQueueTab() {
                   const createdDate = toDate(doc.createdAt);
                   const daysInQueue = createdDate ? Math.floor((Date.now() - createdDate.getTime()) / (1000 * 60 * 60 * 24)) : 0;
                   return (
-                    <tr key={doc.id} className={`border-b border-[#E0E0E0] hover:bg-[#F3E8FF]/20 transition-colors group ${isPending ? "border-l-4 border-l-[#FFD41C]" : ""}`}>
+                    <tr key={doc.id} className={`border-b border-[#E0E0E0] hover:bg-[#E8F0FF]/20 transition-colors group ${isPending ? "border-l-4 border-l-[#FFD41C]" : ""}`}>
                       <td className="px-4 py-3">
-                        <input type="checkbox" checked={selected.includes(doc.id)} onChange={() => toggleSelect(doc.id)} className="accent-[#83358E]" />
+                        <input type="checkbox" checked={selected.includes(doc.id)} onChange={() => toggleSelect(doc.id)} className="accent-[#0E4EBD]" />
                       </td>
                       <td className="px-4 py-3 font-mono text-xs text-gray-500 whitespace-nowrap">
                         <div className="flex items-center gap-2">
@@ -585,7 +585,7 @@ function IncomingQueueTab() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
-                          <div className="w-7 h-7 bg-gradient-to-br from-[#83358E] to-[#A855F7] rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0">{doc.submittedByOrgAcronym?.slice(0, 2) || '??'}</div>
+                          <div className="w-7 h-7 bg-gradient-to-br from-[#001A4D] to-[#0E4EBD] rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0">{doc.submittedByOrgAcronym?.slice(0, 2) || '??'}</div>
                           <div>
                             <p className="text-[#001A4D] text-xs font-medium leading-tight">{doc.submittedByOrgName}</p>
                           </div>
@@ -594,12 +594,12 @@ function IncomingQueueTab() {
                       <td className="px-4 py-3"><CategoryPill category={doc.category} /></td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5">
-                          <div className="w-6 h-6 bg-[#F3E8FF] rounded-full flex items-center justify-center text-[#83358E] text-[10px] font-bold flex-shrink-0">
+                          <div className="w-6 h-6 bg-[#E8F0FF] rounded-full flex items-center justify-center text-[#0E4EBD] text-[10px] font-bold flex-shrink-0">
                             {doc.submittedBy.split(" ").map(n => n[0]).join("").slice(0, 2)}
                           </div>
                           <div>
                             <p className="text-gray-600 text-xs">{doc.submittedBy}</p>
-                            <span className="px-1 py-0.5 bg-[#F3E8FF] text-[#83358E] text-[9px] rounded font-medium">Officer</span>
+                            <span className="px-1 py-0.5 bg-[#E8F0FF] text-[#0E4EBD] text-[9px] rounded font-medium">Officer</span>
                           </div>
                         </div>
                       </td>
@@ -616,7 +616,7 @@ function IncomingQueueTab() {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1 relative">
                           <button onClick={() => setPreviewDoc(doc)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-blue-50 text-blue-600 transition-colors" title="Quick Preview"><Eye className="w-4 h-4" /></button>
-                          <button onClick={() => navigate(`/home/documents/${doc.id}/review`)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[#F3E8FF] text-[#83358E] transition-colors" title="Full Review"><FileText className="w-4 h-4" /></button>
+                          <button onClick={() => navigate(`/home/documents/${doc.id}/review`)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[#E8F0FF] text-[#0E4EBD] transition-colors" title="Full Review"><FileText className="w-4 h-4" /></button>
                           <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer" className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-50 text-[#001A4D] transition-colors" title="Download"><Download className="w-4 h-4" /></a>
                           {(doc.status === "Pending" || doc.status === "Resubmitted") && (
                             <>
@@ -657,14 +657,14 @@ function SentTab() {
   const { data: orgs } = useOrganizationStream();
   const [previewDoc, setPreviewDoc] = useState<DocumentDocument | null>(null);
 
-  if (loading) return <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 text-[#83358E] animate-spin" /></div>;
+  if (loading) return <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 text-[#0E4EBD] animate-spin" /></div>;
 
   return (
     <div className="space-y-4">
       <div className="bg-white border border-[#E0E0E0] rounded-xl p-4 flex items-center gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input type="text" placeholder="Search sent documents..." className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] focus:border-transparent" />
+          <input type="text" placeholder="Search sent documents..." className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD] focus:border-transparent" />
         </div>
         <select className="px-3 py-2 border border-gray-300 rounded-lg text-sm"><option>All Categories</option></select>
       </div>
@@ -703,7 +703,7 @@ function SentTab() {
                       {doc.distribution === "all" ? (
                         <span className="px-2 py-0.5 bg-[#001A4D]/10 text-[#001A4D] text-xs rounded-full font-medium">All Organizations ({totalTargets})</span>
                       ) : (
-                        <span className="px-2 py-0.5 bg-[#F3E8FF] text-[#83358E] text-xs rounded-full font-medium">{doc.targetOrgIds.length} Organizations</span>
+                        <span className="px-2 py-0.5 bg-[#E8F0FF] text-[#0E4EBD] text-xs rounded-full font-medium">{doc.targetOrgIds.length} Organizations</span>
                       )}
                     </td>
                     <td className="px-4 py-3">

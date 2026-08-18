@@ -23,7 +23,7 @@ export default function AttendanceQRSettings({ onUnsavedChange }: AttendanceQRSe
               type="number"
               defaultValue={30}
               onChange={onUnsavedChange}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
             />
             <p className="text-xs text-gray-500 mt-1">How often QR codes regenerate to prevent screenshot fraud</p>
           </div>
@@ -36,7 +36,7 @@ export default function AttendanceQRSettings({ onUnsavedChange }: AttendanceQRSe
               type="number"
               defaultValue={5}
               onChange={onUnsavedChange}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
             />
             <p className="text-xs text-gray-500 mt-1">Time window for valid QR code scans</p>
           </div>
@@ -46,7 +46,7 @@ export default function AttendanceQRSettings({ onUnsavedChange }: AttendanceQRSe
               <span className="text-sm text-gray-700">Enable geolocation verification</span>
               <button
                 onClick={onUnsavedChange}
-                className="relative w-12 h-6 rounded-full bg-[#83358E]"
+                className="relative w-12 h-6 rounded-full bg-[#001A4D] cursor-pointer"
               >
                 <div className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full translate-x-6"></div>
               </button>
@@ -55,7 +55,7 @@ export default function AttendanceQRSettings({ onUnsavedChange }: AttendanceQRSe
               <span className="text-sm text-gray-700">Allow duplicate scans prevention</span>
               <button
                 onClick={onUnsavedChange}
-                className="relative w-12 h-6 rounded-full bg-[#83358E]"
+                className="relative w-12 h-6 rounded-full bg-[#001A4D] cursor-pointer"
               >
                 <div className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full translate-x-6"></div>
               </button>
@@ -84,7 +84,7 @@ export default function AttendanceQRSettings({ onUnsavedChange }: AttendanceQRSe
               type="number"
               defaultValue={75}
               onChange={onUnsavedChange}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
             />
             <p className="text-xs text-gray-500 mt-1">Students must attend at least this percentage to receive a certificate</p>
           </div>
@@ -97,7 +97,7 @@ export default function AttendanceQRSettings({ onUnsavedChange }: AttendanceQRSe
               type="number"
               defaultValue={15}
               onChange={onUnsavedChange}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
             />
             <p className="text-xs text-gray-500 mt-1">Students arriving within this time are marked as present (not late)</p>
           </div>
@@ -115,7 +115,7 @@ export default function AttendanceQRSettings({ onUnsavedChange }: AttendanceQRSe
           ].map((scanner, index) => (
             <div key={index} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
               <div className="flex items-center gap-4 flex-1">
-                <QrCode className="w-5 h-5 text-[#83358E]" />
+                <QrCode className="w-5 h-5 text-[#0E4EBD]" />
                 <div className="flex-1">
                   <div className="font-medium text-gray-900">{scanner.name}</div>
                   <div className="text-xs text-gray-500">

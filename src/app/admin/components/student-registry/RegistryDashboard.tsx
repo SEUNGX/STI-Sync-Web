@@ -2,6 +2,7 @@ import { RefreshCw, Download, Clock, UserCheck, UserX, CircleCheck } from 'lucid
 import { StudentDocument } from '../../../modules/students/types/student.types';
 import { SemesterDocument } from '../../../modules/academic/types/academic.types';
 import { getMillis } from '../../../modules/students/utils/date.utils';
+import { formatAppDate } from '../../../utils/date';
 
 interface RegistryDashboardProps {
   onNavigate: (view: string) => void;
@@ -103,7 +104,7 @@ export default function RegistryDashboard({ onNavigate, categorizedStudents, act
             <h3 className="text-xl font-bold mb-2">Re-enrollment In Progress — {activeSemester.label}</h3>
             <div className="bg-white/20 rounded-full h-5 mb-3 overflow-hidden">
               <div
-                className="bg-[#83358E] h-full transition-all"
+                className="bg-[#FFD41C] h-full transition-all"
                 style={{ width: `${progressPercent}%` }}
               ></div>
             </div>
@@ -112,7 +113,7 @@ export default function RegistryDashboard({ onNavigate, categorizedStudents, act
               <span className="font-bold">{progressPercent}%</span>
             </div>
             <p className="text-white/90 text-sm mb-4">
-              Re-enrollment deadline: {new Date(activeSemester.reenrollDeadline).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}. Students who have not confirmed will be automatically set to Inactive.
+              Re-enrollment deadline: {formatAppDate(activeSemester.reenrollDeadline)}. Students who have not confirmed will be automatically set to Inactive.
             </p>
             <div className="flex items-center gap-3">
               <button className="px-6 py-2 bg-[#FFD41C] text-[#001A4D] rounded-lg font-medium hover:bg-[#FFD41C]/90">
@@ -185,11 +186,11 @@ export default function RegistryDashboard({ onNavigate, categorizedStudents, act
       {/* Two-column section */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Pending Verification Queue Preview */}
-        <div className="lg:col-span-7 bg-white border border-[#E0E0E0] rounded-xl overflow-hidden">
-          <div className="bg-[#83358E] px-6 py-4 flex items-center justify-between">
+        <div className="lg:col-span-7 bg-white border border-[#E0E0E0] rounded-xl overflow-hidden shadow-xs">
+          <div className="bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] px-6 py-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <h3 className="text-white font-bold">Needs Your Review</h3>
-              <span className="px-3 py-1 bg-white/20 text-white rounded-full text-xs font-bold">
+              <span className="px-3 py-1 bg-[#FFD41C] text-[#001A4D] rounded-full text-xs font-bold">
                 {pending.length}
               </span>
             </div>
@@ -201,7 +202,7 @@ export default function RegistryDashboard({ onNavigate, categorizedStudents, act
                 {pendingQueue.map((student) => (
                   <div key={student.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50">
                     <div className="flex items-center gap-4 flex-1">
-                      <div className="w-10 h-10 bg-gradient-to-br from-[#0E4EBD] to-[#83358E] rounded-full flex items-center justify-center text-white font-bold text-sm">
+                      <div className="w-10 h-10 bg-gradient-to-br from-[#001A4D] to-[#0E4EBD] rounded-full flex items-center justify-center text-white font-bold text-sm">
                         {student.avatar}
                       </div>
                       <div className="flex-1">
@@ -212,7 +213,7 @@ export default function RegistryDashboard({ onNavigate, categorizedStudents, act
                     </div>
                     <button
                       onClick={() => onNavigate('pending')}
-                      className="ml-4 px-4 py-2 bg-[#83358E] text-white rounded-lg text-sm font-medium hover:bg-[#83358E]/90"
+                      className="ml-4 px-4 py-2 bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] text-white rounded-lg text-sm font-bold hover:opacity-90 transition-opacity cursor-pointer shadow-xs"
                     >
                       Review
                     </button>

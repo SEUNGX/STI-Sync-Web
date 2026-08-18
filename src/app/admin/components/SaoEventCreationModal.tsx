@@ -163,7 +163,7 @@ export default function SaoEventCreationModal({
         <div className="relative w-full max-w-[1280px] h-[90vh] bg-white rounded-lg shadow-2xl flex flex-col">
 
           {/* Sticky Header */}
-          <div className="sticky top-0 z-10 bg-gradient-to-r from-[#001A4D] to-[#83358E] px-6 py-4 flex items-center justify-between rounded-t-lg">
+          <div className="sticky top-0 z-10 bg-gradient-to-r from-[#001A4D] via-[#002B7F] to-[#0E4EBD] px-6 py-4 flex items-center justify-between rounded-t-lg shadow-sm">
             <div className="flex items-center gap-4">
               <div className="text-white font-bold text-lg flex items-center gap-2">
                 <span>STI Sync</span>
@@ -171,9 +171,9 @@ export default function SaoEventCreationModal({
                   {activeDraftId ? 'Resume Draft — Admin' : 'Event Creation — Admin'}
                 </span>
               </div>
-              <div className="px-3 py-1 bg-[#001A4D] rounded-full flex items-center gap-1.5">
-                <Shield className="w-3.5 h-3.5 text-[#FFC107]" />
-                <span className="text-[#FFC107] text-sm font-medium">SAO Admin</span>
+              <div className="px-3 py-1 bg-white/10 border border-white/20 rounded-full flex items-center gap-1.5 backdrop-blur-xs">
+                <Shield className="w-3.5 h-3.5 text-[#FFD41C]" />
+                <span className="text-[#FFD41C] text-sm font-bold">SAO Admin</span>
               </div>
               {activeDraftId && (
                 <div className="px-3 py-1 bg-amber-500/20 border border-amber-400/40 rounded-full">
@@ -183,12 +183,12 @@ export default function SaoEventCreationModal({
             </div>
 
             <div className="flex items-center gap-4">
-              <div className="text-[#FFC107] font-bold">
+              <div className="text-[#FFD41C] font-bold">
                 Step {currentStep + 1} of {steps.length} — {currentStepName}
               </div>
               <button
                 onClick={onClose}
-                className="text-white hover:bg-white/10 p-1.5 rounded transition-colors"
+                className="text-white hover:bg-white/10 p-1.5 rounded transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -198,7 +198,7 @@ export default function SaoEventCreationModal({
           {/* Progress Line */}
           <div className="h-1 bg-white/20">
             <div
-              className="h-full bg-[#FFC107] transition-all duration-300"
+              className="h-full bg-[#FFD41C] transition-all duration-300"
               style={{ width: `${((currentStep + 1) / steps.length) * 100}%` }}
             ></div>
           </div>
@@ -210,11 +210,11 @@ export default function SaoEventCreationModal({
                 key={index}
                 onClick={() => goToStep(index)}
                 disabled={index > currentStep}
-                className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
+                className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-all cursor-pointer ${
                   index === currentStep
-                    ? 'bg-[#83358E] text-white'
+                    ? 'bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] text-white shadow-xs'
                     : index < currentStep
-                    ? 'bg-[#1E70E8] text-white hover:bg-[#0E4EBD]'
+                    ? 'bg-blue-50 text-[#0E4EBD] hover:bg-blue-100'
                     : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                 }`}
               >
@@ -235,7 +235,7 @@ export default function SaoEventCreationModal({
             <button
               onClick={prevStep}
               disabled={currentStep === 0}
-              className="px-6 py-2.5 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="px-6 py-2.5 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
             >
               Previous
             </button>
@@ -245,7 +245,7 @@ export default function SaoEventCreationModal({
                 <button
                   onClick={handleSaveDraft}
                   disabled={saving || loading}
-                  className="px-6 py-2.5 border border-[#83358E] text-[#83358E] rounded-lg font-medium hover:bg-[#83358E]/5 transition-colors disabled:opacity-50 flex items-center gap-2"
+                  className="px-6 py-2.5 border border-[#0E4EBD] text-[#0E4EBD] rounded-lg font-semibold hover:bg-blue-50 transition-colors disabled:opacity-50 flex items-center gap-2 cursor-pointer"
                 >
                   {saving ? (
                     <>

@@ -41,7 +41,7 @@ export function OrganizationDetailModal({ organization, isOpen, onClose }: Organ
       <div className="relative w-full max-w-3xl max-h-[90vh] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden z-10">
         
         {/* Banner / Header */}
-        <div className="h-28 bg-gradient-to-r from-[#001A4D] via-[#0E4EBD] to-[#83358E] relative p-6 flex items-end justify-between flex-shrink-0"
+        <div className="h-28 bg-gradient-to-r from-[#001A4D] via-[#002B7F] to-[#0E4EBD] relative p-6 flex items-end justify-between flex-shrink-0"
           style={orgType?.color ? { background: `linear-gradient(135deg, ${orgType.color}, #001A4D)` } : {}}
         >
           <button
@@ -150,8 +150,8 @@ export function OrganizationDetailModal({ organization, isOpen, onClose }: Organ
                   <div className="text-2xl font-bold text-[#001A4D]">{officers.length}</div>
                 </div>
 
-                <div className="p-4 bg-purple-50/60 border border-purple-100 rounded-xl">
-                  <div className="text-xs text-purple-700 font-semibold mb-1">Organization Type</div>
+                <div className="p-4 bg-blue-50/60 border border-blue-100 rounded-xl">
+                  <div className="text-xs text-[#0E4EBD] font-semibold mb-1">Organization Type</div>
                   <div className="text-base font-bold text-[#001A4D] truncate">{orgType?.name || 'General'}</div>
                 </div>
               </div>
@@ -227,7 +227,7 @@ export function OrganizationDetailModal({ organization, isOpen, onClose }: Organ
                         <tr key={m.id} className="hover:bg-gray-50">
                           <td className="p-3 font-mono font-medium text-gray-600">{m.studentId}</td>
                           <td className="p-3 font-bold text-[#001A4D]">{m.studentName}</td>
-                          <td className="p-3 text-purple-900 font-semibold">{m.course || '—'}</td>
+                          <td className="p-3 text-[#0E4EBD] font-semibold">{m.course || '—'}</td>
                           <td className="p-3 text-gray-600">{m.year || '—'}</td>
                           <td className="p-3">
                             <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full font-bold text-[10px]">

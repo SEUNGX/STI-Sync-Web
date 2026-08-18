@@ -358,7 +358,7 @@ export default function CreateOrganizationModal({ isOpen, onClose }: CreateOrgan
 
       <div className="border border-[#E0E0E0] rounded-xl p-6 space-y-4">
         <div className="flex items-start gap-4">
-          <div className="w-14 h-14 bg-gradient-to-br from-[#0E4EBD] to-[#83358E] rounded-full flex items-center justify-center text-white font-bold text-xl">
+          <div className="w-14 h-14 bg-gradient-to-br from-[#001A4D] to-[#0E4EBD] rounded-full flex items-center justify-center text-white font-bold text-xl">
             {formData.acronym || 'ORG'}
           </div>
           <div className="flex-1">

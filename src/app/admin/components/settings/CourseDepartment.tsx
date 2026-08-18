@@ -457,17 +457,17 @@ export default function CourseDepartment({ onUnsavedChange }: CourseDepartmentPr
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">Department Name <span className="text-red-500">*</span></label>
                   <input type="text" value={deptForm.name} onChange={e => setDeptForm({ ...deptForm, name: e.target.value })} disabled={isSaving}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] focus:border-transparent disabled:opacity-50" />
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] disabled:opacity-50" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">Code <span className="text-red-500">*</span></label>
                   <input type="text" value={deptForm.code} onChange={e => setDeptForm({ ...deptForm, code: e.target.value.toUpperCase() })} disabled={isSaving}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-[#83358E] focus:border-transparent disabled:opacity-50" maxLength={10} />
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] disabled:opacity-50" maxLength={10} />
                 </div>
                 <div className="flex gap-3 pt-2">
                   <button onClick={close} disabled={isSaving} className="flex-1 py-2.5 border border-gray-300 text-gray-700 rounded-xl text-sm font-semibold hover:bg-gray-50 disabled:opacity-50">Cancel</button>
                   <button onClick={handleSaveDept} disabled={!deptForm.name || !deptForm.code || isSaving}
-                    className="flex-1 py-2.5 bg-[#83358E] text-white rounded-xl text-sm font-bold hover:bg-[#6D2A78] disabled:opacity-40">
+                    className="flex-1 py-2.5 bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] text-white rounded-xl text-sm font-bold hover:opacity-90 transition-opacity disabled:opacity-40 cursor-pointer shadow-xs">
                     {isSaving ? 'Saving...' : 'Save Changes'}
                   </button>
                 </div>
@@ -542,31 +542,31 @@ export default function CourseDepartment({ onUnsavedChange }: CourseDepartmentPr
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">Course Name <span className="text-red-500">*</span></label>
                   <input type="text" value={courseForm.name} onChange={e => setCourseForm({ ...courseForm, name: e.target.value })} disabled={isSaving}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] focus:border-transparent disabled:opacity-50" />
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] disabled:opacity-50" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">Code</label>
                   <input type="text" value={courseForm.code} onChange={e => setCourseForm({ ...courseForm, code: e.target.value.toUpperCase() })} disabled={isSaving}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-[#83358E] focus:border-transparent disabled:opacity-50" maxLength={10} />
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] disabled:opacity-50" maxLength={10} />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">Department</label>
                   <select value={courseForm.departmentId} onChange={e => setCourseForm({ ...courseForm, departmentId: e.target.value })} disabled={isSaving}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] focus:border-transparent disabled:opacity-50">
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] disabled:opacity-50">
                     {activeDepts.map(d => <option key={d.id} value={d.id}>{d.code} — {d.name}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">Year Levels</label>
                   <select value={courseForm.yearLevels} onChange={e => setCourseForm({ ...courseForm, yearLevels: Number(e.target.value) })} disabled={isSaving}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] focus:border-transparent disabled:opacity-50">
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] disabled:opacity-50">
                     {[2, 3, 4, 5].map(n => <option key={n} value={n}>{n} years</option>)}
                   </select>
                 </div>
                 <div className="flex gap-3 pt-2">
                   <button onClick={close} disabled={isSaving} className="flex-1 py-2.5 border border-gray-300 text-gray-700 rounded-xl text-sm font-semibold hover:bg-gray-50 disabled:opacity-50">Cancel</button>
                   <button onClick={handleSaveCourse} disabled={!courseForm.name || !courseForm.code || isSaving}
-                    className="flex-1 py-2.5 bg-[#83358E] text-white rounded-xl text-sm font-bold hover:bg-[#6D2A78] disabled:opacity-40">
+                    className="flex-1 py-2.5 bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] text-white rounded-xl text-sm font-bold hover:opacity-90 transition-opacity disabled:opacity-40 cursor-pointer shadow-xs">
                     {isSaving ? 'Saving...' : 'Save Changes'}
                   </button>
                 </div>

@@ -1,4 +1,5 @@
 import { Wallet, TrendingUp, Plus } from 'lucide-react';
+import { formatCurrency } from '../../../utils/currency';
 
 interface BudgetFundConfigProps {
   onUnsavedChange: () => void;
@@ -39,8 +40,8 @@ export default function BudgetFundConfig({ onUnsavedChange }: BudgetFundConfigPr
                 <div className="flex items-center gap-4 mb-2">
                   <div className="flex-1">
                     <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
-                      <span>₱{budget.spent.toLocaleString()} spent</span>
-                      <span>₱{remaining.toLocaleString()} left</span>
+                      <span>{formatCurrency(budget.spent)} spent</span>
+                      <span>{formatCurrency(remaining)} left</span>
                     </div>
                     <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
                       <div
@@ -54,7 +55,7 @@ export default function BudgetFundConfig({ onUnsavedChange }: BudgetFundConfigPr
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-sm font-medium text-gray-900">₱{budget.allocated.toLocaleString()}</div>
+                    <div className="text-sm font-medium text-gray-900">{formatCurrency(budget.allocated)}</div>
                     <div className="text-xs text-gray-500">Total</div>
                   </div>
                 </div>
@@ -75,7 +76,7 @@ export default function BudgetFundConfig({ onUnsavedChange }: BudgetFundConfigPr
               type="number"
               defaultValue={100000}
               onChange={onUnsavedChange}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
             />
           </div>
 
@@ -87,16 +88,16 @@ export default function BudgetFundConfig({ onUnsavedChange }: BudgetFundConfigPr
               type="number"
               defaultValue={25000}
               onChange={onUnsavedChange}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
             />
           </div>
 
           <div className="space-y-3 pt-4 border-t border-gray-200">
             <label className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
-              <span className="text-sm text-gray-700">Require budget approval for events over ₱10,000</span>
+              <span className="text-sm text-gray-700">Require budget approval for events over ₱10,000.00</span>
               <button
                 onClick={onUnsavedChange}
-                className="relative w-12 h-6 rounded-full bg-[#83358E]"
+                className="relative w-12 h-6 rounded-full bg-[#001A4D] cursor-pointer"
               >
                 <div className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full translate-x-6"></div>
               </button>
@@ -105,7 +106,7 @@ export default function BudgetFundConfig({ onUnsavedChange }: BudgetFundConfigPr
               <span className="text-sm text-gray-700">Alert when organization reaches 80% budget</span>
               <button
                 onClick={onUnsavedChange}
-                className="relative w-12 h-6 rounded-full bg-[#83358E]"
+                className="relative w-12 h-6 rounded-full bg-[#001A4D] cursor-pointer"
               >
                 <div className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full translate-x-6"></div>
               </button>
@@ -114,7 +115,7 @@ export default function BudgetFundConfig({ onUnsavedChange }: BudgetFundConfigPr
               <span className="text-sm text-gray-700">Allow budget rollover to next semester</span>
               <button
                 onClick={onUnsavedChange}
-                className="relative w-12 h-6 rounded-full bg-gray-300"
+                className="relative w-12 h-6 rounded-full bg-gray-300 cursor-pointer"
               >
                 <div className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full"></div>
               </button>
@@ -127,10 +128,10 @@ export default function BudgetFundConfig({ onUnsavedChange }: BudgetFundConfigPr
         <h3 className="text-lg font-bold text-[#001A4D] mb-4">Expense Categories</h3>
         <div className="grid grid-cols-2 gap-3">
           {[
-            { name: 'Venue Rental', limit: '₱15,000', color: '#0E4EBD' },
-            { name: 'Food & Beverages', limit: '₱20,000', color: '#22C55E' },
-            { name: 'Materials & Supplies', limit: '₱8,000', color: '#FFC107' },
-            { name: 'Marketing & Promotion', limit: '₱5,000', color: '#83358E' },
+            { name: 'Venue Rental', limit: '₱15,000.00', color: '#001A4D' },
+            { name: 'Food & Beverages', limit: '₱20,000.00', color: '#22C55E' },
+            { name: 'Materials & Supplies', limit: '₱8,000.00', color: '#FFD41C' },
+            { name: 'Marketing & Promotion', limit: '₱5,000.00', color: '#0E4EBD' },
           ].map((cat, index) => (
             <div key={index} className="p-3 border border-gray-200 rounded-lg">
               <div className="flex items-center gap-2 mb-1">

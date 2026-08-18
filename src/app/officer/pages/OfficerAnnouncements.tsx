@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Plus, X, Eye, Trash2, Pin, Globe, Building2, Users, Calendar, Search, Loader2, Megaphone, AlertCircle } from 'lucide-react';
-import { format } from 'date-fns';
+import { formatAppDateTime } from '../../utils/date';
 import { useOfficerProfile } from '../../auth/hooks/useOfficerProfile';
 import { useOrganizationStream } from '../../modules/organizations/hooks/useOrganizationStream';
 import { useRoles } from '../../modules/roles/hooks/useRoles';
@@ -195,9 +195,7 @@ export default function OfficerAnnouncements() {
                         )}
                       </div>
                       <p className="text-[#888780] text-[12px] mt-0.5">
-                        {announcement.createdAt?.toDate
-                          ? format(announcement.createdAt.toDate(), 'MMM dd, yyyy') + ' at ' + format(announcement.createdAt.toDate(), 'h:mm a')
-                          : 'Recently'}
+                        {formatAppDateTime(announcement.createdAt, 'Recently', ' at ')}
                       </p>
                     </div>
                   </div>

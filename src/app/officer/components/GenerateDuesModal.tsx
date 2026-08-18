@@ -3,6 +3,7 @@ import { X, Loader2, Users, Check, Calendar } from 'lucide-react';
 import { useSemesters } from '../../modules/academic/hooks/useAcademicStream';
 import { useOrgMembers } from '../../modules/organizations/hooks/useOrgMembers';
 import { generateMembershipDues } from '../../modules/finance/services/payable.service';
+import { formatCurrency } from '../../utils/currency';
 
 interface GenerateDuesModalProps {
   isOpen: boolean;
@@ -254,7 +255,7 @@ export function GenerateDuesModal({
           <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-800 space-y-1">
             <p className="font-semibold">Summary:</p>
             <p>
-              • Assigning ₱{membershipFee} membership fee to{' '}
+              • Assigning {formatCurrency(membershipFee)} membership fee to{' '}
               {targetMode === 'all' ? `${activeMembers.length} member(s)` : `${selectedMemberIds.length} selected member(s)`}.
             </p>
             <p>• Deduplication active: members who already have dues for this semester will be skipped automatically.</p>

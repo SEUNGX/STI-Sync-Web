@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { X, Loader2, CheckCircle, Wallet } from 'lucide-react';
 import { recordPayment } from '../../modules/finance/services/payable.service';
 import type { PayableDocument } from '../../modules/finance/types/payable.types';
+import { formatCurrency } from '../../utils/currency';
 
 interface RecordPaymentModalProps {
   isOpen: boolean;
@@ -42,7 +43,7 @@ export function RecordPaymentModal({
 
     if (amount > remainingBalance) {
       const confirmOverpay = confirm(
-        `Payment amount (₱${amount}) exceeds the remaining balance (₱${remainingBalance}). Are you sure?`
+        `Payment amount (${formatCurrency(amount)}) exceeds the remaining balance (${formatCurrency(remainingBalance)}). Are you sure?`
       );
       if (!confirmOverpay) return;
     }
@@ -51,7 +52,7 @@ export function RecordPaymentModal({
 
     try {
       await recordPayment(payable.id, amount, recordedBy, paymentMethod);
-      alert(`Payment of ₱${amount.toLocaleString()} successfully recorded for ${payable.studentName}.`);
+      alert(`Payment of ${formatCurrency(amount)} successfully recorded for ${payable.studentName}.`);
       onClose();
     } catch (err: any) {
       console.error(err);
@@ -97,15 +98,15 @@ export function RecordPaymentModal({
             <div className="grid grid-cols-3 gap-2 pt-2 border-t border-gray-200 text-center">
               <div>
                 <p className="text-[11px] text-gray-500">Assigned</p>
-                <p className="text-sm font-bold text-gray-900">₱{payable.assignedAmount.toLocaleString()}</p>
+                <p className="text-sm font-bold text-gray-900">{formatCurrency(payable.assignedAmount)}</p>
               </div>
               <div>
                 <p className="text-[11px] text-gray-500">Already Paid</p>
-                <p className="text-sm font-bold text-green-600">₱{(payable.paidAmount || 0).toLocaleString()}</p>
+                <p className="text-sm font-bold text-green-600">{formatCurrency(payable.paidAmount || 0)}</p>
               </div>
               <div>
                 <p className="text-[11px] text-gray-500">Remaining</p>
-                <p className="text-sm font-bold text-red-600">₱{remainingBalance.toLocaleString()}</p>
+                <p className="text-sm font-bold text-red-600">{formatCurrency(remainingBalance)}</p>
               </div>
             </div>
           </div>
@@ -132,8 +133,8 @@ export function RecordPaymentModal({
               </div>
               {Number(paymentAmount) < remainingBalance && Number(paymentAmount) > 0 && (
                 <p className="text-xs text-amber-600 mt-1">
-                  * This will be recorded as a <strong>partial payment</strong>. Remaining balance will be ₱
-                  {(remainingBalance - Number(paymentAmount)).toLocaleString()}.
+                  * This will be recorded as a <strong>partial payment</strong>. Remaining balance will be{' '}
+                  {formatCurrency(remainingBalance - Number(paymentAmount))}.
                 </p>
               )}
             </div>

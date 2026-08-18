@@ -62,7 +62,7 @@ export default function CertificateSettings({ onUnsavedChange }: CertificateSett
               type="number"
               defaultValue={75}
               onChange={onUnsavedChange}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
             />
           </div>
 
@@ -71,7 +71,7 @@ export default function CertificateSettings({ onUnsavedChange }: CertificateSett
               <span className="text-sm text-gray-700">Require event evaluation completion before certificate release</span>
               <button
                 onClick={onUnsavedChange}
-                className="relative w-12 h-6 rounded-full bg-[#83358E]"
+                className="relative w-12 h-6 rounded-full bg-[#001A4D] cursor-pointer"
               >
                 <div className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full translate-x-6"></div>
               </button>
@@ -80,7 +80,7 @@ export default function CertificateSettings({ onUnsavedChange }: CertificateSett
               <span className="text-sm text-gray-700">Auto-generate certificates after event ends</span>
               <button
                 onClick={onUnsavedChange}
-                className="relative w-12 h-6 rounded-full bg-gray-300"
+                className="relative w-12 h-6 rounded-full bg-gray-300 cursor-pointer"
               >
                 <div className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full"></div>
               </button>
@@ -89,7 +89,7 @@ export default function CertificateSettings({ onUnsavedChange }: CertificateSett
               <span className="text-sm text-gray-700">Include QR code verification on certificates</span>
               <button
                 onClick={onUnsavedChange}
-                className="relative w-12 h-6 rounded-full bg-[#83358E]"
+                className="relative w-12 h-6 rounded-full bg-[#001A4D] cursor-pointer"
               >
                 <div className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full translate-x-6"></div>
               </button>
@@ -109,7 +109,7 @@ export default function CertificateSettings({ onUnsavedChange }: CertificateSett
               type="text"
               defaultValue="Ms. Riselle Mae B. Lucanas"
               onChange={onUnsavedChange}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
             />
           </div>
 
@@ -121,7 +121,7 @@ export default function CertificateSettings({ onUnsavedChange }: CertificateSett
               type="text"
               defaultValue="Student Affairs Adviser, STI College Ormoc"
               onChange={onUnsavedChange}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
             />
           </div>
 
@@ -129,7 +129,7 @@ export default function CertificateSettings({ onUnsavedChange }: CertificateSett
             <label className="block text-sm font-medium text-gray-700 mb-1.5">
               Upload Signature Image
             </label>
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-[#83358E] transition-colors cursor-pointer">
+            <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-[#0E4EBD] hover:bg-blue-50/20 transition-colors cursor-pointer">
               <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
               <p className="text-sm text-gray-600">Click to upload or drag and drop</p>
               <p className="text-xs text-gray-500">PNG, JPG up to 2MB (Transparent PNG recommended)</p>

@@ -2,6 +2,7 @@ import { CheckCircle, Calendar, Users, DollarSign, Shield, Rocket, Clock, MapPin
 import type { EventFormData } from '../../types/event.types';
 import { useOfficerProfile } from '../../../../auth/hooks/useOfficerProfile';
 import { useAdviserProfile } from '../../../auth/hooks/useAdviserProfile';
+import { formatCurrency } from '../../../../utils/currency';
 
 interface Step7Props {
   data: EventFormData;
@@ -129,7 +130,7 @@ export default function Step7Publish({ data, onUpdate, onPublish, isPublishing, 
                   <span>Target: {data.targetYearLevels?.length || 0} Year Levels, {data.targetDepartmentIds?.length || 0} Depts</span>
                   {data.attendanceEnabled && <span className="text-green-600 font-medium">✓ Attendance Required (Min {data.minAttendancePercent || 80}%)</span>}
                   {data.certificatesEnabled && <span className="text-green-600 font-medium">✓ Certificates {data.autoIssueCertificates ? 'Auto-Issued' : 'Configured'}</span>}
-                  {data.studentPayablesEnabled && <span className="text-blue-600 font-medium">✓ Required Payment: ₱{data.adminFeeOverride || 0}</span>}
+                  {data.studentPayablesEnabled && <span className="text-blue-600 font-medium">✓ Required Payment: {formatCurrency(data.adminFeeOverride || 0)}</span>}
                 </div>
               </div>
             </div>
@@ -139,7 +140,7 @@ export default function Step7Publish({ data, onUpdate, onPublish, isPublishing, 
               <div className="flex-1">
                 <h3 className="text-sm font-bold text-gray-700 mb-2">Budget</h3>
                 <div className="space-y-2">
-                  <div className="text-2xl font-bold text-[#001A4D]">₱{(data.totalApprovedBudget || 0).toLocaleString()}</div>
+                  <div className="text-2xl font-bold text-[#001A4D]">{formatCurrency(data.totalApprovedBudget || 0)}</div>
                   <div className="text-xs text-gray-600">Total Approved Amount across {data.budgetItems?.length || 0} line items</div>
                 </div>
               </div>

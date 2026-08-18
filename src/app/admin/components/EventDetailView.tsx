@@ -5,6 +5,8 @@ import {
   ChevronLeft, Filter, Download, Shield, AlertTriangle,
   CreditCard, UserCheck, UserX, MoreVertical
 } from 'lucide-react';
+import { formatCurrency } from '../../utils/currency';
+import { formatAppDate } from '../../utils/date';
 
 interface EventDetailViewProps {
   event: any;
@@ -12,15 +14,15 @@ interface EventDetailViewProps {
 }
 
 const MOCK_STUDENTS = [
-  { id: 1, name: 'Juan Dela Cruz', studentId: '2023-0001', course: 'BSIT', year: '3rd Year', paymentStatus: 'paid', paidAt: 'June 5, 2026', amount: 700 },
+  { id: 1, name: 'Juan Dela Cruz', studentId: '2023-0001', course: 'BSIT', year: '3rd Year', paymentStatus: 'paid', paidAt: 'Jun 5 2026', amount: 700 },
   { id: 2, name: 'Maria Santos', studentId: '2023-0002', course: 'BSCS', year: '2nd Year', paymentStatus: 'unpaid', paidAt: null, amount: 0 },
-  { id: 3, name: 'Carlos Reyes', studentId: '2022-0045', course: 'BSIT', year: '4th Year', paymentStatus: 'paid', paidAt: 'June 4, 2026', amount: 700 },
+  { id: 3, name: 'Carlos Reyes', studentId: '2022-0045', course: 'BSIT', year: '4th Year', paymentStatus: 'paid', paidAt: 'Jun 4 2026', amount: 700 },
   { id: 4, name: 'Ana Garcia', studentId: '2024-0112', course: 'BSIS', year: '1st Year', paymentStatus: 'unpaid', paidAt: null, amount: 0 },
-  { id: 5, name: 'Miguel Torres', studentId: '2023-0078', course: 'BSCS', year: '3rd Year', paymentStatus: 'paid', paidAt: 'June 6, 2026', amount: 700 },
+  { id: 5, name: 'Miguel Torres', studentId: '2023-0078', course: 'BSCS', year: '3rd Year', paymentStatus: 'paid', paidAt: 'Jun 6 2026', amount: 700 },
   { id: 6, name: 'Liza Mendoza', studentId: '2022-0099', course: 'BSIT', year: '4th Year', paymentStatus: 'unpaid', paidAt: null, amount: 0 },
-  { id: 7, name: 'Ryan Cruz', studentId: '2024-0033', course: 'BSCS', year: '2nd Year', paymentStatus: 'paid', paidAt: 'June 3, 2026', amount: 700 },
+  { id: 7, name: 'Ryan Cruz', studentId: '2024-0033', course: 'BSCS', year: '2nd Year', paymentStatus: 'paid', paidAt: 'Jun 3 2026', amount: 700 },
   { id: 8, name: 'Patricia Lim', studentId: '2023-0156', course: 'BSIS', year: '3rd Year', paymentStatus: 'unpaid', paidAt: null, amount: 0 },
-  { id: 9, name: 'Kevin Aquino', studentId: '2022-0201', course: 'BSIT', year: '4th Year', paymentStatus: 'paid', paidAt: 'June 7, 2026', amount: 700 },
+  { id: 9, name: 'Kevin Aquino', studentId: '2022-0201', course: 'BSIT', year: '4th Year', paymentStatus: 'paid', paidAt: 'Jun 7 2026', amount: 700 },
   { id: 10, name: 'Sophia Tan', studentId: '2024-0088', course: 'BSCS', year: '1st Year', paymentStatus: 'unpaid', paidAt: null, amount: 0 },
   { id: 11, name: 'Jerome Bautista', studentId: '2023-0204', course: 'BSIT', year: '2nd Year', paymentStatus: 'unpaid', paidAt: null, amount: 0 },
   { id: 12, name: 'Claire Villanueva', studentId: '2022-0187', course: 'BSIS', year: '4th Year', paymentStatus: 'paid', paidAt: 'June 5, 2026', amount: 700 },
@@ -55,7 +57,7 @@ export default function EventDetailView({ event, onClose }: EventDetailViewProps
 
   const markAsPaid = (id: number) => {
     setStudents(students.map(s =>
-      s.id === id ? { ...s, paymentStatus: 'paid', paidAt: new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }), amount: AMOUNT_PER_STUDENT } : s
+      s.id === id ? { ...s, paymentStatus: 'paid', paidAt: formatAppDate(new Date()), amount: AMOUNT_PER_STUDENT } : s
     ));
     setConfirmStudent(null);
     setActiveMenu(null);
@@ -79,17 +81,17 @@ export default function EventDetailView({ event, onClose }: EventDetailViewProps
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-5xl h-[90vh] flex flex-col overflow-hidden">
 
         {/* Header */}
-        <div className="bg-gradient-to-r from-[#001A4D] to-[#83358E] px-6 py-4 flex items-center justify-between flex-shrink-0">
+        <div className="bg-gradient-to-r from-[#001A4D] via-[#002B7F] to-[#0E4EBD] px-6 py-4 flex items-center justify-between flex-shrink-0 shadow-sm">
           <div className="flex items-center gap-3">
-            <button onClick={onClose} className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors">
+            <button onClick={onClose} className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors cursor-pointer">
               <ChevronLeft className="w-5 h-5" />
             </button>
             <div>
               <h2 className="text-white font-bold text-lg leading-tight">{event.name}</h2>
               <div className="flex items-center gap-2 mt-0.5">
-                <span className="text-white/60 text-xs">{event.org}</span>
+                <span className="text-white/80 text-xs font-medium">{event.org}</span>
                 <span className="text-white/40">·</span>
-                <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
                   event.status === 'Approved' ? 'bg-green-500/20 text-green-300' :
                   event.status === 'Pending' ? 'bg-amber-500/20 text-amber-300' :
                   'bg-red-500/20 text-red-300'
@@ -97,7 +99,7 @@ export default function EventDetailView({ event, onClose }: EventDetailViewProps
               </div>
             </div>
           </div>
-          <button onClick={onClose} className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors">
+          <button onClick={onClose} className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors cursor-pointer">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -108,9 +110,9 @@ export default function EventDetailView({ event, onClose }: EventDetailViewProps
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
-              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+              className={`px-4 py-3 text-sm font-bold border-b-2 transition-colors cursor-pointer ${
                 activeTab === tab.key
-                  ? 'border-[#83358E] text-[#83358E]'
+                  ? 'border-[#001A4D] text-[#001A4D]'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
@@ -132,11 +134,11 @@ export default function EventDetailView({ event, onClose }: EventDetailViewProps
               <div className="grid grid-cols-3 gap-4">
                 {[
                   { icon: Calendar, label: 'Event Date', value: event.date, color: 'text-[#1E70E8]' },
-                  { icon: MapPin, label: 'Venue', value: event.venue, color: 'text-[#83358E]' },
+                  { icon: MapPin, label: 'Venue', value: event.venue, color: 'text-[#0E4EBD]' },
                   { icon: Tag, label: 'Type', value: event.type, color: 'text-green-600' },
                   { icon: Building2, label: 'Organization', value: event.org, color: 'text-[#001A4D]' },
                   { icon: DollarSign, label: 'Approved Budget', value: event.budget, color: 'text-amber-600' },
-                  { icon: Users, label: 'Registered Students', value: `${students.length} students`, color: 'text-[#83358E]' },
+                  { icon: Users, label: 'Registered Students', value: `${students.length} students`, color: 'text-[#002B7F]' },
                 ].map(({ icon: Icon, label, value, color }) => (
                   <div key={label} className="p-4 bg-gray-50 border border-gray-200 rounded-xl">
                     <div className="flex items-center gap-2 mb-2">
@@ -152,8 +154,8 @@ export default function EventDetailView({ event, onClose }: EventDetailViewProps
               <div className="grid grid-cols-4 gap-4">
                 <div className="col-span-2 p-5 bg-gradient-to-br from-[#001A4D] to-[#0E4EBD] rounded-xl text-white">
                   <div className="text-white/60 text-xs mb-1">Total Collection Progress</div>
-                  <div className="text-3xl font-bold text-[#FFC107]">₱{totalCollected.toLocaleString()}</div>
-                  <div className="text-white/60 text-xs mt-1">of ₱{totalExpected.toLocaleString()} expected</div>
+                  <div className="text-3xl font-bold text-[#FFC107]">{formatCurrency(totalCollected)}</div>
+                  <div className="text-white/60 text-xs mt-1">of {formatCurrency(totalExpected)} expected</div>
                   <div className="mt-3 h-2 bg-white/20 rounded-full overflow-hidden">
                     <div className="h-full bg-[#FFC107] rounded-full transition-all" style={{ width: `${collectionRate}%` }} />
                   </div>
@@ -195,7 +197,7 @@ export default function EventDetailView({ event, onClose }: EventDetailViewProps
                     </div>
                     <button
                       onClick={() => { setActiveTab('payables'); setFilterStatus('unpaid'); }}
-                      className="px-3 py-1.5 text-xs font-medium text-[#83358E] border border-[#83358E] rounded-lg hover:bg-[#83358E]/5"
+                      className="px-3 py-1.5 text-xs font-semibold text-[#0E4EBD] border border-[#0E4EBD] rounded-lg hover:bg-blue-50 cursor-pointer transition-colors"
                     >
                       Manage Payments
                     </button>
@@ -214,14 +216,14 @@ export default function EventDetailView({ event, onClose }: EventDetailViewProps
                         </div>
                         <div className="flex items-center gap-2">
                           <Lock className="w-4 h-4 text-red-500" />
-                          <span className="text-xs font-medium text-red-700">₱{AMOUNT_PER_STUDENT} due</span>
+                          <span className="text-xs font-medium text-red-700">{formatCurrency(AMOUNT_PER_STUDENT)} due</span>
                         </div>
                       </div>
                     ))}
                     {unpaidCount > 5 && (
                       <button
                         onClick={() => { setActiveTab('payables'); setFilterStatus('unpaid'); }}
-                        className="w-full py-2 text-xs text-gray-500 hover:text-[#83358E] transition-colors"
+                        className="w-full py-2 text-xs text-gray-500 hover:text-[#0E4EBD] transition-colors cursor-pointer"
                       >
                         +{unpaidCount - 5} more unpaid students — view all
                       </button>
@@ -239,7 +241,7 @@ export default function EventDetailView({ event, onClose }: EventDetailViewProps
               {/* Stats row */}
               <div className="grid grid-cols-4 gap-3">
                 <div className="p-4 bg-[#001A4D]/5 border border-[#001A4D]/20 rounded-xl text-center">
-                  <div className="text-2xl font-bold text-[#001A4D]">₱{AMOUNT_PER_STUDENT}</div>
+                  <div className="text-2xl font-bold text-[#001A4D]">{formatCurrency(AMOUNT_PER_STUDENT)}</div>
                   <div className="text-xs text-gray-500 mt-0.5">Fee Per Student</div>
                 </div>
                 <div className="p-4 bg-green-50 border border-green-200 rounded-xl text-center">
@@ -251,7 +253,7 @@ export default function EventDetailView({ event, onClose }: EventDetailViewProps
                   <div className="text-xs text-gray-500 mt-0.5">Unpaid</div>
                 </div>
                 <div className="p-4 bg-[#FFC107]/10 border border-[#FFC107]/40 rounded-xl text-center">
-                  <div className="text-2xl font-bold text-[#001A4D]">₱{totalCollected.toLocaleString()}</div>
+                  <div className="text-2xl font-bold text-[#001A4D]">{formatCurrency(totalCollected)}</div>
                   <div className="text-xs text-gray-500 mt-0.5">Collected</div>
                 </div>
               </div>
@@ -273,7 +275,7 @@ export default function EventDetailView({ event, onClose }: EventDetailViewProps
                     placeholder="Search by name, student ID, or course..."
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    className="w-full pl-9 pr-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+                    className="w-full pl-9 pr-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
                   />
                 </div>
                 <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-xl">
@@ -344,7 +346,7 @@ export default function EventDetailView({ event, onClose }: EventDetailViewProps
                           )}
                         </td>
                         <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                          {student.paymentStatus === 'paid' ? `₱${student.amount.toLocaleString()}` : <span className="text-red-500">₱{AMOUNT_PER_STUDENT} due</span>}
+                          {student.paymentStatus === 'paid' ? formatCurrency(student.amount) : <span className="text-red-500">{formatCurrency(AMOUNT_PER_STUDENT)} due</span>}
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-500">
                           {student.paidAt ?? <span className="text-gray-400">—</span>}
@@ -414,7 +416,7 @@ export default function EventDetailView({ event, onClose }: EventDetailViewProps
               </p>
               <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl mb-5 flex items-center justify-between">
                 <span className="text-sm text-gray-700">Amount</span>
-                <span className="font-bold text-gray-900">₱{AMOUNT_PER_STUDENT.toLocaleString()}</span>
+                <span className="font-bold text-gray-900">{formatCurrency(AMOUNT_PER_STUDENT)}</span>
               </div>
               <div className="p-3 bg-green-50 border border-green-200 rounded-xl mb-5 flex items-start gap-2">
                 <QrCode className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />

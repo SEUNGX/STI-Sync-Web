@@ -176,7 +176,7 @@ export default function LoginActivity({ onUnsavedChange }: LoginActivityProps) {
             </div>
             <button
               onClick={onUnsavedChange}
-              className="relative w-12 h-6 rounded-full bg-[#83358E]"
+              className="relative w-12 h-6 rounded-full bg-[#001A4D] cursor-pointer"
             >
               <div className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full translate-x-6"></div>
             </button>
@@ -189,7 +189,7 @@ export default function LoginActivity({ onUnsavedChange }: LoginActivityProps) {
             </div>
             <button
               onClick={onUnsavedChange}
-              className="relative w-12 h-6 rounded-full bg-[#83358E]"
+              className="relative w-12 h-6 rounded-full bg-[#001A4D] cursor-pointer"
             >
               <div className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full translate-x-6"></div>
             </button>

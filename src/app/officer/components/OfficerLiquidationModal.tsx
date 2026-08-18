@@ -11,6 +11,7 @@ import type {
   LiquidationDocument,
   ExpenseLineItem
 } from '../../modules/finance/types/liquidation.types';
+import { formatCurrency, formatVariance } from '../../utils/currency';
 
 interface OfficerLiquidationModalProps {
   isOpen: boolean;
@@ -358,12 +359,12 @@ export default function OfficerLiquidationModal({
           <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
             <div className="p-3 bg-white border border-gray-100 rounded-lg shadow-sm">
               <div className="text-xs text-gray-500 font-medium">Approved Budget</div>
-              <div className="text-lg font-bold text-[#001A4D] mt-1">₱{allocatedBudget.toLocaleString()}</div>
+              <div className="text-lg font-bold text-[#001A4D] mt-1">{formatCurrency(allocatedBudget)}</div>
             </div>
 
             <div className="p-3 bg-white border border-gray-100 rounded-lg shadow-sm">
               <div className="text-xs text-gray-500 font-medium">Total Actual Spendings</div>
-              <div className="text-lg font-bold text-[#83358E] mt-1">₱{totalActualSpending.toLocaleString()}</div>
+              <div className="text-lg font-bold text-[#83358E] mt-1">{formatCurrency(totalActualSpending)}</div>
             </div>
 
             <div className={`p-3 bg-white border rounded-lg shadow-sm ${isDeficit ? 'border-red-200' : 'border-green-200'}`}>
@@ -371,7 +372,7 @@ export default function OfficerLiquidationModal({
                 {isDeficit ? 'Net Deficit (Over Budget)' : 'Net Surplus (Remaining)'}
               </div>
               <div className={`text-lg font-bold mt-1 ${isDeficit ? 'text-red-600' : 'text-green-600'}`}>
-                {isDeficit ? `-₱${Math.abs(surplusOrDeficit).toLocaleString()}` : `+₱${surplusOrDeficit.toLocaleString()}`}
+                {formatVariance(surplusOrDeficit)}
               </div>
             </div>
           </div>
@@ -403,7 +404,7 @@ export default function OfficerLiquidationModal({
                       )}
                       {item.allocatedCost !== undefined && item.allocatedCost > 0 && (
                         <span className="text-[11px] font-semibold px-2.5 py-0.5 bg-blue-50 text-blue-800 rounded border border-blue-200">
-                          Allocated: ₱{item.allocatedCost.toLocaleString()}
+                          Allocated: {formatCurrency(item.allocatedCost)}
                         </span>
                       )}
                     </div>
@@ -415,8 +416,8 @@ export default function OfficerLiquidationModal({
                             : 'bg-green-100 text-green-800'
                           }`}>
                           {(item.allocatedCost - item.totalCost) < 0
-                            ? `Item Deficit (-₱${Math.abs(item.allocatedCost - item.totalCost).toLocaleString()})`
-                            : `Item Surplus (+₱${(item.allocatedCost - item.totalCost).toLocaleString()})`}
+                            ? `Item Deficit (-${formatCurrency(Math.abs(item.allocatedCost - item.totalCost))})`
+                            : `Item Surplus (+${formatCurrency(item.allocatedCost - item.totalCost)})`}
                         </span>
                       )}
                       {!item.isPreFilled && lineItems.length > 1 && (
@@ -470,14 +471,14 @@ export default function OfficerLiquidationModal({
                         <div>
                           <span className="text-gray-500 font-medium">Proposed Baseline:</span>
                           <span className="ml-1.5 font-bold text-[#001A4D]">
-                            {item.proposedQuantity || item.quantity || 1} Qty × ₱{(item.proposedUnitCost || 0).toLocaleString()} = ₱{(item.allocatedCost || 0).toLocaleString()}
+                            {item.proposedQuantity || item.quantity || 1} Qty × {formatCurrency(item.proposedUnitCost || 0)} = {formatCurrency(item.allocatedCost || 0)}
                           </span>
                         </div>
                         <span className="text-blue-300 hidden sm:inline">|</span>
                         <div>
                           <span className="text-gray-500 font-medium">Actual Input:</span>
                           <span className="ml-1.5 font-bold text-[#83358E]">
-                            {item.quantity} Qty × ₱{item.unitCost.toLocaleString()} = ₱{item.totalCost.toLocaleString()}
+                            {item.quantity} Qty × {formatCurrency(item.unitCost)} = {formatCurrency(item.totalCost)}
                           </span>
                         </div>
                       </div>
@@ -487,8 +488,8 @@ export default function OfficerLiquidationModal({
                           : 'bg-green-100 text-green-800'
                         }`}>
                         {((item.allocatedCost || 0) - item.totalCost) < 0
-                          ? `Deficit: -₱${Math.abs((item.allocatedCost || 0) - item.totalCost).toLocaleString()}`
-                          : `Surplus: +₱${((item.allocatedCost || 0) - item.totalCost).toLocaleString()}`}
+                          ? `Deficit: -${formatCurrency(Math.abs((item.allocatedCost || 0) - item.totalCost))}`
+                          : `Surplus: +${formatCurrency(((item.allocatedCost || 0) - item.totalCost))}`}
                       </div>
                     </div>
                   )}

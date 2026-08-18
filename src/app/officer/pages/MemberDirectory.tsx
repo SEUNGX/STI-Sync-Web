@@ -22,6 +22,7 @@ import { useOfficerProfile } from '../../auth/hooks/useOfficerProfile';
 import { useRoles } from '../../modules/roles/hooks/useRoles';
 import { useOrgMembers } from '../../modules/organizations/hooks/useOrgMembers';
 import { useOrgOfficers } from '../../modules/organizations/hooks/useOrgOfficers';
+import { formatCurrency } from '../../utils/currency';
 import {
   approveMemberApplication,
   rejectMemberApplication,
@@ -123,7 +124,7 @@ export default function MemberDirectory() {
       const res = await approveMemberApplication(member.id, profile?.studentId || 'Officer');
       let msg = `Approved membership for ${member.studentName}!`;
       if (res.payableCreated && res.feeAmount) {
-        msg += ` Automatically assigned ₱${res.feeAmount} membership payable.`;
+        msg += ` Automatically assigned ${formatCurrency(res.feeAmount)} membership payable.`;
       }
       setActionFeedback(msg);
       setTimeout(() => setActionFeedback(null), 5000);

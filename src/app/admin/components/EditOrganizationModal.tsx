@@ -153,7 +153,7 @@ export function EditOrganizationModal({ organization, isOpen, onClose, onSuccess
                 required
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] outline-none"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] outline-none"
               />
             </div>
 
@@ -164,7 +164,7 @@ export function EditOrganizationModal({ organization, isOpen, onClose, onSuccess
                 required
                 value={formData.acronym}
                 onChange={(e) => setFormData({ ...formData, acronym: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono uppercase focus:ring-2 focus:ring-[#83358E] outline-none"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono uppercase focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] outline-none"
               />
             </div>
           </div>
@@ -176,7 +176,7 @@ export function EditOrganizationModal({ organization, isOpen, onClose, onSuccess
                 value={formData.typeId}
                 onChange={(e) => setFormData({ ...formData, typeId: e.target.value })}
                 disabled={loadingTypes}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] outline-none disabled:opacity-50"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] outline-none disabled:opacity-50"
               >
                 <option value="">Select type...</option>
                 {orgTypes.map((t) => (
@@ -193,7 +193,7 @@ export function EditOrganizationModal({ organization, isOpen, onClose, onSuccess
                 value={formData.department}
                 onChange={(e) => setFormData({ ...formData, department: e.target.value })}
                 disabled={loadingDepts}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] outline-none disabled:opacity-50"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] outline-none disabled:opacity-50"
               >
                 <option value="">College-wide / All Departments</option>
                 {departments.map((d) => (
@@ -212,7 +212,7 @@ export function EditOrganizationModal({ organization, isOpen, onClose, onSuccess
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               placeholder="Enter brief summary of the organization..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] outline-none resize-none"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] outline-none resize-none"
             />
           </div>
         </form>

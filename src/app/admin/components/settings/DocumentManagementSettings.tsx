@@ -17,7 +17,8 @@ import type { DocumentCategoryDocument } from '../../../modules/documents/types/
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 const COLOR_OPTIONS = [
-  { label: 'Violet', value: 'bg-[#F3E8FF] text-[#83358E]', dot: 'bg-[#83358E]' },
+  { label: 'Navy', value: 'bg-[#001A4D]/10 text-[#001A4D]', dot: 'bg-[#001A4D]' },
+  { label: 'Cobalt', value: 'bg-[#0E4EBD]/10 text-[#0E4EBD]', dot: 'bg-[#0E4EBD]' },
   { label: 'Blue', value: 'bg-blue-100 text-blue-700', dot: 'bg-blue-600' },
   { label: 'Amber', value: 'bg-amber-100 text-amber-700', dot: 'bg-amber-500' },
   { label: 'Green', value: 'bg-green-100 text-green-700', dot: 'bg-green-600' },
@@ -38,7 +39,7 @@ function Toggle({
     <button
       type="button"
       onClick={() => onChange(!value)}
-      className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${value ? 'bg-[#83358E]' : 'bg-gray-300'}`}
+      className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 cursor-pointer ${value ? 'bg-[#001A4D]' : 'bg-gray-300'}`}
     >
       <div
         className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform shadow ${value ? 'translate-x-6' : ''}`}
@@ -101,7 +102,7 @@ function CategoryRow({
               <button
                 key={opt.value}
                 onClick={() => handleColorChange(opt)}
-                className={`w-5 h-5 rounded-full ${opt.dot} hover:scale-110 transition-transform ${cat.color === opt.value ? 'ring-2 ring-offset-1 ring-[#83358E]' : ''}`}
+                className={`w-5 h-5 rounded-full ${opt.dot} hover:scale-110 transition-transform ${cat.color === opt.value ? 'ring-2 ring-offset-1 ring-[#0E4EBD]' : ''}`}
                 title={opt.label}
               />
             ))}
@@ -116,7 +117,7 @@ function CategoryRow({
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false); }}
-          className="flex-1 px-2 py-1 border border-[#83358E] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#83358E]"
+          className="flex-1 px-2 py-1 border border-[#0E4EBD] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0E4EBD]"
         />
       ) : (
         <span className="flex-1 text-sm font-medium inline-flex items-center">
@@ -131,7 +132,7 @@ function CategoryRow({
             type="checkbox"
             checked={cat.officerCanSubmit}
             onChange={(e) => onUpdate({ officerCanSubmit: e.target.checked })}
-            className="accent-[#83358E] w-3.5 h-3.5"
+            className="accent-[#0E4EBD] w-3.5 h-3.5"
           />
           <span className="hidden xl:inline">Officers</span>
         </label>
@@ -140,7 +141,7 @@ function CategoryRow({
             type="checkbox"
             checked={cat.requiresRemarks}
             onChange={(e) => onUpdate({ requiresRemarks: e.target.checked })}
-            className="accent-[#83358E] w-3.5 h-3.5"
+            className="accent-[#0E4EBD] w-3.5 h-3.5"
           />
           <span className="hidden xl:inline">Req. remarks</span>
         </label>
@@ -153,7 +154,7 @@ function CategoryRow({
       <div className="flex gap-1 flex-shrink-0">
         {saving ? (
           <div className="w-7 h-7 flex items-center justify-center">
-            <Loader2 className="w-3.5 h-3.5 text-[#83358E] animate-spin" />
+            <Loader2 className="w-3.5 h-3.5 text-[#0E4EBD] animate-spin" />
           </div>
         ) : editing ? (
           <>
@@ -320,7 +321,7 @@ export default function DocumentManagementSettings() {
   if (catLoading || settingsLoading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <Loader2 className="w-6 h-6 text-[#83358E] animate-spin mr-3" />
+        <Loader2 className="w-6 h-6 text-[#0E4EBD] animate-spin mr-3" />
         <span className="text-gray-500 text-sm">Loading document settings…</span>
       </div>
     );
@@ -337,16 +338,16 @@ export default function DocumentManagementSettings() {
       {/* ── 1. Document Categories ─────────────────────────────────────────── */}
       <div className="bg-white border border-[#E0E0E0] rounded-xl p-6">
         <div className="flex items-center justify-between mb-5">
-          <div className="border-l-4 border-[#83358E] pl-3">
+          <div className="border-l-4 border-[#0E4EBD] pl-3">
             <div className="flex items-center gap-2">
-              <Tag className="w-4 h-4 text-[#83358E]" />
+              <Tag className="w-4 h-4 text-[#0E4EBD]" />
               <h3 className="text-base font-bold text-[#001A4D]">Document Categories</h3>
             </div>
             <p className="text-xs text-gray-500 mt-0.5">Manage the categories officers can select when submitting documents.</p>
           </div>
           <button
             onClick={() => setAddingCat(true)}
-            className="flex items-center gap-1.5 px-3 py-2 bg-[#001A4D] text-[#FFD41C] text-sm font-medium rounded-lg hover:bg-[#001A4D]/90 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-2 bg-[#001A4D] text-[#FFD41C] text-sm font-bold rounded-lg hover:bg-[#001A4D]/90 transition-colors cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             Add Category
@@ -386,13 +387,13 @@ export default function DocumentManagementSettings() {
 
         {/* Add new category inline */}
         {addingCat && (
-          <div className="flex items-center gap-3 mt-3 p-3 border-2 border-dashed border-[#83358E]/40 rounded-xl bg-[#F3E8FF]/30">
+          <div className="flex items-center gap-3 mt-3 p-3 border-2 border-dashed border-[#0E4EBD]/40 rounded-xl bg-blue-50/40">
             <div className="flex gap-1 flex-shrink-0">
               {COLOR_OPTIONS.slice(0, 4).map((opt) => (
                 <button
                   key={opt.value}
                   onClick={() => { setNewCatColor(opt.value); setNewCatDot(opt.dot); }}
-                  className={`w-5 h-5 rounded-full ${opt.dot} hover:scale-110 transition-transform ${newCatColor === opt.value ? 'ring-2 ring-offset-1 ring-[#83358E]' : ''}`}
+                  className={`w-5 h-5 rounded-full ${opt.dot} hover:scale-110 transition-transform ${newCatColor === opt.value ? 'ring-2 ring-offset-1 ring-[#0E4EBD]' : ''}`}
                 />
               ))}
             </div>
@@ -403,16 +404,16 @@ export default function DocumentManagementSettings() {
               value={newCatName}
               onChange={(e) => setNewCatName(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') addCategory(); if (e.key === 'Escape') setAddingCat(false); }}
-              className="flex-1 px-3 py-2 border border-[#83358E] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#83358E]"
+              className="flex-1 px-3 py-2 border border-[#0E4EBD] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0E4EBD]"
               disabled={addingSaving}
             />
             <button
               onClick={addCategory}
               disabled={addingSaving || !newCatName.trim()}
-              className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+              className={`px-3 py-2 rounded-lg text-sm font-bold transition-colors ${
                 addingSaving || !newCatName.trim()
                   ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                  : 'bg-[#83358E] text-white hover:bg-[#6D2A78]'
+                  : 'bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] text-white hover:opacity-90 cursor-pointer shadow-xs'
               }`}
             >
               {addingSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Add'}
@@ -429,9 +430,9 @@ export default function DocumentManagementSettings() {
 
       {/* ── 2. Reference Number Format ─────────────────────────────────────── */}
       <div className="bg-white border border-[#E0E0E0] rounded-xl p-6">
-        <div className="border-l-4 border-[#83358E] pl-3 mb-5">
+        <div className="border-l-4 border-[#0E4EBD] pl-3 mb-5">
           <div className="flex items-center gap-2">
-            <Hash className="w-4 h-4 text-[#83358E]" />
+            <Hash className="w-4 h-4 text-[#0E4EBD]" />
             <h3 className="text-base font-bold text-[#001A4D]">Reference Number Format</h3>
           </div>
           <p className="text-xs text-gray-500 mt-0.5">Configure the auto-generated reference number assigned to each submitted document.</p>
@@ -446,7 +447,7 @@ export default function DocumentManagementSettings() {
                 maxLength={6}
                 value={refPrefix}
                 onChange={(e) => setRefPrefix(e.target.value.toUpperCase())}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent font-mono"
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] font-mono"
               />
               <p className="text-xs text-gray-500 mt-1">Max 6 characters</p>
             </div>
@@ -455,7 +456,7 @@ export default function DocumentManagementSettings() {
               <select
                 value={refSeparator}
                 onChange={(e) => setRefSeparator(e.target.value)}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent font-mono"
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] font-mono"
               >
                 <option value="-">- (dash)</option>
                 <option value="/">&nbsp;/ (slash)</option>
@@ -471,7 +472,7 @@ export default function DocumentManagementSettings() {
                 max={8}
                 value={refPadding}
                 onChange={(e) => setRefPadding(+e.target.value)}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
               />
             </div>
           </div>
@@ -484,11 +485,11 @@ export default function DocumentManagementSettings() {
             <Toggle value={refIncludeYear} onChange={setRefIncludeYear} />
           </div>
 
-          <div className="flex items-center gap-3 p-4 bg-[#F3E8FF] border border-[#83358E]/30 rounded-xl">
-            <Hash className="w-4 h-4 text-[#83358E]" />
+          <div className="flex items-center gap-3 p-4 bg-blue-50 border border-blue-200 rounded-xl">
+            <Hash className="w-4 h-4 text-[#0E4EBD]" />
             <div>
               <p className="text-xs text-gray-500 mb-0.5">Preview — next reference number:</p>
-              <p className="text-[#83358E] font-bold font-mono text-lg">{refPreview}</p>
+              <p className="text-[#001A4D] font-bold font-mono text-lg">{refPreview}</p>
             </div>
           </div>
         </div>
@@ -498,9 +499,9 @@ export default function DocumentManagementSettings() {
 
       {/* ── 3. Retention & Archive ─────────────────────────────────────────── */}
       <div className="bg-white border border-[#E0E0E0] rounded-xl p-6">
-        <div className="border-l-4 border-[#83358E] pl-3 mb-5">
+        <div className="border-l-4 border-[#0E4EBD] pl-3 mb-5">
           <div className="flex items-center gap-2">
-            <Archive className="w-4 h-4 text-[#83358E]" />
+            <Archive className="w-4 h-4 text-[#0E4EBD]" />
             <h3 className="text-base font-bold text-[#001A4D]">Retention & Archival</h3>
           </div>
           <p className="text-xs text-gray-500 mt-0.5">Set how long documents are kept, when they are auto-archived, and what officers can delete.</p>
@@ -516,7 +517,7 @@ export default function DocumentManagementSettings() {
                 max={20}
                 value={retentionYears}
                 onChange={(e) => setRetentionYears(+e.target.value)}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
               />
               <p className="text-xs text-gray-500 mt-1">Documents are preserved for this period before permanent deletion is allowed.</p>
             </div>
@@ -528,7 +529,7 @@ export default function DocumentManagementSettings() {
                 max={365}
                 value={draftExpiryDays}
                 onChange={(e) => setDraftExpiryDays(+e.target.value)}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
               />
               <p className="text-xs text-gray-500 mt-1">Unsent draft submissions are auto-deleted after this many days.</p>
             </div>
@@ -544,7 +545,7 @@ export default function DocumentManagementSettings() {
             </div>
 
             {autoArchiveCompleted && (
-              <div className="ml-4 pl-3 border-l-2 border-[#83358E]/30">
+              <div className="ml-4 pl-3 border-l-2 border-[#0E4EBD]/30">
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Archive After (semesters past)</label>
                 <input
                   type="number"
@@ -552,7 +553,7 @@ export default function DocumentManagementSettings() {
                   max={10}
                   value={archiveAfterSemesters}
                   onChange={(e) => setArchiveAfterSemesters(+e.target.value)}
-                  className="w-40 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+                  className="w-40 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
                 />
                 <p className="text-xs text-gray-500 mt-1">Documents from semesters older than this threshold are archived automatically.</p>
               </div>

@@ -8,6 +8,7 @@ import type { PayableDocument } from '../types/payable.types';
 import { AdminRecordPaymentModal } from './AdminRecordPaymentModal';
 import { useStudents } from '../../students/hooks/useStudentStream';
 import { generatePayablesForEvent } from '../../events/services/event.service';
+import { formatCurrency } from '../../../utils/currency';
 
 interface EventPayablesQRControlProps {
   eventId: string;
@@ -204,7 +205,7 @@ export function EventPayablesQRControl({
         <div className="flex flex-wrap items-center gap-3 text-xs">
           <div className="bg-white/10 px-3.5 py-2 rounded-lg border border-white/10">
             <p className="text-gray-400 text-[10px] uppercase font-semibold">Total Collection</p>
-            <p className="font-bold text-sm text-[#FFC107]">₱{totalCollected.toLocaleString()} <span className="text-gray-300 font-normal text-xs">/ ₱{totalAssigned.toLocaleString()}</span></p>
+            <p className="font-bold text-sm text-[#FFC107]">{formatCurrency(totalCollected)} <span className="text-gray-300 font-normal text-xs">/ {formatCurrency(totalAssigned)}</span></p>
           </div>
           <div className="bg-white/10 px-3.5 py-2 rounded-lg border border-white/10">
             <p className="text-gray-400 text-[10px] uppercase font-semibold">Unlocked Tickets</p>
@@ -300,10 +301,10 @@ export function EventPayablesQRControl({
                     {getStudentDisplayId(payable)}
                   </td>
                   <td className="px-5 py-3.5 font-semibold text-[#001A4D]">
-                    ₱{payable.assignedAmount}
+                    {formatCurrency(payable.assignedAmount)}
                   </td>
                   <td className="px-5 py-3.5 font-semibold text-emerald-700">
-                    ₱{payable.paidAmount || 0}
+                    {formatCurrency(payable.paidAmount || 0)}
                   </td>
                   <td className="px-5 py-3.5">
                     <span

@@ -225,7 +225,7 @@ export default function ActiveStudents({ students: activeStudents }: ActiveStude
         <div className="flex items-center gap-3">
           <button
             onClick={() => setShowAddModal(true)}
-            className="px-5 py-2.5 bg-[#83358E] text-white rounded-lg font-medium hover:bg-[#83358E]/90 flex items-center gap-2 shadow-sm transition-all"
+            className="px-5 py-2.5 bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] text-white rounded-lg font-bold hover:opacity-90 flex items-center gap-2 shadow-sm transition-all cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             Add Student Manually
@@ -277,14 +277,14 @@ export default function ActiveStudents({ students: activeStudents }: ActiveStude
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search by name, student ID, or email..."
-              className="w-full pl-9 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] outline-none"
+              className="w-full pl-9 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] outline-none"
             />
           </div>
 
           <select
             value={selectedCourse}
             onChange={(e) => setSelectedCourse(e.target.value)}
-            className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] outline-none bg-white text-gray-700"
+            className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] outline-none bg-white text-gray-700"
           >
             <option value="All Courses">All Courses</option>
             {courses.map((c) => (
@@ -295,7 +295,7 @@ export default function ActiveStudents({ students: activeStudents }: ActiveStude
           <select
             value={selectedYear}
             onChange={(e) => setSelectedYear(e.target.value)}
-            className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] outline-none bg-white text-gray-700"
+            className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] outline-none bg-white text-gray-700"
           >
             <option value="All Year Levels">All Year Levels</option>
             <option value="1st Year">1st Year</option>
@@ -307,7 +307,7 @@ export default function ActiveStudents({ students: activeStudents }: ActiveStude
           <select
             value={selectedSection}
             onChange={(e) => setSelectedSection(e.target.value)}
-            className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] outline-none bg-white text-gray-700"
+            className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] outline-none bg-white text-gray-700"
           >
             <option value="All Sections">All Sections</option>
             {availableSections.map((sec) => (
@@ -366,7 +366,7 @@ export default function ActiveStudents({ students: activeStudents }: ActiveStude
                     <tr key={student.id} className="hover:bg-gray-50/80 transition-colors">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-gradient-to-br from-[#0E4EBD] to-[#83358E] rounded-full flex items-center justify-center text-white font-bold text-xs uppercase overflow-hidden shadow-sm flex-shrink-0">
+                          <div className="w-10 h-10 bg-gradient-to-br from-[#001A4D] to-[#0E4EBD] rounded-full flex items-center justify-center text-white font-bold text-xs uppercase overflow-hidden shadow-sm flex-shrink-0">
                             {student.profilePhotoUrl ? (
                               <img 
                                 src={student.profilePhotoUrl} 
@@ -376,7 +376,7 @@ export default function ActiveStudents({ students: activeStudents }: ActiveStude
                                   e.currentTarget.onerror = null;
                                   e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(
                                     `${student.firstName || ''} ${student.lastName || ''}`
-                                  )}&background=83358E&color=fff`;
+                                  )}&background=001A4D&color=fff`;
                                 }}
                               />
                             ) : (
@@ -402,7 +402,7 @@ export default function ActiveStudents({ students: activeStudents }: ActiveStude
                         ) : (
                           <div className="flex flex-wrap gap-1 max-w-[180px]">
                             {orgs.slice(0, 2).map((orgName, idx) => (
-                              <span key={idx} className="px-2 py-0.5 bg-[#83358E]/10 text-[#83358E] rounded text-xs font-semibold">
+                              <span key={idx} className="px-2 py-0.5 bg-blue-50 text-[#0E4EBD] rounded text-xs font-semibold border border-blue-100">
                                 {orgName}
                               </span>
                             ))}

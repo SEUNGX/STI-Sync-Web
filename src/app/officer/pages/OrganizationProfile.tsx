@@ -9,6 +9,7 @@ import { useOrgMembers } from '../../modules/organizations/hooks/useOrgMembers';
 import { useOrgOfficers } from '../../modules/organizations/hooks/useOrgOfficers';
 import { updateOrganization } from '../../modules/organizations/services/organization.service';
 import type { OrganizationDocument } from '../../modules/organizations/types/organization.types';
+import { formatAppDate } from '../../utils/date';
 
 export default function OrganizationProfile({ embedded = false }: { embedded?: boolean }) {
   const { profile } = useOfficerProfile();
@@ -103,9 +104,7 @@ export default function OrganizationProfile({ embedded = false }: { embedded?: b
   }
 
   const activeOfficersList = officers.filter(o => o.isActive);
-  const establishedDate = activeOrg.createdAt?.toDate 
-    ? activeOrg.createdAt.toDate().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
-    : 'Unknown';
+  const establishedDate = formatAppDate(activeOrg.createdAt, 'Unknown');
 
   const inputClass = `w-full px-4 py-2 border border-[#E0E0E0] rounded-lg text-sm transition-colors focus:ring-2 focus:ring-[#83358E] focus:border-transparent outline-none ${
     !canEdit ? 'bg-gray-50 text-gray-600 cursor-not-allowed' : 'bg-white'

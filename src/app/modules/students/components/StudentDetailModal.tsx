@@ -8,6 +8,8 @@ import {
 import type { StudentDocument } from '../types/student.types';
 import { useStudentDetail } from '../hooks/useStudentDetail';
 import { formatTimestampDate } from '../utils/date.utils';
+import { formatCurrency } from '../../../utils/currency';
+import { formatAppDate } from '../../../utils/date';
 
 interface StudentDetailModalProps {
   student: StudentDocument;
@@ -33,10 +35,10 @@ export default function StudentDetailModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden border border-[#E0E0E0]">
         {/* Modal Header */}
-        <div className="relative bg-gradient-to-r from-[#001A4D] via-[#0E4EBD] to-[#83358E] px-8 py-6 text-white flex-shrink-0">
+        <div className="relative bg-gradient-to-r from-[#001A4D] via-[#002B7F] to-[#0E4EBD] px-8 py-6 text-white flex-shrink-0 shadow-sm">
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+            className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -52,11 +54,11 @@ export default function StudentDetailModal({
                     e.currentTarget.onerror = null;
                     e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(
                       `${student.firstName} ${student.lastName}`
-                    )}&background=83358E&color=fff&size=160`;
+                    )}&background=001A4D&color=fff&size=160`;
                   }}
                 />
               ) : (
-                <div className="w-full h-full bg-gradient-to-br from-[#0E4EBD] to-[#83358E] rounded-xl flex items-center justify-center text-white font-bold text-2xl">
+                <div className="w-full h-full bg-gradient-to-br from-[#001A4D] to-[#0E4EBD] rounded-xl flex items-center justify-center text-white font-bold text-2xl">
                   {student.firstName?.[0] || 'S'}{student.lastName?.[0] || 'T'}
                 </div>
               )}
@@ -138,7 +140,7 @@ export default function StudentDetailModal({
               Finances & Payables
               {stats.outstandingBalance > 0 && (
                 <span className="ml-1 px-2 py-0.5 rounded-full text-xs bg-red-500 text-white font-mono">
-                  ₱{stats.outstandingBalance.toLocaleString()}
+                  {formatCurrency(stats.outstandingBalance)}
                 </span>
               )}
             </button>
@@ -213,7 +215,7 @@ export default function StudentDetailModal({
                 {/* Academic Enrollment */}
                 <div className="bg-white rounded-xl p-5 border border-[#E0E0E0] shadow-sm space-y-4">
                   <h3 className="font-bold text-[#001A4D] text-base flex items-center gap-2 border-b border-gray-100 pb-3">
-                    <Building2 className="w-4 h-4 text-[#83358E]" />
+                    <Building2 className="w-4 h-4 text-[#0E4EBD]" />
                     Academic & Enrollment
                   </h3>
                   <div className="grid grid-cols-2 gap-4 text-sm">
@@ -332,7 +334,7 @@ export default function StudentDetailModal({
 
                         <div className="flex items-center gap-1.5">
                           {m.isOfficer && (
-                            <span className="px-2.5 py-0.5 bg-[#83358E] text-white rounded-full text-xs font-bold shadow-xs">
+                            <span className="px-2.5 py-0.5 bg-[#001A4D] text-[#FFD41C] rounded-full text-xs font-bold shadow-xs">
                               Officer
                             </span>
                           )}
@@ -374,18 +376,18 @@ export default function StudentDetailModal({
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="bg-white border border-[#E0E0E0] rounded-xl p-4 shadow-sm">
                   <div className="text-xs font-bold text-gray-500 uppercase">Total Billed</div>
-                  <div className="text-2xl font-bold text-[#001A4D] mt-1">₱{stats.totalBilled.toLocaleString()}</div>
+                  <div className="text-2xl font-bold text-[#001A4D] mt-1">{formatCurrency(stats.totalBilled)}</div>
                   <div className="text-xs text-gray-400 mt-0.5">{payables.length} total payable item(s)</div>
                 </div>
                 <div className="bg-white border border-[#E0E0E0] rounded-xl p-4 shadow-sm">
                   <div className="text-xs font-bold text-gray-500 uppercase">Total Paid</div>
-                  <div className="text-2xl font-bold text-green-600 mt-1">₱{stats.totalPaid.toLocaleString()}</div>
+                  <div className="text-2xl font-bold text-green-600 mt-1">{formatCurrency(stats.totalPaid)}</div>
                   <div className="text-xs text-gray-400 mt-0.5">Recorded collections</div>
                 </div>
                 <div className="bg-white border border-[#E0E0E0] rounded-xl p-4 shadow-sm">
                   <div className="text-xs font-bold text-gray-500 uppercase">Outstanding Balance</div>
                   <div className={`text-2xl font-bold mt-1 ${stats.outstandingBalance > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                    ₱{stats.outstandingBalance.toLocaleString()}
+                    {formatCurrency(stats.outstandingBalance)}
                   </div>
                   <div className="text-xs text-gray-400 mt-0.5">
                     {stats.outstandingBalance > 0 ? 'Unsettled obligations' : 'Fully cleared'}
@@ -437,13 +439,11 @@ export default function StudentDetailModal({
                                 </span>
                               </td>
                               <td className="px-5 py-3.5">
-                                <div className="font-mono font-bold text-gray-900">₱{assigned.toLocaleString()}</div>
-                                <div className="text-xs text-green-600 font-mono">Paid: ₱{paid.toLocaleString()}</div>
+                                <div className="font-mono font-bold text-gray-900">{formatCurrency(assigned)}</div>
+                                <div className="text-xs text-green-600 font-mono">Paid: {formatCurrency(paid)}</div>
                               </td>
                               <td className="px-5 py-3.5 text-xs text-gray-600">
-                                {p.dueDate?.toDate 
-                                  ? p.dueDate.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-                                  : '—'}
+                                {formatAppDate(p.dueDate, '—')}
                               </td>
                               <td className="px-5 py-3.5">
                                 <span className={`px-2.5 py-1 rounded-full text-xs font-semibold uppercase ${
@@ -456,10 +456,10 @@ export default function StudentDetailModal({
                                 </span>
                               </td>
                               <td className="px-5 py-3.5 text-xs text-gray-500">
-                                {p.paidAt?.toDate ? (
+                                {p.paidAt ? (
                                   <div>
                                     <span className="block font-medium text-gray-700">
-                                      {p.paidAt.toDate().toLocaleDateString()}
+                                      {formatAppDate(p.paidAt)}
                                     </span>
                                     <span>Method: {p.paymentMethod || 'Cash'}</span>
                                   </div>
@@ -495,7 +495,7 @@ export default function StudentDetailModal({
                 </div>
                 <div className="bg-white border border-[#E0E0E0] rounded-xl p-4 shadow-sm">
                   <div className="text-xs font-bold text-gray-500 uppercase">Overall Attendance Rate</div>
-                  <div className="text-2xl font-bold text-[#83358E] mt-1">{stats.attendanceRate}%</div>
+                  <div className="text-2xl font-bold text-[#0E4EBD] mt-1">{stats.attendanceRate}%</div>
                   <div className="text-xs text-gray-400 mt-0.5">Campus event compliance</div>
                 </div>
               </div>

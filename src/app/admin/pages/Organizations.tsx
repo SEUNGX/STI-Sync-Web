@@ -22,6 +22,7 @@ import { Badge } from "../../components/ui/badge";
 import { CreateClubModal, useOrgMemberCountsStream } from '../../modules/organizations';
 import type { OrganizationDocument } from '../../modules/organizations/types/organization.types';
 import { useAdviserProfile } from '../../modules/auth';
+import { formatCurrency } from '../../utils/currency';
 
 import { useOrganizationStream } from '../../modules/organizations/hooks/useOrganizationStream';
 import { useOrganizationTypes } from '../../modules/organizations/hooks/useOrganizationTypes';
@@ -239,11 +240,11 @@ export function Organizations() {
           <CardHeader className="pb-2">
             <CardTitle className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center justify-between">
               <span>Active Events</span>
-              <CalendarCheck className="w-4 h-4 text-purple-600" />
+              <CalendarCheck className="w-4 h-4 text-[#0E4EBD]" />
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold font-mono text-[#83358E]">{activeEventsCount}</div>
+            <div className="text-3xl font-bold font-mono text-[#0E4EBD]">{activeEventsCount}</div>
             <p className="text-xs text-gray-500 mt-1">
               Approved / scheduled campus activities
             </p>
@@ -371,7 +372,7 @@ export function Organizations() {
                         <span>{org.memberCount || 0} members</span>
                       </div>
                       <div className="flex items-center gap-1.5 font-medium">
-                        <Calendar className="w-4 h-4 text-purple-600" />
+                        <Calendar className="w-4 h-4 text-[#0E4EBD]" />
                         <span>{orgEventCount} events</span>
                       </div>
                     </div>
@@ -390,7 +391,7 @@ export function Organizations() {
                       </span>
                       {org.membershipFee ? (
                         <span className="text-xs font-mono font-semibold text-gray-600">
-                          Fee: ₱{org.membershipFee}
+                          Fee: {formatCurrency(org.membershipFee)}
                         </span>
                       ) : null}
                     </div>

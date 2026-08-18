@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Shield, Plus, Trash2, PieChart, Users, QrCode, X, Calculator, Lock } from 'lucide-react';
 import type { EventFormData, BudgetLineItem } from '../../types/event.types';
+import { formatCurrency, formatVariance } from '../../../../utils/currency';
 
 interface Step5Props {
   data: EventFormData;
@@ -86,7 +87,7 @@ export default function Step5Budget({ data, onUpdate }: Step5Props) {
             </div>
             <div className="text-right pl-4">
               <div className="text-xs text-white/70 uppercase tracking-wider font-semibold">Total Proposed Budget</div>
-              <div className="text-2xl font-black text-[#FFC107]">₱{totalProposed.toLocaleString()}</div>
+              <div className="text-2xl font-black text-[#FFC107]">{formatCurrency(totalProposed)}</div>
             </div>
           </div>
         </div>
@@ -199,7 +200,7 @@ export default function Step5Budget({ data, onUpdate }: Step5Props) {
                           />
                         </td>
                         <td className="px-3 py-2">
-                          <div className="text-xs font-bold text-[#83358E]">₱{total.toLocaleString()}</div>
+                          <div className="text-xs font-bold text-[#83358E]">{formatCurrency(total)}</div>
                         </td>
                         <td className="px-3 py-2">
                           {budgetItems.length > 1 && (
@@ -221,7 +222,7 @@ export default function Step5Budget({ data, onUpdate }: Step5Props) {
               <span className="font-bold text-[#001A4D]">Total Overall Proposed Budget</span>
               <p className="text-xs text-gray-500">Sum of all proposed line items for this event</p>
             </div>
-            <span className="text-2xl font-black text-[#83358E]">₱{totalProposed.toLocaleString()}</span>
+            <span className="text-2xl font-black text-[#83358E]">{formatCurrency(totalProposed)}</span>
           </div>
         </div>
       </div>
@@ -241,7 +242,7 @@ export default function Step5Budget({ data, onUpdate }: Step5Props) {
                   strokeDasharray={`${totalProposed > 0 ? 251.2 : 0} 251.2`} />
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <div className="text-lg font-bold text-gray-900">₱{totalProposed.toLocaleString()}</div>
+                <div className="text-lg font-bold text-gray-900">{formatCurrency(totalProposed)}</div>
                 <div className="text-xs text-gray-500 font-medium">Proposed Total</div>
               </div>
             </div>
@@ -253,7 +254,7 @@ export default function Step5Budget({ data, onUpdate }: Step5Props) {
                   <span className="text-sm text-gray-700 font-medium">Proposed Budget</span>
                 </div>
                 <div className="text-right">
-                  <div className="text-sm font-bold text-gray-900">₱{totalProposed.toLocaleString()}</div>
+                  <div className="text-sm font-bold text-gray-900">{formatCurrency(totalProposed)}</div>
                   <div className="text-xs text-gray-500">100%</div>
                 </div>
               </div>
@@ -297,7 +298,7 @@ export default function Step5Budget({ data, onUpdate }: Step5Props) {
               <div className="grid grid-cols-2 gap-3">
                 <div className="p-4 bg-[#001A4D]/5 border border-[#001A4D]/20 rounded-xl">
                   <div className="text-xs text-gray-500 mb-1">Total Proposed Budget</div>
-                  <div className="text-2xl font-bold text-[#001A4D]">₱{totalProposed.toLocaleString()}</div>
+                  <div className="text-2xl font-bold text-[#001A4D]">{formatCurrency(totalProposed)}</div>
                   <div className="text-xs text-gray-500 mt-1">Sum of all proposed line items</div>
                 </div>
                 <div className="p-4 bg-[#83358E]/5 border border-[#83358E]/20 rounded-xl">
@@ -325,7 +326,7 @@ export default function Step5Budget({ data, onUpdate }: Step5Props) {
                 <div className="flex items-center justify-center gap-4 py-3">
                   <div className="text-center">
                     <div className="text-xs text-gray-500 mb-1">Total Budget</div>
-                    <div className="text-xl font-bold text-[#001A4D]">₱{totalProposed.toLocaleString()}</div>
+                    <div className="text-xl font-bold text-[#001A4D]">{formatCurrency(totalProposed)}</div>
                   </div>
                   <div className="text-2xl text-gray-400 font-light">÷</div>
                   <div className="text-center">
@@ -335,7 +336,7 @@ export default function Step5Budget({ data, onUpdate }: Step5Props) {
                   <div className="text-2xl text-gray-400 font-light">=</div>
                   <div className="text-center">
                     <div className="text-xs text-gray-500 mb-1">Baseline Fee</div>
-                    <div className="text-2xl font-bold text-green-600">₱{calculatedPerStudent.toLocaleString()}</div>
+                    <div className="text-2xl font-bold text-green-600">{formatCurrency(calculatedPerStudent)}</div>
                   </div>
                 </div>
               </div>
@@ -370,17 +371,17 @@ export default function Step5Budget({ data, onUpdate }: Step5Props) {
                     <div className="space-y-3 flex-1">
                       <div>
                         <div className="text-white/60 text-xs mb-0.5">Required Payment Per Student</div>
-                        <div className="text-3xl font-bold text-[#FFC107]">₱{amountPerStudent.toLocaleString()}</div>
+                        <div className="text-3xl font-bold text-[#FFC107]">{formatCurrency(amountPerStudent)}</div>
                       </div>
                       <div className="grid grid-cols-2 gap-3 pt-2 border-t border-white/10">
                         <div>
                           <div className="text-white/50 text-xs mb-0.5">Total Expected</div>
-                          <div className="text-white font-bold">₱{totalCollected.toLocaleString()}</div>
+                          <div className="text-white font-bold">{formatCurrency(totalCollected)}</div>
                         </div>
                         <div>
                           <div className="text-white/50 text-xs mb-0.5">{surplus >= 0 ? 'Buffer' : 'Shortfall'}</div>
                           <div className={`font-bold ${surplus >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                            {surplus >= 0 ? '+' : ''}₱{surplus.toLocaleString()}
+                            {formatVariance(surplus)}
                           </div>
                         </div>
                       </div>

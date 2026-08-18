@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { X, Download, FileSpreadsheet, Check, Filter, Eye, RefreshCw, Layers } from 'lucide-react';
 import { toast } from 'sonner';
 import type { EnrichedAttendanceRecord } from '../types/attendance.types';
+import { formatAppDateTime } from '../../../utils/date';
 
 interface AttendanceExportPreviewModalProps {
   isOpen: boolean;
@@ -109,7 +110,7 @@ export function AttendanceExportPreviewModal({
   const exportToExcelXML = () => {
     setIsExporting(true);
     try {
-      const now = new Date().toLocaleString();
+      const now = formatAppDateTime(new Date());
       const filename = `${sanitizeFileName(eventTitle)}_Attendance_Report.xls`;
 
       let xml = `<?xml version="1.0" encoding="UTF-8"?>

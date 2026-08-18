@@ -34,6 +34,7 @@ import {
 } from "../../modules/academic/services/academic.service";
 import { useAdviserProfile } from "../../modules/auth/hooks/useAdviserProfile";
 import type { SemesterDocument, SemesterStatus, SemesterTerm } from "../../modules/academic/types/academic.types";
+import { formatAppDate } from "../../utils/date";
 
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -41,9 +42,7 @@ type BannerState = "active" | "ending-soon" | "rollover-needed" | "in-progress";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function formatDate(iso: string): string {
-  if (!iso) return "—";
-  const d = new Date(iso + "T00:00:00");
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return formatAppDate(iso, "—");
 }
 
 function weeksBetween(start: string, end: string): string {
@@ -98,21 +97,21 @@ function ActiveSemesterBanner({
 
   if (state === "active" && activeSemester) {
     return (
-      <div className="w-full p-6 rounded-2xl bg-gradient-to-r from-[#001A4D] to-[#83358E] flex items-center justify-between mb-6">
+      <div className="w-full p-6 sm:p-7 rounded-3xl bg-gradient-to-br from-[#001A4D] via-[#002B7F] to-[#0A47B8] text-white flex items-center justify-between mb-6 shadow-lg shadow-[#001A4D]/15 border border-blue-900/40">
         <div className="flex items-center gap-4">
-          <div className="w-10 h-10 flex items-center justify-center">
-            <School className="w-10 h-10 text-[#FFD41C]" />
+          <div className="w-12 h-12 rounded-2xl bg-white/10 backdrop-blur-sm flex items-center justify-center">
+            <School className="w-6 h-6 text-[#FFD41C]" />
           </div>
           <div>
-            <p className="text-white/70 text-xs uppercase tracking-wider mb-0.5">Currently Active Semester</p>
-            <p className="text-white font-bold text-[28px] leading-tight">
+            <p className="text-white/70 text-xs uppercase tracking-wider mb-0.5 font-bold">Currently Active Semester</p>
+            <p className="text-white font-black text-[26px] sm:text-[28px] leading-tight">
               {activeSemester.semester} · A.Y. {activeSemester.academicYear}
             </p>
-            <p className="text-white/80 text-sm mt-0.5">
+            <p className="text-white/80 text-xs sm:text-sm mt-0.5">
               {formatDate(activeSemester.startDate)} — {formatDate(activeSemester.endDate)}
             </p>
           </div>
-          <span className="ml-2 px-3 py-1 bg-[#FFD41C] text-[#001A4D] text-xs font-bold rounded-full">
+          <span className="ml-2 px-3 py-1 bg-[#FFD41C] text-[#001A4D] text-xs font-black rounded-full shadow-sm">
             {days} day{days !== 1 ? "s" : ""} remaining
           </span>
         </div>
@@ -449,7 +448,7 @@ function AddSemesterModal({ existingSemesters, onClose, onSuccess }: AddSemester
       <div className="absolute inset-0 bg-black/55" onClick={onClose} />
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-[560px] overflow-hidden">
         {/* Header */}
-        <div className="bg-gradient-to-r from-[#001A4D] to-[#83358E] px-6 py-4 flex items-center justify-between">
+        <div className="bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <CalendarPlus className="w-5 h-5 text-[#FFD41C]" />
             <h3 className="text-white font-bold text-base">Add Academic Semester</h3>
@@ -471,11 +470,11 @@ function AddSemesterModal({ existingSemesters, onClose, onSuccess }: AddSemester
 
         {/* Both Terms Exist Warning */}
         {termAvailability.bothExist && (
-          <div className="mx-5 mt-3 p-3 bg-purple-50 border border-purple-200 rounded-lg flex items-start gap-2 text-xs text-purple-900">
-            <AlertCircle className="w-4 h-4 text-[#83358E] flex-shrink-0 mt-0.5" />
+          <div className="mx-5 mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-2 text-xs text-[#001A4D]">
+            <AlertCircle className="w-4 h-4 text-[#0E4EBD] flex-shrink-0 mt-0.5" />
             <div>
               <p className="font-bold">Both 1st & 2nd Semesters Created</p>
-              <p className="text-[11px] text-purple-800 mt-0.5">
+              <p className="text-[11px] text-gray-700 mt-0.5">
                 Both terms for A.Y. {form.academicYear} have already been registered. Please choose an upcoming Academic Year below.
               </p>
             </div>
@@ -501,7 +500,7 @@ function AddSemesterModal({ existingSemesters, onClose, onSuccess }: AddSemester
               type="text"
               placeholder="e.g. 2026-2027"
               maxLength={9}
-              className={`w-full px-4 py-2.5 border rounded-lg font-mono focus:ring-2 focus:ring-[#83358E] focus:border-transparent ${
+              className={`w-full px-4 py-2.5 border rounded-lg font-mono focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] ${
                 errors.academicYear || (!ayValidation.valid && form.academicYear.length === 9)
                   ? "border-red-400 bg-red-50"
                   : "border-gray-300"
@@ -531,7 +530,7 @@ function AddSemesterModal({ existingSemesters, onClose, onSuccess }: AddSemester
                     onClick={() => handleSelectAY(ay)}
                     className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all ${
                       isSelected
-                        ? "bg-[#83358E] text-white shadow-xs"
+                        ? "bg-[#001A4D] text-[#FFD41C] shadow-xs"
                         : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                     }`}
                   >
@@ -560,7 +559,7 @@ function AddSemesterModal({ existingSemesters, onClose, onSuccess }: AddSemester
                       isAlreadyCreated
                         ? "bg-gray-50 border-gray-200 opacity-60 cursor-not-allowed"
                         : isSelected
-                        ? "border-[#83358E] bg-[#F3E8FF]/40 ring-2 ring-[#83358E]/30 cursor-pointer"
+                        ? "border-[#0E4EBD] bg-blue-50/50 ring-2 ring-[#0E4EBD]/30 cursor-pointer"
                         : "border-gray-200 hover:border-gray-300 cursor-pointer"
                     }`}
                   >
@@ -572,7 +571,7 @@ function AddSemesterModal({ existingSemesters, onClose, onSuccess }: AddSemester
                         checked={isSelected}
                         disabled={isAlreadyCreated}
                         onChange={() => handleSelectTerm(opt)}
-                        className="accent-[#83358E]"
+                        className="accent-[#0E4EBD]"
                       />
                       <span className="text-sm font-bold text-[#001A4D]">{opt}</span>
                     </div>
@@ -592,7 +591,7 @@ function AddSemesterModal({ existingSemesters, onClose, onSuccess }: AddSemester
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center gap-1.5">
               Semester Label
-              <span className="text-[10px] text-[#83358E] bg-purple-50 px-1.5 py-0.5 rounded font-semibold">AUTO</span>
+              <span className="text-[10px] text-[#0E4EBD] bg-blue-50 px-1.5 py-0.5 rounded font-semibold">AUTO</span>
             </label>
             <div className="relative">
               <input
@@ -616,7 +615,7 @@ function AddSemesterModal({ existingSemesters, onClose, onSuccess }: AddSemester
               </label>
               <input
                 type="date"
-                className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent ${
+                className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] ${
                   errors.startDate ? "border-red-400 bg-red-50" : "border-gray-300"
                 }`}
                 value={form.startDate}
@@ -633,7 +632,7 @@ function AddSemesterModal({ existingSemesters, onClose, onSuccess }: AddSemester
               </label>
               <input
                 type="date"
-                className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent ${
+                className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] ${
                   errors.endDate ? "border-red-400 bg-red-50" : "border-gray-300"
                 }`}
                 value={form.endDate}
@@ -653,7 +652,7 @@ function AddSemesterModal({ existingSemesters, onClose, onSuccess }: AddSemester
             </label>
             <input
               type="date"
-              className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent ${
+              className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] ${
                 errors.reenrollDeadline ? "border-red-400 bg-red-50" : "border-gray-300"
               }`}
               value={form.reenrollDeadline}
@@ -685,7 +684,7 @@ function AddSemesterModal({ existingSemesters, onClose, onSuccess }: AddSemester
                       setForm({ ...form, status: s });
                       setErrors((prev) => ({ ...prev, status: "" }));
                     }}
-                    className="accent-[#83358E]"
+                    className="accent-[#0E4EBD]"
                   />
                   <span className={`text-sm capitalize ${s === "ACTIVE" && hasActiveBlock ? "text-gray-400" : ""}`}>
                     {s === "UPCOMING" ? "Upcoming (Recommended)" : "Active"}
@@ -821,15 +820,15 @@ function RolloverModal({ activeSemester, existingSemesters, onClose, onSuccess }
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85">
         <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[480px] p-8">
-          <div className="bg-gradient-to-r from-[#001A4D] to-[#83358E] -mx-8 -mt-8 px-8 py-5 rounded-t-2xl mb-6 flex items-center gap-3">
+          <div className="bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] -mx-8 -mt-8 px-8 py-5 rounded-t-2xl mb-6 flex items-center gap-3">
             <RefreshCw className="w-8 h-8 text-[#FFD41C] animate-spin" style={{ animationDuration: "2s" }} />
             <span className="text-white font-bold text-lg">{done ? "Rollover Complete!" : "Executing Rollover..."}</span>
           </div>
 
           {done ? (
             <div className="text-center">
-              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <CheckCircle className="w-8 h-8 text-green-600" />
+              <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <CheckCircle className="w-8 h-8 text-emerald-600" />
               </div>
               <p className="text-[#001A4D] font-bold text-xl mb-1">Semester Rollover Complete!</p>
               <p className="text-gray-500 text-sm mb-1">
@@ -840,7 +839,7 @@ function RolloverModal({ activeSemester, existingSemesters, onClose, onSuccess }
               </p>
               <button
                 onClick={onClose}
-                className="w-full py-3 bg-[#001A4D] text-[#FFD41C] font-bold rounded-xl text-sm hover:bg-[#001A4D]/90 transition-colors"
+                className="w-full py-3 bg-[#001A4D] text-[#FFD41C] font-bold rounded-xl text-sm hover:bg-[#001A4D]/90 transition-colors cursor-pointer"
               >
                 View Updated Dashboard
               </button>
@@ -851,15 +850,15 @@ function RolloverModal({ activeSemester, existingSemesters, onClose, onSuccess }
                 {execSteps.map((s, i) => (
                   <div key={i} className="flex items-center gap-3">
                     {i < execStep ? (
-                      <Check className="w-4 h-4 text-green-600 flex-shrink-0" />
+                      <Check className="w-4 h-4 text-emerald-600 flex-shrink-0" />
                     ) : i === execStep ? (
-                      <Loader className="w-4 h-4 text-[#83358E] animate-spin flex-shrink-0" />
+                      <Loader className="w-4 h-4 text-[#0E4EBD] animate-spin flex-shrink-0" />
                     ) : (
                       <Clock className="w-4 h-4 text-gray-300 flex-shrink-0" />
                     )}
                     <span
                       className={`text-sm ${
-                        i < execStep ? "text-green-700" : i === execStep ? "text-[#83358E] font-medium" : "text-gray-400"
+                        i < execStep ? "text-emerald-700 font-medium" : i === execStep ? "text-[#0E4EBD] font-bold" : "text-gray-400"
                       }`}
                     >
                       {s}
@@ -869,7 +868,7 @@ function RolloverModal({ activeSemester, existingSemesters, onClose, onSuccess }
               </div>
               <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-[#83358E] rounded-full transition-all duration-500"
+                  className="h-full bg-[#0E4EBD] rounded-full transition-all duration-500"
                   style={{ width: `${(execStep / execSteps.length) * 100}%` }}
                 />
               </div>
@@ -888,7 +887,7 @@ function RolloverModal({ activeSemester, existingSemesters, onClose, onSuccess }
       <div className="absolute inset-0 bg-black/70" onClick={onClose} />
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-[680px] flex flex-col max-h-[90vh]">
         {/* Header */}
-        <div className="bg-gradient-to-r from-[#001A4D] to-[#83358E] px-8 py-5 rounded-t-2xl flex items-center gap-4">
+        <div className="bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] px-8 py-5 rounded-t-2xl flex items-center gap-4">
           <div className="w-[52px] h-[52px] bg-[#FFD41C] rounded-full flex items-center justify-center">
             <RefreshCw className="w-7 h-7 text-[#001A4D]" />
           </div>
@@ -908,14 +907,14 @@ function RolloverModal({ activeSemester, existingSemesters, onClose, onSuccess }
               <div key={i} className="flex items-center gap-1 flex-1">
                 <div
                   className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
-                    isDone ? "bg-green-500 text-white" : isActive ? "bg-[#83358E] text-white" : "bg-gray-100 text-gray-400"
+                    isDone ? "bg-emerald-500 text-white" : isActive ? "bg-[#0E4EBD] text-white" : "bg-gray-100 text-gray-400"
                   }`}
                 >
                   {isDone ? <Check className="w-3.5 h-3.5" /> : num}
                 </div>
                 <span
                   className={`text-xs font-medium whitespace-nowrap ${
-                    isActive ? "text-[#83358E]" : isDone ? "text-green-600" : "text-gray-400"
+                    isActive ? "text-[#0E4EBD] font-bold" : isDone ? "text-emerald-600 font-medium" : "text-gray-400"
                   }`}
                 >
                   {s}
@@ -963,7 +962,7 @@ function RolloverModal({ activeSemester, existingSemesters, onClose, onSuccess }
                         onClick={() => setSelectedTargetId(sem.id)}
                         className={`block p-4 border rounded-xl cursor-pointer transition-all ${
                           isSelected
-                            ? "border-[#83358E] bg-[#F3E8FF]/30 ring-2 ring-[#83358E]/40"
+                            ? "border-[#0E4EBD] bg-blue-50/40 ring-2 ring-[#0E4EBD]/30"
                             : "border-gray-200 hover:border-gray-300"
                         }`}
                       >
@@ -974,7 +973,7 @@ function RolloverModal({ activeSemester, existingSemesters, onClose, onSuccess }
                               name="targetSemester"
                               checked={isSelected}
                               onChange={() => setSelectedTargetId(sem.id)}
-                              className="accent-[#83358E]"
+                              className="accent-[#0E4EBD]"
                             />
                             <div>
                               <p className="font-bold text-[#001A4D] text-base">
@@ -985,7 +984,7 @@ function RolloverModal({ activeSemester, existingSemesters, onClose, onSuccess }
                               </p>
                             </div>
                           </div>
-                          <span className="px-3 py-1 bg-purple-100 text-[#83358E] text-xs font-bold rounded-full">
+                          <span className="px-3 py-1 bg-blue-50 text-[#0E4EBD] text-xs font-bold rounded-full border border-blue-100">
                             {sem.label}
                           </span>
                         </div>
@@ -1007,7 +1006,7 @@ function RolloverModal({ activeSemester, existingSemesters, onClose, onSuccess }
               <p className="text-[#001A4D] font-bold text-lg mb-4">What will happen during this rollover?</p>
               
               {/* Transition Banner */}
-              <div className="p-4 bg-gradient-to-r from-[#001A4D] to-[#83358E] rounded-xl text-white mb-5 flex items-center justify-between">
+              <div className="p-4 bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] rounded-xl text-white mb-5 flex items-center justify-between">
                 <div>
                   <p className="text-white/70 text-xs uppercase font-bold tracking-wider">Closing Active Semester</p>
                   <p className="text-base font-bold">{activeSemester?.label || "None"}</p>
@@ -1065,7 +1064,7 @@ function RolloverModal({ activeSemester, existingSemesters, onClose, onSuccess }
 
               {/* Re-enrollment */}
               <div className="p-4 border border-gray-200 rounded-xl">
-                <div className="border-l-4 border-[#83358E] pl-3 mb-4">
+                <div className="border-l-4 border-[#0E4EBD] pl-3 mb-4">
                   <p className="text-[#001A4D] font-bold text-sm">Student Re-enrollment</p>
                 </div>
                 <div className="space-y-3">
@@ -1084,7 +1083,7 @@ function RolloverModal({ activeSemester, existingSemesters, onClose, onSuccess }
                     <button
                       type="button"
                       onClick={() => setAutoInactivate(!autoInactivate)}
-                      className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${autoInactivate ? "bg-[#83358E]" : "bg-gray-300"}`}
+                      className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${autoInactivate ? "bg-[#0E4EBD]" : "bg-gray-300"}`}
                     >
                       <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform shadow ${autoInactivate ? "translate-x-6" : ""}`} />
                     </button>
@@ -1094,7 +1093,7 @@ function RolloverModal({ activeSemester, existingSemesters, onClose, onSuccess }
 
               {/* Budget */}
               <div className="p-4 border border-gray-200 rounded-xl">
-                <div className="border-l-4 border-[#83358E] pl-3 mb-4">
+                <div className="border-l-4 border-[#0E4EBD] pl-3 mb-4">
                   <p className="text-[#001A4D] font-bold text-sm">Budget Setup for New Semester</p>
                 </div>
                 <div className="flex items-start gap-3 p-3 bg-gray-50 border border-gray-200 rounded-lg">
@@ -1105,7 +1104,7 @@ function RolloverModal({ activeSemester, existingSemesters, onClose, onSuccess }
                   <button
                     type="button"
                     onClick={() => setCarryBudget(!carryBudget)}
-                    className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${carryBudget ? "bg-[#83358E]" : "bg-gray-300"}`}
+                    className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${carryBudget ? "bg-[#0E4EBD]" : "bg-gray-300"}`}
                   >
                     <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform shadow ${carryBudget ? "translate-x-6" : ""}`} />
                   </button>
@@ -1114,7 +1113,7 @@ function RolloverModal({ activeSemester, existingSemesters, onClose, onSuccess }
 
               {/* Organization */}
               <div className="p-4 border border-gray-200 rounded-xl">
-                <div className="border-l-4 border-[#83358E] pl-3 mb-4">
+                <div className="border-l-4 border-[#0E4EBD] pl-3 mb-4">
                   <p className="text-[#001A4D] font-bold text-sm">Organization Settings</p>
                 </div>
                 <div className="space-y-3">
@@ -1130,7 +1129,7 @@ function RolloverModal({ activeSemester, existingSemesters, onClose, onSuccess }
                       <button
                         type="button"
                         onClick={item.toggle}
-                        className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${item.state ? "bg-[#83358E]" : "bg-gray-300"}`}
+                        className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${item.state ? "bg-[#0E4EBD]" : "bg-gray-300"}`}
                       >
                         <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform shadow ${item.state ? "translate-x-6" : ""}`} />
                       </button>
@@ -1164,7 +1163,7 @@ function RolloverModal({ activeSemester, existingSemesters, onClose, onSuccess }
                     type="checkbox"
                     checked={authorized}
                     onChange={() => setAuthorized(!authorized)}
-                    className="w-5 h-5 accent-[#83358E] flex-shrink-0 mt-0.5"
+                    className="w-5 h-5 accent-[#0E4EBD] flex-shrink-0 mt-0.5"
                   />
                   <span className="text-sm text-gray-700 leading-relaxed">
                     I authorize this semester rollover. I understand this will activate <strong>{targetSemester?.label}</strong>, complete the previous active semester, and flag active students for re-enrollment.
@@ -1187,7 +1186,7 @@ function RolloverModal({ activeSemester, existingSemesters, onClose, onSuccess }
             <button
               onClick={() => setStep(step + 1)}
               disabled={step === 1 && !targetSemester}
-              className="px-5 py-2.5 bg-[#83358E] text-white rounded-lg text-sm font-medium hover:bg-[#6D2A78] transition-colors disabled:opacity-50"
+              className="px-5 py-2.5 bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] text-white rounded-lg text-sm font-bold hover:opacity-90 transition-opacity disabled:opacity-50 cursor-pointer shadow-sm"
             >
               Next: {steps[step]} →
             </button>
@@ -1241,7 +1240,7 @@ function SemesterHistoryModal({
         </div>
 
         {/* Header Card */}
-        <div className="bg-gradient-to-r from-[#001A4D] to-[#83358E] px-6 py-5 flex items-center justify-between">
+        <div className="bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] px-6 py-5 flex items-center justify-between">
           <div>
             <p className="text-white font-bold text-2xl">
               {semester.semester} · A.Y. {semester.academicYear}
@@ -1272,7 +1271,7 @@ function SemesterHistoryModal({
               key={t}
               onClick={() => setTab(t)}
               className={`px-5 py-3 text-sm font-medium capitalize border-b-2 transition-colors ${
-                tab === t ? "border-[#83358E] text-[#83358E]" : "border-transparent text-gray-500 hover:text-gray-700"
+                tab === t ? "border-[#0E4EBD] text-[#0E4EBD] font-bold" : "border-transparent text-gray-500 hover:text-gray-700"
               }`}
             >
               {t === "events" ? "Events" : t === "attendance" ? "Attendance" : t === "financial" ? "Financial" : "Students"}
@@ -1299,7 +1298,7 @@ function SemesterHistoryModal({
               {[
                 { label: "Overall Attendance Rate", value: "—", color: "text-green-600" },
                 { label: "Total Check-ins", value: "—", color: "text-[#001A4D]" },
-                { label: "Avg per Event", value: "—", color: "text-[#83358E]" },
+                { label: "Avg per Event", value: "—", color: "text-[#0E4EBD]" },
               ].map((s) => (
                 <div key={s.label} className="p-4 bg-white border border-gray-200 rounded-xl text-center">
                   <p className={`text-3xl font-bold ${s.color}`}>{s.value}</p>
@@ -1312,7 +1311,7 @@ function SemesterHistoryModal({
             <div className="grid grid-cols-2 gap-4">
               {[
                 { label: "Total Budget Allocated", value: "—", color: "text-[#001A4D]" },
-                { label: "Total Spent", value: "—", color: "text-[#83358E]" },
+                { label: "Total Spent", value: "—", color: "text-[#0E4EBD]" },
                 { label: "Liquidations Filed", value: "—", color: "text-blue-600" },
                 { label: "Approved", value: "—", color: "text-green-600" },
               ].map((s) => (
@@ -1328,7 +1327,7 @@ function SemesterHistoryModal({
               {[
                 { label: "Total Enrolled", value: String(semester.students) || "—", color: "text-[#001A4D]" },
                 { label: "Active at Semester End", value: "—", color: "text-green-600" },
-                { label: "Overall Compliance Rate", value: "—", color: "text-[#83358E]" },
+                { label: "Overall Compliance Rate", value: "—", color: "text-[#0E4EBD]" },
                 { label: "Re-enrollment Confirmation", value: "—", color: "text-blue-600" },
               ].map((s) => (
                 <div key={s.label} className="p-4 bg-white border border-gray-200 rounded-xl">
@@ -1528,7 +1527,7 @@ function EditSemesterModal({ semester, existingSemesters, onClose }: EditSemeste
       <div className="absolute inset-0 bg-black/55" onClick={onClose} />
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-[540px] overflow-hidden">
         {/* Header */}
-        <div className="bg-gradient-to-r from-[#001A4D] to-[#83358E] px-6 py-4 flex items-center justify-between">
+        <div className="bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Edit className="w-5 h-5 text-[#FFD41C]" />
             <div>
@@ -1569,7 +1568,7 @@ function EditSemesterModal({ semester, existingSemesters, onClose }: EditSemeste
               type="text"
               placeholder="e.g. 2026-2027"
               maxLength={9}
-              className={`w-full px-4 py-2.5 border rounded-lg font-mono focus:ring-2 focus:ring-[#83358E] focus:border-transparent ${
+              className={`w-full px-4 py-2.5 border rounded-lg font-mono focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] ${
                 errors.academicYear || (!ayValidation.valid && form.academicYear.length === 9)
                   ? "border-red-400 bg-red-50"
                   : "border-gray-300"
@@ -1599,7 +1598,7 @@ function EditSemesterModal({ semester, existingSemesters, onClose }: EditSemeste
                   key={opt}
                   className={`flex-1 flex items-center gap-2.5 px-4 py-3 border rounded-lg cursor-pointer transition-all ${
                     form.semester === opt
-                      ? "border-[#83358E] bg-[#F3E8FF]/40 ring-2 ring-[#83358E]/30"
+                      ? "border-[#0E4EBD] bg-blue-50/50 ring-2 ring-[#0E4EBD]/30"
                       : "border-gray-200 hover:border-gray-300"
                   }`}
                 >
@@ -1612,7 +1611,7 @@ function EditSemesterModal({ semester, existingSemesters, onClose }: EditSemeste
                       setForm({ ...form, semester: opt });
                       setErrors((p) => ({ ...p, semester: "", duplicate: "" }));
                     }}
-                    className="accent-[#83358E]"
+                    className="accent-[#0E4EBD]"
                   />
                   <span className="text-sm font-medium text-[#001A4D]">{opt}</span>
                 </label>
@@ -1625,7 +1624,7 @@ function EditSemesterModal({ semester, existingSemesters, onClose }: EditSemeste
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center gap-1.5">
               Semester Label
-              <span className="text-[10px] text-[#83358E] bg-purple-50 px-1.5 py-0.5 rounded font-semibold">AUTO</span>
+              <span className="text-[10px] text-[#0E4EBD] bg-blue-50 px-1.5 py-0.5 rounded font-semibold">AUTO</span>
             </label>
             <div className="relative">
               <input
@@ -1646,7 +1645,7 @@ function EditSemesterModal({ semester, existingSemesters, onClose }: EditSemeste
               </label>
               <input
                 type="date"
-                className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent ${
+                className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] ${
                   errors.startDate || errors.dateConflict ? "border-red-400 bg-red-50" : "border-gray-300"
                 }`}
                 value={form.startDate}
@@ -1663,7 +1662,7 @@ function EditSemesterModal({ semester, existingSemesters, onClose }: EditSemeste
               </label>
               <input
                 type="date"
-                className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent ${
+                className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] ${
                   errors.endDate || errors.dateConflict ? "border-red-400 bg-red-50" : "border-gray-300"
                 }`}
                 value={form.endDate}
@@ -1681,7 +1680,7 @@ function EditSemesterModal({ semester, existingSemesters, onClose }: EditSemeste
             <label className="block text-sm font-medium text-gray-700 mb-1.5">Re-enrollment Deadline</label>
             <input
               type="date"
-              className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent ${
+              className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] ${
                 errors.reenrollDeadline ? "border-red-400 bg-red-50" : "border-gray-300"
               }`}
               value={form.reenrollDeadline}
@@ -1869,7 +1868,7 @@ export function AcademicSemesterSettings() {
         </div>
         <button
           onClick={() => setShowRollover(true)}
-          className="px-5 py-2.5 bg-gradient-to-r from-[#83358E] to-[#A855F7] text-white rounded-lg font-medium text-sm flex items-center gap-2 hover:opacity-90 transition-opacity"
+          className="px-5 py-2.5 bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] text-white rounded-lg font-bold text-sm flex items-center gap-2 hover:opacity-90 transition-opacity shadow-sm"
         >
           <RefreshCw className="w-4 h-4" />
           Run Semester Rollover
@@ -1896,14 +1895,14 @@ export function AcademicSemesterSettings() {
         {/* Section Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <div className="flex items-center gap-3">
-            <div className="border-l-4 border-[#83358E] pl-3">
+            <div className="border-l-4 border-[#0E4EBD] pl-3">
               <h3 className="text-[#001A4D] font-bold text-base">Semester Records</h3>
             </div>
             <div className="flex gap-1">
               <button
                 onClick={() => setActiveTab("active")}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                  activeTab === "active" ? "bg-[#001A4D] text-white" : "bg-amber-50 text-amber-700 hover:bg-amber-100"
+                  activeTab === "active" ? "bg-[#001A4D] text-white font-bold" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                 }`}
               >
                 Active
@@ -1911,7 +1910,7 @@ export function AcademicSemesterSettings() {
               <button
                 onClick={() => setActiveTab("archived")}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                  activeTab === "archived" ? "bg-[#001A4D] text-white" : "bg-amber-50 text-amber-700 hover:bg-amber-100"
+                  activeTab === "archived" ? "bg-[#001A4D] text-white font-bold" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                 }`}
               >
                 Archived
@@ -1920,7 +1919,7 @@ export function AcademicSemesterSettings() {
           </div>
           <button
             onClick={() => setShowAddModal(true)}
-            className="px-4 py-2 bg-[#001A4D] text-[#FFD41C] rounded-lg text-sm font-medium flex items-center gap-2 hover:bg-[#001A4D]/90 transition-colors"
+            className="px-4 py-2 bg-[#001A4D] text-[#FFD41C] rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-[#001A4D]/90 transition-colors shadow-xs"
           >
             <Plus className="w-4 h-4" />
             Add Semester
@@ -1939,7 +1938,7 @@ export function AcademicSemesterSettings() {
             {activeTab === "active" && (
               <button
                 onClick={() => setShowAddModal(true)}
-                className="mt-3 px-4 py-2 text-[#83358E] text-sm font-medium hover:underline flex items-center gap-1 mx-auto"
+                className="mt-3 px-4 py-2 text-[#0E4EBD] text-sm font-bold hover:underline flex items-center gap-1 mx-auto"
               >
                 <Plus className="w-4 h-4" />
                 Add your first semester
@@ -1969,8 +1968,8 @@ export function AcademicSemesterSettings() {
                     key={sem.id}
                     className={`transition-colors ${
                       sem.status === "ACTIVE"
-                        ? "border-l-4 border-l-[#FFD41C] bg-[#F3E8FF]/30 hover:bg-[#F3E8FF]/50"
-                        : "hover:bg-[#F3E8FF]/20"
+                        ? "border-l-4 border-l-[#FFD41C] bg-blue-50/40 hover:bg-blue-50/60"
+                        : "hover:bg-gray-50/80"
                     }`}
                   >
                     <td className="px-4 py-3">
@@ -1979,14 +1978,14 @@ export function AcademicSemesterSettings() {
                     <td className="px-4 py-3 text-[#001A4D] font-bold text-sm">A.Y. {sem.academicYear}</td>
                     <td className="px-4 py-3 text-[#001A4D] text-sm">{sem.semester}</td>
                     <td className="px-4 py-3">
-                      <span className="px-2 py-0.5 bg-purple-50 text-[#83358E] text-xs font-mono font-semibold rounded">
+                      <span className="px-2 py-0.5 bg-blue-50 text-[#0E4EBD] text-xs font-mono font-semibold rounded">
                         {sem.label}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-gray-500 text-sm">{formatDate(sem.startDate)}</td>
                     <td className="px-4 py-3 text-gray-500 text-sm">{formatDate(sem.endDate)}</td>
                     <td className="px-4 py-3 text-gray-500 text-sm">{weeksBetween(sem.startDate, sem.endDate)}</td>
-                    <td className="px-4 py-3 text-blue-600 font-bold text-sm">{sem.events}</td>
+                    <td className="px-4 py-3 text-[#0E4EBD] font-bold text-sm">{sem.events}</td>
                     <td className="px-4 py-3 text-[#001A4D] font-bold text-sm">{sem.students}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1">

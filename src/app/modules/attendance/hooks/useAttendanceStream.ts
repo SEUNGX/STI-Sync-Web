@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { collectionGroup, onSnapshot, collection } from 'firebase/firestore';
 import { db } from '../../../../services/firebase';
 import type { AttendanceRecord } from '../types/attendance.types';
+import { formatAppTime } from '../../../utils/date';
 
 export function useAttendanceStream() {
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
@@ -13,20 +14,17 @@ export function useAttendanceStream() {
     let flaggedRecords: AttendanceRecord[] = [];
 
     const formatTime = (timestamp: any): string => {
-      if (!timestamp) return '—';
-      try {
-        if (typeof timestamp.toDate === 'function') {
-          return timestamp.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        }
-        if (timestamp.seconds) {
-          return new Date(timestamp.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        }
-      } catch (_) {}
-      return '—';
+      return formatAppTime(timestamp, '—');
     };
 
     const updateCombinedRecords = () => {
-      const combined = [...normalRecords, ...flaggedRecords];
+      const recordMap = new Map<string, AttendanceRecord>();
+      for (const r of [...normalRecords, ...flaggedRecords]) {
+        if (!recordMap.has(r.id)) {
+          recordMap.set(r.id, r);
+        }
+      }
+      const combined = Array.from(recordMap.values());
       // Sort newest first
       combined.sort((a, b) => {
         const aTime = a.createdAt?.seconds ?? 0;
@@ -55,6 +53,7 @@ export function useAttendanceStream() {
             org: data.organizationId || data.org || 'N/A',
             eventId: data.eventId || '',
             event: data.event || data.eventName || 'General Event',
+            sessionId: data.sessionId || '',
             checkIn: checkInTime,
             checkOut: checkOutTime,
             status: mappedStatus as any,
@@ -85,6 +84,7 @@ export function useAttendanceStream() {
             org: data.organizationId || data.org || 'N/A',
             eventId: data.eventId || '',
             event: data.event || data.eventName || 'General Event',
+            sessionId: data.sessionId || '',
             checkIn: data.gateType === 'time_in' ? scanTimeStr : '—',
             checkOut: data.gateType === 'time_out' ? scanTimeStr : '—',
             status: 'Flagged',

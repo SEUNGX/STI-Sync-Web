@@ -132,7 +132,7 @@ export default function PendingVerification({ students }: PendingVerificationPro
                   <div className="grid grid-cols-2 gap-4 mb-4">
                     <div>
                       <div className="text-xs text-gray-500 mb-2">Selfie Photo</div>
-                      <div className="w-full aspect-square bg-gradient-to-br from-[#0E4EBD] to-[#83358E] rounded-xl flex items-center justify-center text-white font-bold text-4xl border-2 border-[#001A4D] overflow-hidden">
+                      <div className="w-full aspect-square bg-gradient-to-br from-[#001A4D] to-[#0E4EBD] rounded-xl flex items-center justify-center text-white font-bold text-4xl border-2 border-[#001A4D] overflow-hidden">
                         {student.profilePhotoUrl ? (
                           <img 
                             src={student.profilePhotoUrl} 
@@ -140,7 +140,7 @@ export default function PendingVerification({ students }: PendingVerificationPro
                             className="w-full h-full object-cover" 
                             onError={(e) => {
                               e.currentTarget.onerror = null;
-                              e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent((student.firstName || '') + ' ' + (student.lastName || ''))}&background=83358E&color=fff&size=256`;
+                              e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent((student.firstName || '') + ' ' + (student.lastName || ''))}&background=001A4D&color=fff&size=256`;
                             }}
                           />
                         ) : (
@@ -150,7 +150,7 @@ export default function PendingVerification({ students }: PendingVerificationPro
                     </div>
                     <div>
                       <div className="text-xs text-gray-500 mb-2">School ID Photo</div>
-                      <div className="w-full aspect-square bg-gradient-to-br from-[#83358E] to-[#0E4EBD] rounded-xl flex items-center justify-center text-white font-bold text-4xl border-2 border-[#001A4D] overflow-hidden p-2">
+                      <div className="w-full aspect-square bg-gradient-to-br from-[#002B7F] to-[#0E4EBD] rounded-xl flex items-center justify-center text-white font-bold text-4xl border-2 border-[#001A4D] overflow-hidden p-2">
                         {student.schoolIdPhotoUrl ? (
                           <img 
                             src={student.schoolIdPhotoUrl} 
@@ -167,9 +167,9 @@ export default function PendingVerification({ students }: PendingVerificationPro
                       </div>
                     </div>
                   </div>
-                  <div className="bg-[#F3E8FF] border border-[#83358E]/20 rounded-lg p-3 flex items-center gap-2">
-                    <Eye className="w-4 h-4 text-[#83358E] flex-shrink-0" />
-                    <span className="text-xs text-[#83358E] italic">Compare these photos carefully before approving.</span>
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center gap-2">
+                    <Eye className="w-4 h-4 text-[#0E4EBD] flex-shrink-0" />
+                    <span className="text-xs text-[#0E4EBD] font-medium">Compare these photos carefully before approving.</span>
                   </div>
                 </div>
 
