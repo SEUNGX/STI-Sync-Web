@@ -3,8 +3,12 @@ import {
   addDoc, 
   updateDoc, 
   doc, 
+  getDocs,
+  query,
+  where,
   serverTimestamp,
-  arrayUnion
+  arrayUnion,
+  Timestamp,
 } from 'firebase/firestore';
 import { db } from '../../../../services/firebase';
 import type { LiquidationDocument, LiquidationRemark } from '../types/liquidation.types';
@@ -52,7 +56,7 @@ export const createLiquidationReport = async (
   // If Admin created, auto-post to SAO Ledger
   if (isAdmin) {
     try {
-      await postToSaoLedger(docRef.id, payload as Partial<LiquidationDocument>, data.createdById);
+      await postLiquidationToLedger(docRef.id, payload as Partial<LiquidationDocument>, data.createdById);
     } catch (err) {
       console.warn('[createLiquidationReport] Ledger write note:', err);
     }
@@ -117,7 +121,7 @@ export const submitLiquidationReport = async (
 
 /**
  * Approves a liquidation report.
- * Updates status to 'approved' and posts a financial entry to the /sao_ledger collection.
+ * Updates status to 'approved' and posts financial surplus/deficit to the appropriate ledger.
  */
 export const approveLiquidationReport = async (
   id: string,
@@ -145,9 +149,9 @@ export const approveLiquidationReport = async (
     remarksHistory: arrayUnion(approvalRemark),
   });
 
-  // Post entry to SAO Ledger for financial tracking
+  // Post entry to appropriate ledger (SAO or Club Treasury)
   try {
-    await postToSaoLedger(id, liquidationData, adminUserId);
+    await postLiquidationToLedger(id, liquidationData, adminUserId);
   } catch (err) {
     console.warn('[approveLiquidationReport] Ledger write note:', err);
   }
@@ -182,29 +186,79 @@ export const returnLiquidationReport = async (
 };
 
 /**
- * Helper to post financial entry to /sao_ledger
+ * Helper to post liquidation financial entry (surplus refund or deficit expense) to the correct ledger:
+ * - Admin/Institutional Liquidation -> /sao_ledger
+ * - Officer/Organization Liquidation -> /organization_ledger
  */
-async function postToSaoLedger(
+async function postLiquidationToLedger(
   liquidationId: string, 
   data?: Partial<LiquidationDocument>, 
   adminUserId?: string
 ) {
-  const ledgerRef = collection(db, 'sao_ledger');
-  const netAmount = data?.surplusOrDeficit ?? 0;
-  const isSurplus = netAmount >= 0;
+  const netAmount = data?.surplusOrDeficit ?? ((data?.allocatedBudget ?? 0) - (data?.totalActualSpending ?? 0));
+  if (netAmount === 0) return;
 
-  await addDoc(ledgerRef, {
-    referenceId: `LIQ-${liquidationId.slice(0, 8).toUpperCase()}`,
-    eventId: data?.eventId || '',
-    eventTitle: data?.eventTitle || 'Event Liquidation',
-    organizationId: data?.organizationId || '',
-    type: isSurplus ? 'REFUND_SURPLUS' : 'DEFICIT_EXPENSE',
-    amount: Math.abs(netAmount),
-    description: isSurplus
-      ? `Liquidation surplus returned for ${data?.eventTitle || 'event'}`
-      : `Liquidation deficit for ${data?.eventTitle || 'event'}`,
-    approvedBy: adminUserId || 'sao_admin',
-    createdAt: serverTimestamp(),
-    date: new Date().toISOString().split('T')[0],
-  });
+  const isSurplus = netAmount > 0;
+  const absAmount = Math.abs(netAmount);
+  const eventTitle = data?.eventTitle || 'Event Liquidation';
+  const semesterId = data?.semesterId || null;
+  const eventId = data?.eventId || null;
+
+  const isClubLiquidation = Boolean(
+    data?.organizationId &&
+    data.organizationId !== 'sas' &&
+    data.organizationId !== 'sas_admin' &&
+    data.createdByRole !== 'admin'
+  );
+
+  const description = isSurplus
+    ? `Liquidation Surplus Returned – ${eventTitle}`
+    : `Liquidation Deficit / Overspend – ${eventTitle}`;
+
+  if (isClubLiquidation) {
+    const orgLedgerRef = collection(db, 'organization_ledger');
+    // Check if this liquidation has already been posted to avoid duplicate transactions
+    const qDup = query(orgLedgerRef, where('collectionId', '==', liquidationId));
+    const existingSnap = await getDocs(qDup);
+    if (!existingSnap.empty) {
+      console.log(`[postLiquidationToLedger] Liquidation ${liquidationId} already posted to organization_ledger.`);
+      return;
+    }
+
+    await addDoc(orgLedgerRef, {
+      organizationId: data!.organizationId,
+      semesterId,
+      date: Timestamp.now(),
+      description,
+      eventId,
+      type: isSurplus ? 'income' : 'expense',
+      source: isSurplus ? 'liquidation_surplus' : 'liquidation_deficit',
+      amount: absAmount,
+      addedBy: adminUserId || 'SAO Adviser',
+      collectionId: liquidationId,
+      createdAt: serverTimestamp(),
+    });
+  } else {
+    const saoLedgerRef = collection(db, 'sao_ledger');
+    // Check if this liquidation has already been posted to avoid duplicate transactions
+    const qDup = query(saoLedgerRef, where('collectionId', '==', liquidationId));
+    const existingSnap = await getDocs(qDup);
+    if (!existingSnap.empty) {
+      console.log(`[postLiquidationToLedger] Liquidation ${liquidationId} already posted to sao_ledger.`);
+      return;
+    }
+
+    await addDoc(saoLedgerRef, {
+      semesterId,
+      date: Timestamp.now(),
+      description,
+      eventId,
+      type: isSurplus ? 'income' : 'expense',
+      source: isSurplus ? 'liquidation_surplus' : 'liquidation_deficit',
+      amount: absAmount,
+      addedBy: adminUserId || 'SAO Adviser',
+      collectionId: liquidationId,
+      createdAt: serverTimestamp(),
+    });
+  }
 }

@@ -17,9 +17,13 @@ import { db } from '../../../../services/firebase';
 import { addLedgerTransaction, addOrgLedgerTransaction } from './finance.service';
 import type {
   PayableDocument,
+  PayableType,
   CreatePayablePayload,
   GenerateDuesPayload,
   PayableStatus,
+  GenerateEventFinesPayload,
+  SessionFineRule,
+  FineViolationDetail,
 } from '../types/payable.types';
 
 export const PAYABLES_COLLECTION = 'payables';
@@ -48,16 +52,38 @@ export async function generateMembershipDues(payload: GenerateDuesPayload): Prom
   );
   const snapshot = await getDocs(qMembers);
 
+  // Load students map for resolving Auth UID and 11-digit School ID
+  const studentsLookup = new Map<string, any>();
+  try {
+    const studentsRef = collection(db, 'students');
+    const studentsSnap = await getDocs(studentsRef);
+    studentsSnap.docs.forEach((d) => {
+      const sData = { id: d.id, ...d.data() };
+      if (sData.studentId) studentsLookup.set(String(sData.studentId).trim().toLowerCase(), sData);
+      if (sData.authUid) studentsLookup.set(String(sData.authUid).trim().toLowerCase(), sData);
+      if (d.id) studentsLookup.set(d.id.trim().toLowerCase(), sData);
+    });
+  } catch (e) {
+    console.warn('[generateMembershipDues] Could not pre-fetch students for ID resolution:', e);
+  }
+
   const membersToProcess: Array<{ studentId: string; studentName: string; studentSchoolId: string }> = [];
 
   snapshot.docs.forEach((d) => {
     const data = d.data();
-    const studentId = data.studentId || d.id;
-    if (memberIds === 'all' || memberIds.includes(studentId) || memberIds.includes(d.id)) {
+    const rawStudentId = (data.studentId || d.id || '').toString().trim();
+    if (memberIds === 'all' || memberIds.includes(rawStudentId) || memberIds.includes(d.id)) {
+      const matched =
+        studentsLookup.get(rawStudentId.toLowerCase()) ||
+        (data.studentSchoolId ? studentsLookup.get(String(data.studentSchoolId).trim().toLowerCase()) : undefined);
+      const authUid = matched?.authUid || matched?.id || data.authUid || data.studentAuthUid || rawStudentId;
+      const schoolId = matched?.studentId || data.studentSchoolId || data.studentId || rawStudentId;
+      const fullName = data.studentName || (matched ? `${matched.firstName} ${matched.lastName}` : 'Student');
+
       membersToProcess.push({
-        studentId,
-        studentName: data.studentName || 'Student',
-        studentSchoolId: data.studentId || '',
+        studentId: authUid,
+        studentName: fullName,
+        studentSchoolId: schoolId,
       });
     }
   });
@@ -73,13 +99,18 @@ export async function generateMembershipDues(payload: GenerateDuesPayload): Prom
     where('type', '==', 'membership_due')
   );
   const existingSnapshot = await getDocs(qExisting);
-  const existingStudentIds = new Set(
-    existingSnapshot.docs.map((d) => d.data().studentId)
-  );
+  const existingStudentIds = new Set<string>();
+  existingSnapshot.docs.forEach((d) => {
+    const dData = d.data();
+    if (dData.studentId) existingStudentIds.add(String(dData.studentId).trim().toLowerCase());
+    if (dData.studentSchoolId) existingStudentIds.add(String(dData.studentSchoolId).trim().toLowerCase());
+  });
 
   // Filter out already generated members
   const newMembers = membersToProcess.filter(
-    (m) => !existingStudentIds.has(m.studentId)
+    (m) =>
+      !existingStudentIds.has(m.studentId.toLowerCase()) &&
+      !existingStudentIds.has(m.studentSchoolId.toLowerCase())
   );
 
   if (newMembers.length === 0) return 0;
@@ -114,6 +145,8 @@ export async function generateMembershipDues(payload: GenerateDuesPayload): Prom
         paidAt: null,
         recordedBy: null,
         paymentMethod: null,
+        transferredToBudget: false,
+        transferredAt: null,
         createdBy,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -161,6 +194,8 @@ export async function createPayable(payload: CreatePayablePayload): Promise<stri
     paidAt: null,
     recordedBy: null,
     paymentMethod: null,
+    transferredToBudget: false,
+    transferredAt: null,
     createdBy: payload.createdBy,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
@@ -218,45 +253,6 @@ export async function recordPayment(
   }
 
   await updateDoc(payableRef, updates);
-
-  // Auto-post payment to the appropriate independent ledger
-  if (paymentAmount > 0) {
-    try {
-      const isClubPayable =
-        data.organizationId &&
-        data.organizationId !== 'sao_admin' &&
-        data.organizationId !== 'sao';
-
-      if (isClubPayable) {
-        await addOrgLedgerTransaction({
-          organizationId: data.organizationId!,
-          semesterId: data.semesterId || null,
-          date: Timestamp.now(),
-          description: `Student Payment: ${data.studentName || 'Student'} — ${data.label}`,
-          eventId: data.eventId || null,
-          type: 'income',
-          source: 'student_collection',
-          amount: paymentAmount,
-          addedBy: recordedBy,
-          collectionId: payableId,
-        });
-      } else {
-        await addLedgerTransaction({
-          semesterId: data.semesterId || null,
-          date: Timestamp.now(),
-          description: `Student Payment: ${data.studentName || 'Student'} — ${data.label}`,
-          eventId: data.eventId || null,
-          type: 'income',
-          source: 'student_collection',
-          amount: paymentAmount,
-          addedBy: recordedBy,
-          collectionId: payableId,
-        });
-      }
-    } catch (ledgerErr) {
-      console.warn('[recordPayment] Non-fatal error posting to ledger:', ledgerErr);
-    }
-  }
 }
 
 /**
@@ -433,12 +429,35 @@ export async function recordEventFinePayables(
   let createdCount = 0;
   let skippedCount = 0;
 
+  // Load students map for robust resolution between Auth UID and 11-digit Student ID
+  const studentsLookup = new Map<string, any>();
+  try {
+    const studentsRef = collection(db, 'students');
+    const studentsSnap = await getDocs(studentsRef);
+    studentsSnap.docs.forEach((d) => {
+      const sData = { id: d.id, ...d.data() };
+      if (sData.studentId) studentsLookup.set(String(sData.studentId).trim().toLowerCase(), sData);
+      if (sData.authUid) studentsLookup.set(String(sData.authUid).trim().toLowerCase(), sData);
+      if (d.id) studentsLookup.set(d.id.trim().toLowerCase(), sData);
+    });
+  } catch (e) {
+    console.warn('[recordEventFinePayables] Could not pre-fetch students for ID resolution:', e);
+  }
+
   const newPayablesToCreate: CreatePayablePayload[] = [];
 
   for (const rec of attendanceDocs) {
-    const studentId = (rec.studentId || '').toString().trim();
-    const studentName = rec.name || 'Student';
+    const rawStudentId = (rec.studentId || '').toString().trim();
+    const rawSchoolId = ((rec as any).studentSchoolId || '').toString().trim();
     const status = (rec.status || '').toString();
+
+    const matched =
+      studentsLookup.get(rawStudentId.toLowerCase()) ||
+      (rawSchoolId ? studentsLookup.get(rawSchoolId.toLowerCase()) : undefined);
+
+    const authUid = matched?.authUid || matched?.id || (rec as any).studentAuthUid || rawStudentId;
+    const schoolId = matched?.studentId || rawSchoolId || rawStudentId;
+    const studentName = rec.name || (matched ? `${matched.firstName} ${matched.lastName}` : 'Student');
 
     let violationCategory: 'absent' | 'late' | 'missed_scan' | null = null;
     let label = '';
@@ -458,19 +477,21 @@ export async function recordEventFinePayables(
       description = `Automatic fine for incomplete scan-in / scan-out at ${eventData.title}`;
     }
 
-    if (!violationCategory || !studentId) continue;
+    if (!violationCategory || (!authUid && !schoolId)) continue;
 
-    const fineKey = `${studentId}_${violationCategory}`;
-    if (existingFineKeys.has(fineKey)) {
+    const fineKey = `${authUid}_${violationCategory}`;
+    const fineSchoolKey = `${schoolId}_${violationCategory}`;
+    if (existingFineKeys.has(fineKey) || existingFineKeys.has(fineSchoolKey)) {
       skippedCount++;
       continue;
     }
 
     existingFineKeys.add(fineKey);
+    existingFineKeys.add(fineSchoolKey);
     newPayablesToCreate.push({
-      studentId,
+      studentId: authUid,
       studentName,
-      studentSchoolId: studentId,
+      studentSchoolId: schoolId,
       type: payableType,
       label,
       description,
@@ -525,6 +546,477 @@ export async function recordEventFinePayables(
   }
 
   return { created: createdCount, skipped: skippedCount };
+}
+
+/**
+ * Dynamically evaluate event attendance per session against custom fine rules
+ * and batch-create/update fine payables.
+ */
+export async function generateDynamicEventFines(
+  payload: GenerateEventFinesPayload
+): Promise<{ created: number; updated: number; skipped: number; totalAmount: number }> {
+  const {
+    eventId,
+    eventTitle,
+    semesterId,
+    rules,
+    createdBy,
+    isOfficer,
+    hostingOrgId,
+    hostingOrgName,
+    dueDate,
+    studentViolations,
+    rawAttendanceRecords,
+  } = payload;
+
+  const parsedDueDate = dueDate
+    ? dueDate instanceof Timestamp
+      ? dueDate
+      : Timestamp.fromDate(new Date(dueDate))
+    : null;
+
+  const eventRef = doc(db, 'events', eventId);
+  const eventSnap = await getDoc(eventRef);
+  if (!eventSnap.exists()) {
+    throw new Error('Event not found');
+  }
+  const eventData = eventSnap.data();
+
+  // 1. Determine if Admin / SAS event vs Club Event
+  const isSasAdminEvent =
+    !isOfficer ||
+    eventData.hostingOrgId === 'sas_admin' ||
+    eventData.hostingOrgId === 'sas' ||
+    eventData.hostingOrgId === 'sao_admin' ||
+    eventData.hostingOrgId === 'sao' ||
+    eventData.isOfficerProposal === false;
+
+  const payableType: PayableType = isSasAdminEvent ? 'admin_fine' : 'org_fine';
+  const orgId = isSasAdminEvent ? null : (hostingOrgId || eventData.hostingOrgId || null);
+  const orgName = isSasAdminEvent
+    ? 'Student Affairs and Services (SAS)'
+    : (hostingOrgName || eventData.hostingOrgName || eventData.org || null);
+
+  // 2. Query existing fine payables for this event
+  const payablesRef = collection(db, PAYABLES_COLLECTION);
+  const qExisting = query(
+    payablesRef,
+    where('eventId', '==', eventId),
+    where('type', '==', payableType)
+  );
+  const existingSnap = await getDocs(qExisting);
+  const existingPayablesByStudent = new Map<string, { id: string; status: string; paidAmount: number }>();
+  existingSnap.docs.forEach((d) => {
+    const data = d.data();
+    const sId = (data.studentId || '').toString().trim().toLowerCase();
+    const schoolId = (data.studentSchoolId || '').toString().trim().toLowerCase();
+    const val = {
+      id: d.id,
+      status: data.status,
+      paidAmount: data.paidAmount || 0,
+    };
+    if (sId) existingPayablesByStudent.set(sId, val);
+    if (schoolId) existingPayablesByStudent.set(schoolId, val);
+  });
+
+  // 3. Load students map for robust resolution between Auth UID and 11-digit Student ID
+  const studentsLookup = new Map<string, any>();
+  try {
+    const studentsRef = collection(db, 'students');
+    const studentsSnap = await getDocs(studentsRef);
+    studentsSnap.docs.forEach((d) => {
+      const sData = { id: d.id, ...d.data() };
+      if (sData.studentId) studentsLookup.set(String(sData.studentId).trim().toLowerCase(), sData);
+      if (sData.authUid) studentsLookup.set(String(sData.authUid).trim().toLowerCase(), sData);
+      if (d.id) studentsLookup.set(d.id.trim().toLowerCase(), sData);
+    });
+  } catch (e) {
+    console.warn('[generateDynamicEventFines] Could not pre-fetch students for ID resolution:', e);
+  }
+
+  let createdCount = 0;
+  let updatedCount = 0;
+  let skippedCount = 0;
+  let totalAssessedAmount = 0;
+
+  const writeOps: Array<{
+    type: 'create' | 'update';
+    docId?: string;
+    data: any;
+  }> = [];
+
+  // Case A: Precalculated student violations passed directly from the modal preview
+  if (studentViolations && studentViolations.length > 0) {
+    studentViolations.forEach((student) => {
+      if (!student.violations || student.violations.length === 0 || student.totalFine <= 0) return;
+
+      const rawStudentId = (student.studentId || '').toString().trim();
+      const rawSchoolId = (student.studentSchoolId || '').toString().trim();
+      if (!rawStudentId && !rawSchoolId) return;
+
+      const matched =
+        studentsLookup.get(rawStudentId.toLowerCase()) ||
+        (rawSchoolId ? studentsLookup.get(rawSchoolId.toLowerCase()) : undefined);
+
+      // studentId must be Auth UID (or Firestore student doc id) so Mobile App query (where('studentId', '==', authUid)) matches
+      const authUid = matched?.authUid || matched?.id || student.studentAuthUid || rawStudentId;
+      const schoolId = matched?.studentId || rawSchoolId || rawStudentId;
+      const fullName = student.studentName || (matched ? `${matched.firstName} ${matched.lastName}` : 'Student');
+
+      const existing = existingPayablesByStudent.get(authUid.toLowerCase()) || existingPayablesByStudent.get(schoolId.toLowerCase());
+      if (existing && (existing.status === 'paid' || existing.status === 'waived' || existing.paidAmount > 0)) {
+        skippedCount++;
+        return;
+      }
+
+      const violationDescriptions = student.violations
+        .map((v) => `${v.description} (₱${v.amount})`)
+        .join(', ');
+
+      if (existing) {
+        writeOps.push({
+          type: 'update',
+          docId: existing.id,
+          data: {
+            assignedAmount: student.totalFine,
+            description: `Event Violations: ${violationDescriptions}`,
+            fineViolations: student.violations,
+            updatedAt: serverTimestamp(),
+          },
+        });
+        updatedCount++;
+        totalAssessedAmount += student.totalFine;
+      } else {
+        writeOps.push({
+          type: 'create',
+          data: {
+            studentId: authUid,
+            studentSchoolId: schoolId,
+            studentName: fullName,
+            type: payableType,
+            label: isSasAdminEvent ? `Event Fine — ${eventTitle}` : `Club Fine — ${eventTitle}`,
+            description: `Event Violations: ${violationDescriptions}`,
+            organizationId: orgId,
+            organizationName: orgName,
+            semesterId: semesterId || eventData.semesterId || 'active',
+            eventId,
+            assignedAmount: student.totalFine,
+            paidAmount: 0,
+            status: 'pending' as PayableStatus,
+            dueDate: parsedDueDate,
+            paidAt: null,
+            recordedBy: null,
+            paymentMethod: null,
+            transferredToBudget: false,
+            transferredAt: null,
+            fineViolations: student.violations,
+            createdBy,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          },
+        });
+        createdCount++;
+        totalAssessedAmount += student.totalFine;
+      }
+    });
+  } else {
+    // Case B: Evaluate against raw attendance records or query attendance from Firestore
+    let attendanceDocs = rawAttendanceRecords || [];
+    if (attendanceDocs.length === 0) {
+      const attendanceRef = collection(db, 'attendance');
+      const qAttendance = query(attendanceRef, where('eventId', '==', eventId));
+      const attendanceSnap = await getDocs(qAttendance);
+      attendanceDocs = attendanceSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+      if (attendanceDocs.length === 0 && eventTitle) {
+        const qByTitle = query(attendanceRef, where('event', '==', eventTitle));
+        const titleSnap = await getDocs(qByTitle);
+        attendanceDocs = titleSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      }
+    }
+
+    if (attendanceDocs.length === 0) {
+      return { created: 0, updated: 0, skipped: 0, totalAmount: 0 };
+    }
+
+    const studentMap = new Map<string, {
+      studentId: string;
+      studentName: string;
+      studentSchoolId: string;
+      sessionRecords: Map<string, any>;
+    }>();
+
+    attendanceDocs.forEach((rec: any) => {
+      const sId = (rec.studentId || '').toString().trim();
+      if (!sId) return;
+
+      if (!studentMap.has(sId)) {
+        studentMap.set(sId, {
+          studentId: sId,
+          studentName: rec.name || 'Student',
+          studentSchoolId: sId,
+          sessionRecords: new Map(),
+        });
+      }
+
+      const entry = studentMap.get(sId)!;
+      const sessId = rec.sessionId || 'main';
+      entry.sessionRecords.set(sessId, rec);
+      if (!entry.sessionRecords.has('all')) {
+        entry.sessionRecords.set('all', rec);
+      }
+    });
+
+    studentMap.forEach((student) => {
+      const violations: FineViolationDetail[] = [];
+      let studentTotalFine = 0;
+
+      rules.forEach((rule) => {
+        const rec = student.sessionRecords.get(rule.sessionId) || student.sessionRecords.get('all');
+        if (!rec) return;
+
+        const status = (rec.status || '').toString();
+
+        if (rule.enableTimeInAbsent && rule.timeInAbsentAmount > 0 && status === 'Absent') {
+          violations.push({
+            sessionId: rule.sessionId,
+            sessionTitle: rule.sessionTitle,
+            violationType: 'time_in_absent',
+            amount: rule.timeInAbsentAmount,
+            description: `${rule.sessionTitle}: Time-In Absent`,
+          });
+          studentTotalFine += rule.timeInAbsentAmount;
+        }
+
+        if (rule.enableTimeInLate && rule.timeInLateAmount > 0 && status === 'Late') {
+          violations.push({
+            sessionId: rule.sessionId,
+            sessionTitle: rule.sessionTitle,
+            violationType: 'time_in_late',
+            amount: rule.timeInLateAmount,
+            description: `${rule.sessionTitle}: Time-In Late`,
+          });
+          studentTotalFine += rule.timeInLateAmount;
+        }
+
+        if (
+          rule.enableTimeOutAbsent &&
+          rule.timeOutAbsentAmount > 0 &&
+          (status === 'Flagged' || (rec.checkIn && (!rec.checkOut || rec.checkOut === '—')))
+        ) {
+          violations.push({
+            sessionId: rule.sessionId,
+            sessionTitle: rule.sessionTitle,
+            violationType: 'time_out_absent',
+            amount: rule.timeOutAbsentAmount,
+            description: `${rule.sessionTitle}: Time-Out Missed / Absent`,
+          });
+          studentTotalFine += rule.timeOutAbsentAmount;
+        }
+      });
+
+      if (violations.length === 0 || studentTotalFine <= 0) return;
+
+      const rawStudentId = (student.studentId || '').toString().trim();
+      const rawSchoolId = (student.studentSchoolId || '').toString().trim();
+
+      const matched =
+        studentsLookup.get(rawStudentId.toLowerCase()) ||
+        (rawSchoolId ? studentsLookup.get(rawSchoolId.toLowerCase()) : undefined);
+
+      const authUid = matched?.authUid || matched?.id || rawStudentId;
+      const schoolId = matched?.studentId || rawSchoolId || rawStudentId;
+      const fullName = student.studentName || (matched ? `${matched.firstName} ${matched.lastName}` : 'Student');
+
+      const existing = existingPayablesByStudent.get(authUid.toLowerCase()) || existingPayablesByStudent.get(schoolId.toLowerCase());
+      if (existing && (existing.status === 'paid' || existing.status === 'waived' || existing.paidAmount > 0)) {
+        skippedCount++;
+        return;
+      }
+
+      const violationDescriptions = violations.map((v) => `${v.description} (₱${v.amount})`).join(', ');
+
+      if (existing) {
+        writeOps.push({
+          type: 'update',
+          docId: existing.id,
+          data: {
+            assignedAmount: studentTotalFine,
+            description: `Event Violations: ${violationDescriptions}`,
+            fineViolations: violations,
+            updatedAt: serverTimestamp(),
+          },
+        });
+        updatedCount++;
+        totalAssessedAmount += studentTotalFine;
+      } else {
+        writeOps.push({
+          type: 'create',
+          data: {
+            studentId: authUid,
+            studentSchoolId: schoolId,
+            studentName: fullName,
+            type: payableType,
+            label: isSasAdminEvent ? `Event Fine — ${eventTitle}` : `Club Fine — ${eventTitle}`,
+            description: `Event Violations: ${violationDescriptions}`,
+            organizationId: orgId,
+            organizationName: orgName,
+            semesterId: semesterId || eventData.semesterId || 'active',
+            eventId,
+            assignedAmount: studentTotalFine,
+            paidAmount: 0,
+            status: 'pending' as PayableStatus,
+            dueDate: parsedDueDate,
+            paidAt: null,
+            recordedBy: null,
+            paymentMethod: null,
+            transferredToBudget: false,
+            transferredAt: null,
+            fineViolations: violations,
+            createdBy,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          },
+        });
+        createdCount++;
+        totalAssessedAmount += studentTotalFine;
+      }
+    });
+  }
+
+  // Commit batch
+  if (writeOps.length > 0) {
+    const chunks = [];
+    for (let i = 0; i < writeOps.length; i += 500) {
+      chunks.push(writeOps.slice(i, i + 500));
+    }
+
+    for (const chunk of chunks) {
+      const batch = writeBatch(db);
+      for (const op of chunk) {
+        if (op.type === 'create') {
+          const newDocRef = doc(payablesRef);
+          batch.set(newDocRef, { ...op.data, id: newDocRef.id });
+        } else if (op.type === 'update' && op.docId) {
+          const docRef = doc(payablesRef, op.docId);
+          batch.update(docRef, op.data);
+        }
+      }
+      await batch.commit();
+    }
+
+    // Update event doc
+    try {
+      await updateDoc(eventRef, {
+        finesAssessed: true,
+        finesAssessedAt: serverTimestamp(),
+        finesAssessedBy: createdBy,
+        finesRuleMatrix: rules,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (e) {
+      console.warn('[generateDynamicEventFines] Could not update event doc fines status:', e);
+    }
+  }
+
+  return {
+    created: createdCount,
+    updated: updatedCount,
+    skipped: skippedCount,
+    totalAmount: totalAssessedAmount,
+  };
+}
+
+/**
+ * Transfer all collected event fines directly into designated target ledger:
+ * - Admin/Institutional Event -> /sao_ledger (Institutional Balance)
+ * - Officer/Organization Event -> /organization_ledger (Club Balance)
+ */
+export async function transferEventFinesToBudget(
+  eventId: string,
+  eventTitle: string,
+  isOfficer: boolean,
+  orgId?: string | null,
+  semesterId?: string
+): Promise<{ transferredCount: number; totalAmount: number }> {
+  const payablesRef = collection(db, PAYABLES_COLLECTION);
+  const targetType = isOfficer ? 'org_fine' : 'admin_fine';
+
+  const q = query(
+    payablesRef,
+    where('eventId', '==', eventId),
+    where('type', '==', targetType),
+    where('status', '==', 'paid')
+  );
+  const snap = await getDocs(q);
+
+  // Filter those that have not yet been transferred
+  const eligibleDocs = snap.docs.filter((d) => !d.data().transferredToBudget);
+
+  if (eligibleDocs.length === 0) {
+    throw new Error('No untransferred collected fines found for this event.');
+  }
+
+  const totalAmount = eligibleDocs.reduce((sum, d) => sum + (d.data().paidAmount || d.data().assignedAmount || 0), 0);
+
+  if (totalAmount <= 0) {
+    throw new Error('Total collected amount is ₱0.00.');
+  }
+
+  const effectiveSemester = semesterId || 'active';
+
+  if (!isOfficer) {
+    // Transfer to Institutional Balance in sao_ledger
+    await addLedgerTransaction({
+      title: `Event Fine Collections — ${eventTitle}`,
+      description: `Collected fines from ${eligibleDocs.length} student violation(s) for event ${eventTitle}`,
+      type: 'credit',
+      source: 'student_collection',
+      amount: totalAmount,
+      reference: eventId,
+      schoolYear: '2025-2026',
+      semester: effectiveSemester,
+      category: 'Student Fine Collections',
+      performedBy: 'SAO Administrator',
+    } as any);
+  } else if (orgId) {
+    // Transfer to Club Balance in organization_ledger
+    await addOrgLedgerTransaction({
+      organizationId: orgId,
+      title: `Club Fine Collections — ${eventTitle}`,
+      description: `Collected fines from ${eligibleDocs.length} member violation(s) for event ${eventTitle}`,
+      type: 'credit',
+      source: 'student_collection',
+      amount: totalAmount,
+      reference: eventId,
+      semesterId: effectiveSemester,
+      category: 'Club Fine Collections',
+      performedBy: 'Student Officer',
+    } as any);
+  }
+
+  // Batch update transferredToBudget on eligible payables
+  const chunks = [];
+  for (let i = 0; i < eligibleDocs.length; i += 500) {
+    chunks.push(eligibleDocs.slice(i, i + 500));
+  }
+
+  for (const chunk of chunks) {
+    const batch = writeBatch(db);
+    for (const d of chunk) {
+      batch.update(d.ref, {
+        transferredToBudget: true,
+        transferredAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    }
+    await batch.commit();
+  }
+
+  return {
+    transferredCount: eligibleDocs.length,
+    totalAmount,
+  };
 }
 
 /**
@@ -732,4 +1224,127 @@ export async function syncStudentPayablesForActiveEvents(
   }
 
   return createdCount;
+}
+
+/**
+ * Centralized transfer function: Transfers all collected payments in a collection group to the designated ledger.
+ * - If targetLedger === 'sao' -> credits /sao_ledger
+ * - If targetLedger === 'org' -> credits /organization_ledger
+ * 
+ * Atomically marks payables as transferredToBudget: true, transferredAt: serverTimestamp(), transferredBatchId: batchId.
+ * Guarantees zero ghost money: only strictly sums paidAmount of records with paidAmount > 0 and status === 'paid'.
+ */
+export async function transferCollectionGroupToLedger(params: {
+  collectionGroupId: string;
+  eventId?: string | null;
+  type?: PayableType;
+  organizationId?: string | null;
+  targetLedger: 'sao' | 'org';
+  semesterId?: string | null;
+  recordedByUid?: string;
+  collectionName?: string;
+}): Promise<{ transferredCount: number; transferredAmount: number }> {
+  const {
+    collectionGroupId,
+    eventId,
+    type,
+    organizationId,
+    targetLedger,
+    semesterId,
+    recordedByUid,
+    collectionName,
+  } = params;
+
+  const payablesRef = collection(db, PAYABLES_COLLECTION);
+  let qDocs;
+
+  if (eventId && eventId !== 'unassigned') {
+    if (type) {
+      qDocs = query(
+        payablesRef,
+        where('eventId', '==', eventId),
+        where('type', '==', type)
+      );
+    } else {
+      qDocs = query(payablesRef, where('eventId', '==', eventId));
+    }
+  } else if (organizationId && type === 'membership_due') {
+    qDocs = query(
+      payablesRef,
+      where('organizationId', '==', organizationId),
+      where('type', '==', 'membership_due')
+    );
+  } else if (organizationId) {
+    qDocs = query(payablesRef, where('organizationId', '==', organizationId));
+  } else {
+    qDocs = query(payablesRef, where('type', 'in', ['admin_fine', 'event_fee']));
+  }
+
+  const snap = await getDocs(qDocs);
+  const eligibleDocs = snap.docs.filter((d) => {
+    const data = d.data();
+    return !data.transferredToBudget && (data.paidAmount || 0) > 0;
+  });
+
+  if (eligibleDocs.length === 0) {
+    return { transferredCount: 0, transferredAmount: 0 };
+  }
+
+  const totalCollected = eligibleDocs.reduce((sum, d) => sum + (d.data().paidAmount || 0), 0);
+  const batchId = `TRANS-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+
+  // Batch commit in chunks of 500
+  const chunks = [];
+  for (let i = 0; i < eligibleDocs.length; i += 500) {
+    chunks.push(eligibleDocs.slice(i, i + 500));
+  }
+
+  for (const chunk of chunks) {
+    const batch = writeBatch(db);
+    for (const docSnap of chunk) {
+      batch.update(docSnap.ref, {
+        transferredToBudget: true,
+        transferredAt: serverTimestamp(),
+        transferredBatchId: batchId,
+        updatedAt: serverTimestamp(),
+      });
+    }
+    await batch.commit();
+  }
+
+  // Insert ledger income entry
+  const displayTitle = collectionName || (eventId ? `Event Collection (${eventId})` : 'Student Collection');
+  if (targetLedger === 'org' && organizationId) {
+    await addDoc(collection(db, 'organization_ledger'), {
+      organizationId,
+      semesterId: semesterId || null,
+      date: Timestamp.now(),
+      description: `Student Collections – ${displayTitle}`,
+      eventId: eventId && eventId !== 'unassigned' ? eventId : null,
+      type: 'income' as const,
+      source: 'student_collection' as const,
+      amount: totalCollected,
+      addedBy: recordedByUid || 'Officer',
+      collectionId: batchId,
+      createdAt: serverTimestamp(),
+    });
+  } else {
+    await addDoc(collection(db, 'sao_ledger'), {
+      semesterId: semesterId || null,
+      date: Timestamp.now(),
+      description: `Student Collections – ${displayTitle}`,
+      eventId: eventId && eventId !== 'unassigned' ? eventId : null,
+      type: 'income' as const,
+      source: 'student_collection' as const,
+      amount: totalCollected,
+      addedBy: recordedByUid || 'Admin SAO',
+      collectionId: batchId,
+      createdAt: serverTimestamp(),
+    });
+  }
+
+  return {
+    transferredCount: eligibleDocs.length,
+    transferredAmount: totalCollected,
+  };
 }

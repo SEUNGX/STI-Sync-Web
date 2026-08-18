@@ -92,10 +92,12 @@ export function AddPayableModal({
       );
 
       for (const m of targetMembers) {
+        const authUid = (m as any).authUid || (m as any).studentAuthUid || m.id || m.studentId;
+        const schoolId = (m as any).studentSchoolId || m.studentId || m.id;
         await createPayable({
-          studentId: m.studentId || m.id,
+          studentId: authUid,
           studentName: m.studentName,
-          studentSchoolId: m.studentId,
+          studentSchoolId: schoolId,
           type: payableType,
           label: label.trim(),
           description: description.trim(),

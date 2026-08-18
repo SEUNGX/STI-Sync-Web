@@ -1,5 +1,24 @@
 import { useState, useMemo } from 'react';
-import { Download, Users, UserCheck, UserMinus, UserX, ChevronDown, AlertCircle, QrCode, Loader2, Calendar, FileSpreadsheet, DollarSign, AlertTriangle } from 'lucide-react';
+import {
+  Download,
+  Users,
+  UserCheck,
+  UserMinus,
+  UserX,
+  ChevronDown,
+  AlertCircle,
+  QrCode,
+  Loader2,
+  Calendar,
+  FileSpreadsheet,
+  DollarSign,
+  AlertTriangle,
+  Coins,
+  Info,
+  CheckCircle2,
+  ShieldAlert,
+  Shield,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { useOfficerProfile } from '../../auth/hooks/useOfficerProfile';
 import { useAllEvents } from '../../modules/events/hooks/useEventStream';
@@ -11,6 +30,8 @@ import { recordEventFinePayables } from '../../modules/finance/services/payable.
 
 import { AttendanceFilterToolbar } from '../../modules/attendance/components/AttendanceFilterToolbar';
 import { AttendanceExportPreviewModal } from '../../modules/attendance/components/AttendanceExportPreviewModal';
+import { EventFinesGenerationModal } from '../../modules/finance/components/EventFinesGenerationModal';
+import { EventFinesRosterView } from '../../modules/finance/components/EventFinesRosterView';
 import type { AttendanceFilterState, EnrichedAttendanceRecord } from '../../modules/attendance/types/attendance.types';
 
 interface OfficerMappedEvent {
@@ -58,7 +79,8 @@ export default function AttendanceLogs() {
   const [filterState, setFilterState] = useState<AttendanceFilterState>(INITIAL_FILTERS);
   const [showFlagged, setShowFlagged] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
-  const [isRecordingFines, setIsRecordingFines] = useState(false);
+  const [activeTab, setActiveTab] = useState<'attendance' | 'fines'>('attendance');
+  const [isAssessFinesModalOpen, setIsAssessFinesModalOpen] = useState(false);
 
   const activeOrgId = profile?.activeOrganizationId;
   const currentStudentId = profile?.studentId;
@@ -152,12 +174,15 @@ export default function AttendanceLogs() {
           else if (isCheckedOut) normStatus = 'Checked Out';
           else if (rec.status) normStatus = rec.status;
 
-          const sessionObj = evt.sessions?.find(s => s.id === rec.sessionId);
+          const studentAuthUid = matchedStudent?.authUid || matchedStudent?.id || (rec as any).studentAuthUid || (rec as any).authUid || rec.studentId || 'N/A';
+          const studentSchoolId = matchedStudent?.studentId || (rec as any).studentSchoolId || rec.studentId || 'N/A';
 
           return {
             ...rec,
             id: rec.id,
-            studentId: rec.studentId || matchedStudent?.studentId || 'N/A',
+            studentAuthUid,
+            studentSchoolId,
+            studentId: studentSchoolId,
             name: rec.name || (matchedStudent ? `${matchedStudent.firstName} ${matchedStudent.lastName}` : 'Unknown Student'),
             departmentId: matchedStudent?.departmentId,
             departmentName: matchedStudent?.departmentName || deptObj?.name || 'N/A',
@@ -311,7 +336,7 @@ export default function AttendanceLogs() {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px]">
-        <Loader2 className="w-8 h-8 animate-spin text-[#83358E] mb-3" />
+        <Loader2 className="w-8 h-8 animate-spin text-[#0E4EBD] mb-3" />
         <p className="text-gray-500 text-sm font-medium">Loading attendance logs & student registry...</p>
       </div>
     );
@@ -346,9 +371,9 @@ export default function AttendanceLogs() {
                 <button
                   key={evt.id}
                   onClick={() => { setSelectedEventId(evt.id); handleResetFilters(); }}
-                  className={`px-4 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-2 ${
+                  className={`px-4 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-2 cursor-pointer ${
                     currentEvent?.id === evt.id
-                      ? 'bg-[#83358E] text-white shadow-sm'
+                      ? 'bg-[#001A4D] text-[#FFD41C] shadow-sm'
                       : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                   }`}
                 >
@@ -356,7 +381,7 @@ export default function AttendanceLogs() {
                   <span>{evt.title}</span>
                   <span
                     className={`text-[10px] px-2 py-0.5 rounded-full font-mono ${
-                      currentEvent?.id === evt.id ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-700'
+                      currentEvent?.id === evt.id ? 'bg-[#FFD41C]/20 text-[#FFD41C]' : 'bg-gray-200 text-gray-700'
                     }`}
                   >
                     {evt.checkedIn} attended
@@ -403,40 +428,60 @@ export default function AttendanceLogs() {
                 </div>
               </div>
 
-              {/* Attendance Fine Control Bar */}
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-purple-50 border border-purple-200 rounded-2xl p-4 shadow-xs">
-                <div>
-                  <h3 className="font-bold text-[#001A4D] text-sm flex items-center gap-2">
-                    <AlertTriangle className="w-4 h-4 text-amber-600" />
-                    Event Fine Control
-                  </h3>
-                  <p className="text-xs text-gray-600 mt-0.5">
-                    Automatically record fines for absent, late, or un-scanned students based on this event's officer settings.
-                  </p>
-                </div>
+              {/* Sub-Tab Switcher */}
+              <div className="flex items-center gap-3 border-b border-gray-200 pb-1">
                 <button
-                  disabled={isRecordingFines}
-                  onClick={() => handleRecordFines(currentEvent.id, currentEvent.title)}
-                  className="px-4 py-2 bg-gradient-to-r from-[#001A4D] to-[#83358E] text-white rounded-xl text-xs font-bold hover:opacity-90 transition-all flex items-center gap-2 disabled:opacity-50 cursor-pointer flex-shrink-0 shadow-sm"
+                  type="button"
+                  onClick={() => setActiveTab('attendance')}
+                  className={`pb-3 px-2 text-sm font-bold transition-all relative cursor-pointer ${
+                    activeTab === 'attendance'
+                      ? 'text-[#001A4D]'
+                      : 'text-gray-400 hover:text-gray-700'
+                  }`}
                 >
-                  {isRecordingFines ? <Loader2 className="w-4 h-4 animate-spin" /> : <DollarSign className="w-4 h-4 text-[#FFD41C]" />}
-                  <span>Record Event Fines</span>
+                  <span className="flex items-center gap-2">
+                    <UserCheck className="w-4 h-4" />
+                    Attendance Roster ({currentEvent.records.length})
+                  </span>
+                  {activeTab === 'attendance' && (
+                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#001A4D] rounded-full" />
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('fines')}
+                  className={`pb-3 px-2 text-sm font-bold transition-all relative cursor-pointer ${
+                    activeTab === 'fines'
+                      ? 'text-[#001A4D]'
+                      : 'text-gray-400 hover:text-gray-700'
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <Coins className="w-4 h-4 text-[#FFD41C]" />
+                    Club Fines & Collections
+                  </span>
+                  {activeTab === 'fines' && (
+                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#001A4D] rounded-full" />
+                  )}
                 </button>
               </div>
 
-              {/* Shared Attendance Filter Toolbar */}
-              <AttendanceFilterToolbar
-                filters={filterState}
-                onFilterChange={handleFilterChange}
-                onReset={handleResetFilters}
-                departments={(departments || []).map(d => ({ id: d.id, name: d.name, code: d.code }))}
-                sections={availableSections}
-                courses={(courses || []).map(c => ({ id: c.id, name: c.name, code: c.code }))}
-                sessions={currentEvent.sessions}
-                onExportClick={() => setIsExportModalOpen(true)}
-                totalCount={currentEvent.records.length}
-                filteredCount={filteredRecords.length}
-              />
+              {activeTab === 'attendance' ? (
+                <>
+                  {/* Shared Attendance Filter Toolbar */}
+                  <AttendanceFilterToolbar
+                    filters={filterState}
+                    onFilterChange={handleFilterChange}
+                    onReset={handleResetFilters}
+                    departments={(departments || []).map(d => ({ id: d.id, name: d.name, code: d.code }))}
+                    sections={availableSections}
+                    courses={(courses || []).map(c => ({ id: c.id, name: c.name, code: c.code }))}
+                    sessions={currentEvent.sessions}
+                    onExportClick={() => setIsExportModalOpen(true)}
+                    totalCount={currentEvent.records.length}
+                    filteredCount={filteredRecords.length}
+                  />
 
               {/* Attendance Table Container */}
               <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
@@ -552,16 +597,54 @@ export default function AttendanceLogs() {
                 </div>
               )}
 
-              {/* Excel Export Preview Modal */}
-              <AttendanceExportPreviewModal
-                isOpen={isExportModalOpen}
-                onClose={() => setIsExportModalOpen(false)}
-                records={filteredRecords}
-                eventTitle={currentEvent.title}
-                eventDate={currentEvent.date}
-                hostingOrgName={currentEvent.orgName}
-                venueName={currentEvent.venue}
-                activeFiltersSummary={activeFiltersSummary}
+                  {/* Excel Export Preview Modal */}
+                  <AttendanceExportPreviewModal
+                    isOpen={isExportModalOpen}
+                    onClose={() => setIsExportModalOpen(false)}
+                    records={filteredRecords}
+                    eventTitle={currentEvent.title}
+                    eventDate={currentEvent.date}
+                    hostingOrgName={currentEvent.orgName}
+                    venueName={currentEvent.venue}
+                    activeFiltersSummary={activeFiltersSummary}
+                  />
+                </>
+              ) : (
+                <EventFinesRosterView
+                  eventId={currentEvent.id}
+                  eventTitle={currentEvent.title}
+                  isOfficer={true}
+                  orgId={activeOrgId || currentEvent.hostingOrgId}
+                  recordedByUid={currentStudentId || 'officer'}
+                  semesterId="active"
+                  onOpenAssessFinesModal={() => setIsAssessFinesModalOpen(true)}
+                  isEventCompleted={currentEvent.status === 'Completed'}
+                />
+              )}
+
+              {/* Dynamic Fines Assessment Modal */}
+              <EventFinesGenerationModal
+                isOpen={isAssessFinesModalOpen}
+                onClose={() => setIsAssessFinesModalOpen(false)}
+                event={{
+                  id: currentEvent.id,
+                  name: currentEvent.title,
+                  title: currentEvent.title,
+                  sessions: currentEvent.sessions.map((s) => ({
+                    id: s.id,
+                    title: s.title,
+                    hasTimeOut: true,
+                  })),
+                  status: currentEvent.status,
+                  hostingOrgId: activeOrgId || currentEvent.hostingOrgId,
+                  hostingOrgName: currentEvent.orgName,
+                }}
+                isOfficer={true}
+                attendanceRecords={currentEvent.records}
+                currentUserId={currentStudentId || 'officer'}
+                onSuccess={() => {
+                  setActiveTab('fines');
+                }}
               />
             </div>
           )}

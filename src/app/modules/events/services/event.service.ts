@@ -18,6 +18,7 @@ import {
 import { db } from '../../../../services/firebase';
 import type { EventDocument, EventFormData, EventProposalHistoryLog } from '../types/event.types';
 import { STUDENTS_COLLECTION } from '../../students/services/student.service';
+import { deductApprovedEventBudget } from '../../finance/services/finance.service';
 
 export const EVENTS_COLLECTION = 'events';
 
@@ -234,9 +235,14 @@ export const createEvent = async (
     docId = docRef.id;
   }
 
-  // Handle payables creation if event is auto-approved
+  // Handle payables creation and budget deduction if event is auto-approved
   if (eventPayload.proposalStatus === 'approved') {
     await generatePayablesForEvent(eventPayload, docId!, uid);
+    try {
+      await deductApprovedEventBudget(eventPayload, docId!, uid);
+    } catch (err) {
+      console.warn('[createEvent] Budget deduction error:', err);
+    }
   }
 
   return docId!;
@@ -307,6 +313,15 @@ export const approveEvent = async (
       eventId,
       adminUserId
     );
+    try {
+      await deductApprovedEventBudget(
+        { ...eventData, proposalStatus: 'approved' },
+        eventId,
+        adminUserId
+      );
+    } catch (err) {
+      console.warn('[approveEvent] Budget deduction error:', err);
+    }
   }
 };
 

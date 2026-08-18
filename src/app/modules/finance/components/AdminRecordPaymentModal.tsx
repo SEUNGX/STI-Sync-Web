@@ -115,42 +115,44 @@ export function AdminRecordPaymentModal({
             </button>
           </div>
 
-          {/* Admin Explicit QR Code Ticket Unlock Control */}
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3.5 space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                {unlockQRTicket ? (
-                  <Unlock className="w-4 h-4 text-emerald-600" />
-                ) : (
-                  <Lock className="w-4 h-4 text-amber-700" />
-                )}
-                <span className="text-xs font-bold text-[#001A4D]">
-                  QR Ticket Access Status
+          {/* Admin Explicit QR Code Ticket Unlock Control (Only for pre-event / event fees where QR gate access is needed) */}
+          {payable.type === 'event_fee' && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3.5 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  {unlockQRTicket ? (
+                    <Unlock className="w-4 h-4 text-emerald-600" />
+                  ) : (
+                    <Lock className="w-4 h-4 text-amber-700" />
+                  )}
+                  <span className="text-xs font-bold text-[#001A4D]">
+                    QR Ticket Access Status
+                  </span>
+                </div>
+                <span
+                  className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
+                    unlockQRTicket
+                      ? 'bg-emerald-100 text-emerald-700'
+                      : 'bg-amber-100 text-amber-800'
+                  }`}
+                >
+                  {unlockQRTicket ? 'Unlocked' : 'Locked'}
                 </span>
               </div>
-              <span
-                className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
-                  unlockQRTicket
-                    ? 'bg-emerald-100 text-emerald-700'
-                    : 'bg-amber-100 text-amber-800'
-                }`}
-              >
-                {unlockQRTicket ? 'Unlocked' : 'Locked'}
-              </span>
-            </div>
 
-            <label className="flex items-start gap-2 cursor-pointer pt-1">
-              <input
-                type="checkbox"
-                checked={unlockQRTicket}
-                onChange={(e) => setUnlockQRTicket(e.target.checked)}
-                className="w-4 h-4 text-[#7F77DD] rounded border-gray-300 mt-0.5"
-              />
-              <span className="text-xs text-gray-700 leading-tight">
-                <strong>Unlock Event QR Ticket immediately</strong> — allows the student to scan their QR ticket for gate entry.
-              </span>
-            </label>
-          </div>
+              <label className="flex items-start gap-2 cursor-pointer pt-1">
+                <input
+                  type="checkbox"
+                  checked={unlockQRTicket}
+                  onChange={(e) => setUnlockQRTicket(e.target.checked)}
+                  className="w-4 h-4 text-[#7F77DD] rounded border-gray-300 mt-0.5"
+                />
+                <span className="text-xs text-gray-700 leading-tight">
+                  <strong>Unlock Event QR Ticket immediately</strong> — allows the student to scan their QR ticket for gate entry.
+                </span>
+              </label>
+            </div>
+          )}
 
           {/* Notes / Reference */}
           <div>

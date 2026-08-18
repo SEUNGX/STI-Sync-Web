@@ -1,13 +1,15 @@
 import { useState, useMemo } from "react";
+import { toast } from 'sonner';
 
 import { useOrgLedger } from '../../modules/finance/hooks/useFinanceStream';
 import { addOrgLedgerTransaction } from '../../modules/finance/services/finance.service';
 import { useSemesters } from '../../modules/academic/hooks/useAcademicStream';
-import { useOrgPayables } from '../../modules/finance/hooks/usePayableStream';
+import { useOrgPayables, useOrgCollectionsStream } from '../../modules/finance/hooks/usePayableStream';
+import { transferCollectionGroupToLedger } from '../../modules/finance/services/payable.service';
 import { useOfficerProfile } from '../../auth/hooks/useOfficerProfile';
 import { useOrganizationStream } from '../../modules/organizations/hooks/useOrganizationStream';
 import type { OrgLedgerDocument } from '../../modules/finance/types/finance.types';
-import type { PayableDocument } from '../../modules/finance/types/payable.types';
+import type { PayableDocument, StudentEventCollectionGroup } from '../../modules/finance/types/payable.types';
 import { Timestamp } from 'firebase/firestore';
 
 import { GenerateDuesModal } from '../components/GenerateDuesModal';
@@ -23,6 +25,7 @@ import {
   Coins,
   CheckCircle,
   AlertCircle,
+  Clock,
   Plus,
   Archive,
   Eye,
@@ -32,6 +35,7 @@ import {
   Users,
   History,
   ArrowRight,
+  ArrowDownLeft,
   Shield,
   RefreshCw,
   Info,
@@ -45,7 +49,7 @@ import {
   FileSpreadsheet,
 } from "lucide-react";
 
-type FinanceTab = "budget" | "payables" | "liquidation";
+type FinanceTab = "budget" | "collections" | "payables" | "liquidation";
 type PayableSubTab = "member" | "type" | "overdue";
 
 import { useOrgLiquidations } from '../../modules/finance/hooks/useLiquidationStream';
@@ -87,7 +91,7 @@ function MetricsRow({
   const currentBalance = totalIncome - totalExpenses;
 
   const cards = [
-    { label: "Club Total Funds (Income)", value: formatCurrency(totalIncome), note: "this semester", color: "text-[#83358E]", icon: Building2 },
+    { label: "Club Total Funds (Income)", value: formatCurrency(totalIncome), note: "this semester", color: "text-[#001A4D]", icon: Building2 },
     { label: "Total Club Expenditures", value: formatCurrency(totalExpenses), note: "this semester", color: "text-blue-600", icon: TrendingUp },
     { label: "Current Club Balance", value: formatCurrency(currentBalance), note: "available funds", color: "text-green-600", icon: Wallet },
     { label: "Total Payables Assigned", value: formatCurrency(totalPayables), note: `across ${payablesData.length} payable doc(s)`, color: "text-[#001A4D]", icon: Coins },
@@ -162,9 +166,9 @@ function AddOrgIncomeModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-[520px] overflow-hidden">
-        <div className="bg-[#83358E] px-6 py-4 flex items-center justify-between">
+        <div className="bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Plus className="w-5 h-5 text-white" />
+            <Plus className="w-5 h-5 text-[#FFD41C]" />
             <h3 className="text-white font-bold text-base">Add Club Income / Allocation</h3>
             <span className="px-2.5 py-0.5 bg-[#FFD41C] text-[#001A4D] text-xs font-bold rounded-full">{organizationName}</span>
           </div>
@@ -176,7 +180,7 @@ function AddOrgIncomeModal({
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">Academic Semester <span className="text-red-500">*</span></label>
             <select
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD] focus:border-transparent"
               value={form.semesterId}
               onChange={(e) => setForm({ ...form, semesterId: e.target.value })}
             >
@@ -193,7 +197,7 @@ function AddOrgIncomeModal({
               <input
                 type="number"
                 placeholder="0.00"
-                className="w-full pl-8 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+                className="w-full pl-8 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD] focus:border-transparent"
                 value={form.amount}
                 onChange={(e) => setForm({ ...form, amount: e.target.value })}
               />
@@ -204,13 +208,13 @@ function AddOrgIncomeModal({
             <textarea
               rows={2}
               placeholder="Why is this income added? (e.g. Sponsorship, Allocation)"
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] focus:border-transparent resize-none"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD] focus:border-transparent resize-none"
               value={form.notes}
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
             />
           </div>
           <div className="flex items-center gap-3 p-4 bg-gray-50 border border-gray-200 rounded-lg">
-            <input type="checkbox" id="carryOver" checked={carryOver} onChange={(e) => setCarryOver(e.target.checked)} className="w-4 h-4 text-[#83358E] rounded focus:ring-[#83358E]" />
+            <input type="checkbox" id="carryOver" checked={carryOver} onChange={(e) => setCarryOver(e.target.checked)} className="w-4 h-4 text-[#0E4EBD] rounded focus:ring-[#0E4EBD]" />
             <label htmlFor="carryOver" className="text-sm text-gray-700 font-medium">Mark as carry-over from previous semester</label>
           </div>
         </div>
@@ -219,7 +223,7 @@ function AddOrgIncomeModal({
           <button
             onClick={handleSave}
             disabled={loading}
-            className="px-5 py-2.5 bg-[#83358E] text-white rounded-lg text-sm font-medium hover:bg-[#6D2A78] transition-colors disabled:opacity-50"
+            className="px-5 py-2.5 bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
           >
             {loading ? "Saving..." : "Save Income"}
           </button>
@@ -343,6 +347,7 @@ function BudgetTrackerTab({
 }) {
   const [showAddIncome, setShowAddIncome] = useState(false);
   const [showAddExpense, setShowAddExpense] = useState(false);
+  const [txFilter, setTxFilter] = useState<'all' | 'income' | 'expense'>('all');
 
   const currentSemTransactions = useMemo(() => {
     if (semesterId === "all") return ledgerData;
@@ -358,31 +363,61 @@ function BudgetTrackerTab({
     })
     .reverse();
 
+  const filteredRows = useMemo(() => {
+    return tableRows.filter((item) => {
+      if (txFilter === 'all') return true;
+      return (item.type || '').toLowerCase() === txFilter;
+    });
+  }, [tableRows, txFilter]);
+
+  const currentClubBalance = useMemo(() => {
+    const inc = currentSemTransactions.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+    const exp = currentSemTransactions.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+    return inc - exp;
+  }, [currentSemTransactions]);
+
   return (
     <div className="space-y-4">
       <div className="bg-white border border-[#E0E0E0] rounded-xl overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <div className="border-l-4 border-[#83358E] pl-3">
-            <h3 className="text-[#001A4D] font-bold text-sm">Organization Ledger</h3>
+          <div className="border-l-4 border-[#0E4EBD] pl-3">
+            <h3 className="text-[#001A4D] font-bold text-sm">Budget Ledger Transactions</h3>
           </div>
-          {!isPast && (
-            <div className="flex gap-2">
-              <button
-                onClick={() => setShowAddExpense(true)}
-                className="px-3 py-1.5 border border-gray-300 text-gray-700 text-xs rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-1.5"
-              >
-                <Minus className="w-3.5 h-3.5 text-blue-600" />
-                Record Expense
-              </button>
-              <button
-                onClick={() => setShowAddIncome(true)}
-                className="px-3 py-1.5 bg-[#83358E] text-white text-xs rounded-lg hover:bg-[#6D2A78] transition-colors flex items-center gap-1.5"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Add Income
-              </button>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
+              {(['all', 'income', 'expense'] as const).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setTxFilter(f)}
+                  className={`px-2.5 py-1 rounded-md text-xs font-semibold capitalize transition-colors cursor-pointer ${
+                    txFilter === f
+                      ? 'bg-[#001A4D] text-[#FFD41C] shadow-xs'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  {f === 'all' ? 'All' : f === 'income' ? 'Income +' : 'Expenses −'}
+                </button>
+              ))}
             </div>
-          )}
+            {!isPast && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowAddExpense(true)}
+                  className="px-3 py-1.5 border border-gray-300 text-gray-700 text-xs rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Minus className="w-3.5 h-3.5 text-[#0E4EBD]" />
+                  Record Expense
+                </button>
+                <button
+                  onClick={() => setShowAddIncome(true)}
+                  className="px-3 py-1.5 bg-[#001A4D] text-white text-xs rounded-lg hover:bg-[#002B7F] transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  <Plus className="w-3.5 h-3.5 text-[#FFD41C]" />
+                  Add Income
+                </button>
+              </div>
+            )}
+          </div>
         </div>
         {isPast && (
           <div className="flex items-center gap-2 px-5 py-2 bg-amber-50 border-b border-amber-200">
@@ -390,33 +425,55 @@ function BudgetTrackerTab({
             <p className="text-amber-700 text-xs font-medium">Historical Data — All records are read-only.</p>
           </div>
         )}
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50">
+        <div className="overflow-x-auto max-h-[520px] overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+          <table className="w-full relative">
+            <thead className="bg-gray-50 sticky top-0 z-10 shadow-xs border-b border-[#E0E0E0]">
               <tr>
                 {["Date", "Description", "Source", "Amount (₱)", "Balance (₱)"].map((col) => (
-                  <th key={col} className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide border-b border-[#E0E0E0]">
+                  <th key={col} className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide bg-gray-50 border-b border-[#E0E0E0]">
                     {col}
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {tableRows.length === 0 ? (
+              {filteredRows.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-4 py-8 text-center text-gray-500 text-sm">
-                    No transactions found for this semester.
+                    No {txFilter === 'all' ? '' : txFilter} transactions found for this semester.
                   </td>
                 </tr>
               ) : (
-                tableRows.map((item) => (
+                filteredRows.map((item) => (
                   <tr key={item.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-5 py-3.5 text-gray-500 font-mono text-xs">
                       {formatAppDate(item.date, 'Unknown')}
                     </td>
                     <td className="px-4 py-3 text-[#001A4D] text-sm">{item.description}</td>
                     <td className="px-4 py-3">
-                      <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded font-medium capitalize">{item.source.replace('_', ' ')}</span>
+                      <span className={`px-2 py-0.5 text-xs rounded font-medium ${
+                        item.source === 'event_budget'
+                          ? 'bg-purple-100 text-purple-700'
+                          : item.source === 'student_collection'
+                          ? 'bg-green-100 text-green-700'
+                          : item.source === 'liquidation_surplus'
+                          ? 'bg-emerald-100 text-emerald-700'
+                          : item.source === 'liquidation_deficit'
+                          ? 'bg-rose-100 text-rose-700'
+                          : item.source === 'manual_expense'
+                          ? 'bg-red-100 text-red-700'
+                          : 'bg-blue-100 text-blue-700'
+                      }`}>
+                        {item.source === 'event_budget'
+                          ? 'Event Budget Allocation'
+                          : item.source === 'liquidation_surplus'
+                          ? 'Liquidation Surplus Refund'
+                          : item.source === 'liquidation_deficit'
+                          ? 'Liquidation Deficit Expense'
+                          : item.source === 'student_collection'
+                          ? 'Student Collection'
+                          : item.source.replace('_', ' ')}
+                      </span>
                     </td>
                     <td className={`px-4 py-3 text-sm font-medium ${item.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
                       {item.type === 'income' ? `+${formatCurrency(item.amount)}` : `-${formatCurrency(item.amount)}`}
@@ -426,6 +483,14 @@ function BudgetTrackerTab({
                 ))
               )}
             </tbody>
+            <tfoot className="sticky bottom-0 z-10">
+              <tr className="bg-[#001A4D] shadow-md">
+                <td colSpan={3} className="px-4 py-3 text-white font-bold text-sm bg-[#001A4D]">Current Club Balance</td>
+                <td colSpan={2} className="px-4 py-3 text-[#FFD41C] font-bold text-base bg-[#001A4D]">
+                  {formatCurrency(currentClubBalance)}
+                </td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       </div>
@@ -445,6 +510,341 @@ function BudgetTrackerTab({
           officerStudentId={officerStudentId}
           onClose={() => setShowAddExpense(false)}
           onSuccess={() => setShowAddExpense(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Student Collections & Treasury Transfers Tab ──────────────────────────────
+
+function OrgCollectionDetailModal({
+  collection,
+  alreadyTransferred,
+  isPast,
+  onClose,
+  onTransfer,
+}: {
+  collection: StudentEventCollectionGroup;
+  alreadyTransferred: boolean;
+  isPast: boolean;
+  onClose: () => void;
+  onTransfer: () => void;
+}) {
+  const paid = collection.payments.filter((p) => p.status === "Paid");
+  const pending = collection.payments.filter((p) => p.status === "Pending");
+  const totalCollected = paid.reduce((s, p) => s + p.amount, 0);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/55 backdrop-blur-xs" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-[620px] max-h-[90vh] flex flex-col overflow-hidden">
+        <div className="bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] px-6 py-4 flex items-center justify-between flex-shrink-0">
+          <div>
+            <h3 className="text-white font-bold text-base">{collection.eventName}</h3>
+            <p className="text-blue-200 text-xs mt-0.5">Collection Breakdown & Treasury Transfer</p>
+          </div>
+          <button onClick={onClose} className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10 cursor-pointer">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="p-5 space-y-4 overflow-y-auto flex-1">
+          {/* Summary KPIs */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 text-center">
+              <p className="text-xs text-gray-500">Assigned / Student</p>
+              <p className="text-base font-bold text-[#001A4D] mt-0.5">{formatCurrency(collection.payablePerStudent)}</p>
+            </div>
+            <div className="bg-green-50 border border-green-200 rounded-xl p-3 text-center">
+              <p className="text-xs text-green-700">Total Collected</p>
+              <p className="text-base font-bold text-green-700 mt-0.5">{formatCurrency(totalCollected)}</p>
+            </div>
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-center">
+              <p className="text-xs text-[#0E4EBD]">Completion</p>
+              <p className="text-base font-bold text-[#0E4EBD] mt-0.5">
+                {collection.totalStudents > 0 ? Math.round((paid.length / collection.totalStudents) * 100) : 0}%
+              </p>
+            </div>
+          </div>
+
+          {/* Roster Table */}
+          <div className="border border-gray-200 rounded-xl overflow-hidden">
+            <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+              <p className="text-[#001A4D] text-xs font-bold uppercase tracking-wide">Student Payment Records</p>
+              <div className="flex gap-2">
+                <span className="flex items-center gap-1 text-xs text-green-600 font-medium">
+                  <CheckCircle className="w-3 h-3" />{paid.length} Paid
+                </span>
+                {pending.length > 0 && (
+                  <span className="flex items-center gap-1 text-xs text-amber-600 font-medium">
+                    <Clock className="w-3 h-3" />{pending.length} Pending
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="max-h-64 overflow-y-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50 sticky top-0">
+                  <tr>
+                    {["Student", "Student ID", "Amount", "Status"].map((col) => (
+                      <th key={col} className="px-4 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-wide border-b border-gray-100">{col}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {collection.payments.map((p) => (
+                    <tr key={p.id} className={p.status === "Pending" ? "bg-amber-50/30" : "hover:bg-gray-50"}>
+                      <td className="px-4 py-2 text-[#001A4D] text-sm font-medium">{p.name}</td>
+                      <td className="px-4 py-2 text-gray-500 text-xs font-mono">{p.studentId}</td>
+                      <td className="px-4 py-2 text-sm font-bold text-gray-700">
+                        {p.status === "Paid" ? formatCurrency(p.amount) : "—"}
+                      </td>
+                      <td className="px-4 py-2">
+                        <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${
+                          p.status === "Paid" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
+                        }`}>
+                          {p.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div className="px-5 py-4 border-t border-gray-200 flex gap-3 flex-shrink-0">
+          <button onClick={onClose} className="flex-1 py-2.5 border border-gray-300 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-50 cursor-pointer">
+            Close
+          </button>
+          {alreadyTransferred ? (
+            <div className="flex-1 py-2.5 bg-green-50 border border-green-200 text-green-700 rounded-xl text-sm font-bold text-center flex items-center justify-center gap-2 select-none">
+              <CheckCircle className="w-4 h-4" />
+              Transferred to Treasury
+            </div>
+          ) : totalCollected <= 0 ? (
+            <div className="flex-1 py-2.5 bg-gray-100 text-gray-400 rounded-xl text-sm font-medium text-center flex items-center justify-center gap-2 select-none">
+              No Collected Cash to Transfer
+            </div>
+          ) : isPast ? (
+            <div className="flex-1 py-2.5 bg-amber-50 text-amber-700 rounded-xl text-sm font-medium text-center flex items-center justify-center gap-2 select-none">
+              Read-Only Past Semester
+            </div>
+          ) : (
+            <button
+              onClick={() => { onTransfer(); onClose(); }}
+              className="flex-1 py-2.5 bg-green-600 text-white rounded-xl text-sm font-bold hover:bg-green-700 transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+            >
+              <ArrowDownLeft className="w-4 h-4" />
+              Transfer {formatCurrency(totalCollected)} to Club Treasury
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function OrgCollectionsTab({
+  isPast,
+  organizationId,
+  organizationName,
+  semesterId,
+  officerStudentId,
+}: {
+  isPast: boolean;
+  organizationId: string;
+  organizationName: string;
+  semesterId: string;
+  officerStudentId: string;
+}) {
+  const { data: collections, loading } = useOrgCollectionsStream(organizationId, semesterId);
+  const [viewCollection, setViewCollection] = useState<StudentEventCollectionGroup | null>(null);
+  const [isTransferring, setIsTransferring] = useState(false);
+
+  const handleTransfer = async (item: StudentEventCollectionGroup) => {
+    setIsTransferring(true);
+    try {
+      const res = await transferCollectionGroupToLedger({
+        collectionGroupId: item.id,
+        eventId: item.eventId !== 'unassigned' ? item.eventId : null,
+        type: item.type,
+        organizationId,
+        targetLedger: 'org',
+        semesterId: semesterId !== 'all' ? semesterId : null,
+        recordedByUid: officerStudentId,
+        collectionName: item.eventName,
+      });
+
+      if (res.transferredCount > 0) {
+        toast.success(`Transferred ${formatCurrency(res.transferredAmount)} across ${res.transferredCount} payment(s) to Club Treasury.`);
+      } else {
+        toast.info('No pending paid collections available to transfer.');
+      }
+    } catch (err: any) {
+      console.error('Failed to transfer collection to organization ledger:', err);
+      toast.error(err?.message || 'Failed to transfer collection.');
+    } finally {
+      setIsTransferring(false);
+    }
+  };
+
+  const pendingTransferTotal = collections
+    .filter((c) => !c.transferredToBudget)
+    .reduce((s, c) => s + (c.untransferredAmount || 0), 0);
+
+  return (
+    <div className="space-y-4">
+      {/* Informational banner */}
+      <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
+        <Info className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+        <div>
+          <p className="text-amber-900 font-bold text-sm">Centralized Club Collections & Treasury Transfer</p>
+          <p className="text-amber-800 text-xs mt-0.5 leading-relaxed">
+            All student collections (Membership Dues, Event Fees, and Event Attendance Fines) recorded in Attendance Logs or Finance Center appear here. Click <strong>Transfer</strong> to atomically credit the collected cash into your Club Budget Ledger.
+          </p>
+        </div>
+      </div>
+
+      <div className="bg-white border border-[#E0E0E0] rounded-xl overflow-hidden shadow-xs">
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+          <div className="border-l-4 border-[#0E4EBD] pl-3">
+            <h3 className="text-[#001A4D] font-bold text-base">Club Payable Collections</h3>
+            <p className="text-gray-500 text-xs mt-0.5">Membership Dues, Event Fees, and Event Fines</p>
+          </div>
+          {pendingTransferTotal > 0 && !isPast && (
+            <div className="px-3 py-1.5 bg-amber-100 text-amber-800 rounded-lg text-xs font-bold flex items-center gap-1.5">
+              <Clock className="w-4 h-4 text-amber-600" />
+              Pending Transfer: {formatCurrency(pendingTransferTotal)}
+            </div>
+          )}
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gray-50">
+              <tr>
+                {["Collection Name", "Type", "Assigned / Student", "Students", "Paid", "Collected (₱)", "Status", "Action"].map((col) => (
+                  <th key={col} className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide border-b border-[#E0E0E0]">
+                    {col}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {loading ? (
+                <tr>
+                  <td colSpan={8} className="px-4 py-8 text-center text-gray-500 text-sm">
+                    Loading student collections...
+                  </td>
+                </tr>
+              ) : collections.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-4 py-8 text-center text-gray-500 text-sm">
+                    No student collections found for this organization.
+                  </td>
+                </tr>
+              ) : (
+                collections.map((c) => {
+                  const paid = c.payments.filter((p) => p.status === "Paid");
+                  const totalCollected = c.totalCollected || paid.reduce((s, p) => s + p.amount, 0);
+                  const pct = c.totalStudents > 0 ? Math.round((paid.length / c.totalStudents) * 100) : 0;
+
+                  const typeBadge =
+                    c.type === "membership_due"
+                      ? "bg-purple-100 text-purple-700"
+                      : c.type === "org_fine"
+                      ? "bg-rose-100 text-rose-700"
+                      : "bg-blue-100 text-blue-700";
+
+                  const typeName =
+                    c.type === "membership_due"
+                      ? "Membership Due"
+                      : c.type === "org_fine"
+                      ? "Event Fine"
+                      : "Event Fee";
+
+                  return (
+                    <tr key={c.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-4 py-3">
+                        <p className="text-[#001A4D] font-medium text-sm">{c.eventName}</p>
+                        <p className="text-gray-400 text-xs">{c.eventDate}</p>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-0.5 text-xs rounded-md font-semibold ${typeBadge}`}>
+                          {typeName}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-gray-700 text-sm font-medium">
+                        {formatCurrency(c.payablePerStudent)}
+                      </td>
+                      <td className="px-4 py-3 text-gray-600 text-sm">{c.totalStudents}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <div className="h-1.5 w-16 bg-gray-100 rounded-full overflow-hidden">
+                            <div className="h-full bg-green-500 rounded-full" style={{ width: `${pct}%` }} />
+                          </div>
+                          <span className="text-green-600 text-sm font-medium">{paid.length}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-green-700 font-bold text-sm">{formatCurrency(totalCollected)}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        {c.transferredToBudget ? (
+                          <span className="flex items-center gap-1 text-xs text-green-700 bg-green-100 px-2 py-1 rounded-full font-medium w-fit whitespace-nowrap">
+                            <CheckCircle className="w-3 h-3" />
+                            Transferred {c.transferredDate}
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1 text-xs text-amber-700 bg-amber-100 px-2 py-1 rounded-full font-medium w-fit whitespace-nowrap">
+                            <Clock className="w-3 h-3" />
+                            Pending Transfer
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setViewCollection(c)}
+                            className="flex items-center gap-1 px-2.5 py-1.5 border border-blue-300 text-blue-600 text-xs rounded-lg font-medium hover:bg-blue-50 transition-colors cursor-pointer whitespace-nowrap"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            Details
+                          </button>
+                          {!c.transferredToBudget && totalCollected > 0 && !isPast && (
+                            <button
+                              onClick={() => handleTransfer(c)}
+                              disabled={isTransferring}
+                              className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-xs rounded-lg font-bold hover:bg-green-700 transition-colors cursor-pointer shadow-xs disabled:opacity-50 whitespace-nowrap"
+                            >
+                              <ArrowDownLeft className="w-3.5 h-3.5" />
+                              Transfer
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {viewCollection && (
+        <OrgCollectionDetailModal
+          collection={viewCollection}
+          alreadyTransferred={viewCollection.transferredToBudget}
+          isPast={isPast}
+          onClose={() => setViewCollection(null)}
+          onTransfer={() => {
+            handleTransfer(viewCollection);
+            setViewCollection(null);
+          }}
         />
       )}
     </div>
@@ -576,9 +976,9 @@ function StudentPayablesTab({
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setShowGenerateDues(true)}
-                className="px-3.5 py-2 bg-[#83358E] text-white rounded-lg text-xs font-bold hover:bg-[#6D2A78] transition-colors flex items-center gap-1.5"
+                className="px-3.5 py-2 bg-[#0E4EBD] text-white rounded-lg text-xs font-bold hover:bg-[#0A3D94] transition-colors flex items-center gap-1.5"
               >
-                <Coins className="w-4 h-4" />
+                <Coins className="w-4 h-4 text-[#FFD41C]" />
                 Generate Membership Dues
               </button>
               <button
@@ -597,7 +997,7 @@ function StudentPayablesTab({
             { label: "Total Payables Assigned", value: formatCurrency(totalAssigned), color: "text-[#001A4D]" },
             { label: "Total Collected", value: formatCurrency(totalCollected), color: "text-green-600" },
             { label: "Total Outstanding", value: formatCurrency(totalOutstanding), color: "text-red-600" },
-            { label: "Collection Rate", value: `${collectionRate}%`, color: "text-[#83358E]" },
+            { label: "Collection Rate", value: `${collectionRate}%`, color: "text-[#0E4EBD]" },
           ].map((s) => (
             <div key={s.label} className="px-5 first:pl-0 last:pr-0 text-center">
               <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
@@ -610,7 +1010,7 @@ function StudentPayablesTab({
             <p className="text-gray-500 text-xs">{collectionRate}% of total payables collected this semester</p>
           </div>
           <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
-            <div className="h-full bg-[#83358E] rounded-full" style={{ width: `${collectionRate}%` }} />
+            <div className="h-full bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] rounded-full" style={{ width: `${collectionRate}%` }} />
           </div>
         </div>
       </div>
@@ -622,7 +1022,7 @@ function StudentPayablesTab({
             key={key}
             onClick={() => setSubTab(key)}
             className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-              subTab === key ? "border-[#83358E] text-[#83358E]" : "border-transparent text-gray-500 hover:text-gray-700"
+              subTab === key ? "border-[#001A4D] text-[#001A4D] font-bold" : "border-transparent text-gray-500 hover:text-gray-700"
             }`}
           >
             {label}
@@ -644,12 +1044,12 @@ function StudentPayablesTab({
               placeholder="Search member by name or student ID..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] focus:border-transparent outline-none"
+              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD] focus:border-transparent outline-none"
             />
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] focus:border-transparent outline-none"
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD] focus:border-transparent outline-none"
             >
               <option value="All">All Status</option>
               <option value="Paid">Fully Paid</option>
@@ -775,13 +1175,13 @@ function StudentPayablesTab({
                     <p className="text-[#001A4D] font-bold text-sm truncate" title={pt.label}>{pt.label}</p>
                     <span className="px-2 py-0.5 bg-blue-50 text-blue-700 text-xs rounded font-medium capitalize">{pt.type}</span>
                   </div>
-                  <p className="text-[#83358E] font-bold text-lg">{formatCurrency(pt.totalAssigned)}</p>
+                  <p className="text-[#0E4EBD] font-bold text-lg">{formatCurrency(pt.totalAssigned)}</p>
                   <div className="flex justify-between text-xs mt-1 mb-2">
                     <span className="text-green-600">{formatCurrency(pt.collected)} collected</span>
                     <span className="text-red-600">{formatCurrency(pt.outstanding)} outstanding</span>
                   </div>
                   <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mb-2">
-                    <div className="h-full bg-[#83358E]" style={{ width: `${pct}%` }} />
+                    <div className="h-full bg-[#0E4EBD]" style={{ width: `${pct}%` }} />
                   </div>
                   <div className="flex items-center justify-between">
                     <p className="text-gray-400 text-xs">{pt.memberCount} member(s)</p>
@@ -935,25 +1335,25 @@ function LiquidationTab({
 
   return (
     <div className="space-y-4">
-      <div className="p-4 bg-[#F3E8FF] border border-[#83358E]/30 rounded-xl">
+      <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
         <div className="flex items-start gap-2">
-          <AlertCircle className="w-4 h-4 text-[#83358E] flex-shrink-0 mt-0.5" />
-          <p className="text-[#83358E] text-sm">
+          <AlertCircle className="w-4 h-4 text-[#0E4EBD] flex-shrink-0 mt-0.5" />
+          <p className="text-blue-900 text-sm">
             Liquidation reports must account for budget items in your Club Budget Plan. The SAO Adviser will cross-reference your liquidations against your approved budget ceiling.
           </p>
         </div>
       </div>
       <div className="bg-white border border-[#E0E0E0] rounded-xl overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <div className="border-l-4 border-[#83358E] pl-3">
+          <div className="border-l-4 border-[#0E4EBD] pl-3">
             <h3 className="text-[#001A4D] font-bold text-sm">Liquidation Reports</h3>
           </div>
           {!isPast && (
             <button
               onClick={handleOpenCreate}
-              className="px-3 py-1.5 bg-[#83358E] text-white text-xs rounded-lg flex items-center gap-1.5 font-medium hover:bg-[#6D2A78] transition-colors"
+              className="px-3 py-1.5 bg-[#001A4D] text-white text-xs rounded-lg flex items-center gap-1.5 font-medium hover:bg-[#002B7F] transition-colors"
             >
-              <Plus className="w-3.5 h-3.5" />
+              <Plus className="w-3.5 h-3.5 text-[#FFD41C]" />
               New Liquidation Report
             </button>
           )}
@@ -990,14 +1390,14 @@ function LiquidationTab({
                     <td className="px-4 py-3 text-[#001A4D] font-bold text-sm">{l.eventTitle}</td>
                     <td className="px-4 py-3 text-gray-500 text-sm">{submittedDate}</td>
                     <td className="px-4 py-3 text-gray-700 font-semibold text-sm">{formatCurrency(l.allocatedBudget)}</td>
-                    <td className="px-4 py-3 text-[#83358E] font-bold text-sm">{formatCurrency(l.totalActualSpending)}</td>
+                    <td className="px-4 py-3 text-[#001A4D] font-bold text-sm">{formatCurrency(l.totalActualSpending)}</td>
                     <td className="px-4 py-3">{statusBadge(l.status)}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         {l.status === 'approved' && (
                           <button
                             onClick={() => setExportReport(l)}
-                            className="text-[#83358E] hover:underline text-xs flex items-center gap-1 font-bold cursor-pointer"
+                            className="text-[#0E4EBD] hover:underline text-xs flex items-center gap-1 font-bold cursor-pointer"
                           >
                             <FileSpreadsheet className="w-3.5 h-3.5 text-[#FFC107]" /> Export
                           </button>
@@ -1011,7 +1411,7 @@ function LiquidationTab({
                         {!isPast && (l.status === 'draft' || l.status === 'returned') && (
                           <button
                             onClick={() => handleOpenEdit(l)}
-                            className="text-[#83358E] hover:underline text-xs flex items-center gap-1 font-bold cursor-pointer"
+                            className="text-[#0E4EBD] hover:underline text-xs flex items-center gap-1 font-bold cursor-pointer"
                           >
                             <Edit3 className="w-3.5 h-3.5" /> Edit
                           </button>
@@ -1065,7 +1465,7 @@ function LiquidationTab({
                 </div>
                 <div>
                   <div className="text-xs text-gray-500">Actual Spending</div>
-                  <div className="font-bold text-sm text-[#83358E]">
+                  <div className="font-bold text-sm text-[#001A4D]">
                     {formatCurrency(viewingDetailReport.totalActualSpending)}
                   </div>
                 </div>
@@ -1076,6 +1476,30 @@ function LiquidationTab({
                   </div>
                 </div>
               </div>
+
+              {viewingDetailReport.status === 'approved' && (
+                <div className={`p-3 rounded-xl border text-xs flex items-center gap-2.5 ${
+                  viewingDetailReport.surplusOrDeficit > 0
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                    : viewingDetailReport.surplusOrDeficit < 0
+                    ? 'bg-rose-50 border-rose-200 text-rose-900'
+                    : 'bg-blue-50 border-blue-200 text-blue-900'
+                }`}>
+                  <CheckCircle className="w-4 h-4 flex-shrink-0 text-emerald-600" />
+                  <div>
+                    <span className="font-bold block">
+                      {viewingDetailReport.surplusOrDeficit > 0
+                        ? `✓ Treasury Surplus Refund: +${formatCurrency(viewingDetailReport.surplusOrDeficit)} credited to Club Treasury`
+                        : viewingDetailReport.surplusOrDeficit < 0
+                        ? `⚠ Treasury Deficit Overspend: −${formatCurrency(Math.abs(viewingDetailReport.surplusOrDeficit))} debited from Club Treasury`
+                        : '✓ Budget Fully Balanced: Spent exactly the allocated amount'}
+                    </span>
+                    <span className="text-[11px] opacity-80">
+                      Approved by SAO Adviser and automatically reconciled with your organization budget ledger.
+                    </span>
+                  </div>
+                </div>
+              )}
 
               {viewingDetailReport.status === 'returned' && viewingDetailReport.returnRemarks && (
                 <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-900 font-medium space-y-1">
@@ -1090,7 +1514,7 @@ function LiquidationTab({
                   <div key={idx} className="p-3 border border-gray-200 rounded-lg text-xs space-y-1.5 bg-gray-50/50">
                     <div className="flex items-center justify-between font-bold text-gray-900">
                       <span>{item.description} ({item.category})</span>
-                      <span className="text-[#83358E]">Actual Cost: {formatCurrency(item.totalCost)}</span>
+                      <span className="text-[#001A4D]">Actual Cost: {formatCurrency(item.totalCost)}</span>
                     </div>
 
                     <div className="flex flex-wrap items-center justify-between text-gray-600 gap-2">
@@ -1146,7 +1570,7 @@ function LiquidationTab({
                       setExportReport(viewingDetailReport);
                       setViewingDetailReport(null);
                     }}
-                    className="px-4 py-2 bg-gradient-to-r from-[#83358E] to-[#001A4D] text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-sm"
+                    className="px-4 py-2 bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-sm"
                   >
                     <FileSpreadsheet className="w-4 h-4 text-[#FFC107]" /> Export Liquidation Report
                   </button>
@@ -1186,7 +1610,7 @@ function LiquidationTab({
 function SemesterEndedScreen({ onViewPast, onStartNew }: { onViewPast: () => void; onStartNew: () => void }) {
   return (
     <div className="min-h-screen bg-white flex flex-col items-center justify-center px-8">
-      <div className="w-[120px] h-[120px] bg-gradient-to-br from-[#001A4D] to-[#83358E] rounded-full flex items-center justify-center mb-6">
+      <div className="w-[120px] h-[120px] bg-gradient-to-br from-[#001A4D] to-[#0E4EBD] rounded-full flex items-center justify-center mb-6">
         <RefreshCw className="w-16 h-16 text-[#FFD41C]" style={{ animation: "spin 6s linear infinite" }} />
       </div>
       <h1 className="text-[#001A4D] font-bold text-3xl mb-2">Semester Has Ended</h1>
@@ -1202,10 +1626,10 @@ function SemesterEndedScreen({ onViewPast, onStartNew }: { onViewPast: () => voi
           </button>
         </div>
         <div className="bg-white border border-[#E0E0E0] rounded-2xl p-6 text-center">
-          <ArrowRight className="w-10 h-10 text-[#83358E] mx-auto mb-3" />
-          <p className="text-[#83358E] font-bold text-base mb-1">Start New Semester</p>
+          <ArrowRight className="w-10 h-10 text-[#0E4EBD] mx-auto mb-3" />
+          <p className="text-[#001A4D] font-bold text-base mb-1">Start New Semester</p>
           <p className="text-gray-500 text-sm mb-4">Begin working in 1st Semester A.Y. 2026–2027.</p>
-          <button onClick={onStartNew} className="w-full py-2.5 bg-[#83358E] text-white rounded-lg text-sm font-medium hover:bg-[#6D2A78] transition-colors">
+          <button onClick={onStartNew} className="w-full py-2.5 bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
             Go to New Semester Dashboard
           </button>
         </div>
@@ -1218,8 +1642,8 @@ function SemesterEndedScreen({ onViewPast, onStartNew }: { onViewPast: () => voi
 function SemesterSetupChecklist({ onContinue }: { onContinue: () => void }) {
   const [done, setDone] = useState<Record<string, boolean>>({});
   const items = [
-    { id: "officers", icon: Shield, color: "text-[#83358E]", bg: "bg-[#F3E8FF]", label: "Confirm Organization Officers", desc: "Verify that your organization's officer roster is up to date for this semester.", action: "Update Officers" },
-    { id: "budget", icon: Wallet, color: "text-blue-600", bg: "bg-blue-50", label: "Set Club Budget Plan", desc: "Plan your organization's expenditures for the new semester.", action: "Set Budget Plan" },
+    { id: "officers", icon: Shield, color: "text-[#0E4EBD]", bg: "bg-blue-50", label: "Confirm Organization Officers", desc: "Verify that your organization's officer roster is up to date for this semester.", action: "Update Officers" },
+    { id: "budget", icon: Wallet, color: "text-[#0E4EBD]", bg: "bg-blue-50", label: "Set Club Budget Plan", desc: "Plan your organization's expenditures for the new semester.", action: "Set Budget Plan" },
     { id: "dues", icon: Coins, color: "text-amber-600", bg: "bg-amber-50", label: "Set Up Member Dues", desc: "Configure the dues and registration fees for your members this semester.", action: "Set Up Dues" },
     { id: "assign", icon: Users, color: "text-green-600", bg: "bg-green-50", label: "Assign Dues to Members", desc: "Once dues are configured, assign them to your active members.", action: "Assign Dues", disabled: !done["dues"] },
   ];
@@ -1256,7 +1680,7 @@ function SemesterSetupChecklist({ onContinue }: { onContinue: () => void }) {
                       ? "border-green-200 text-green-600 bg-green-50"
                       : item.disabled
                       ? "border-gray-200 text-gray-400 cursor-not-allowed"
-                      : `border-[#83358E] text-[#83358E] hover:bg-[#83358E]/5`
+                      : `border-[#0E4EBD] text-[#0E4EBD] hover:bg-blue-50`
                   }`}
                 >
                   {done[item.id] ? "✓ Done" : item.action}
@@ -1270,7 +1694,7 @@ function SemesterSetupChecklist({ onContinue }: { onContinue: () => void }) {
               <p className="text-gray-500 text-xs">{doneCount} of {items.length} setup steps completed</p>
             </div>
             <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-              <div className="h-full bg-[#83358E] rounded-full transition-all" style={{ width: `${(doneCount / items.length) * 100}%` }} />
+              <div className="h-full bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] rounded-full transition-all" style={{ width: `${(doneCount / items.length) * 100}%` }} />
             </div>
           </div>
         </div>
@@ -1280,7 +1704,7 @@ function SemesterSetupChecklist({ onContinue }: { onContinue: () => void }) {
             onClick={onContinue}
             disabled={doneCount === 0}
             className={`w-full py-3 rounded-xl text-sm font-bold mb-2 transition-colors ${
-              doneCount > 0 ? "bg-[#83358E] text-white hover:bg-[#6D2A78]" : "bg-gray-100 text-gray-400 cursor-not-allowed"
+              doneCount > 0 ? "bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] text-white hover:opacity-90" : "bg-gray-100 text-gray-400 cursor-not-allowed"
             }`}
           >
             Continue to Dashboard →
@@ -1367,14 +1791,14 @@ export default function FinanceCenter() {
           <h2 className="text-2xl font-bold text-[#001A4D]">Finance Center</h2>
           <p className="text-gray-500 text-sm">
             Finance &rsaquo; {activeTab === "budget" ? "Budget Tracker" : activeTab === "payables" ? "Student Payables" : "Liquidation Reports"}
-            {activeOrgName && <span className="font-semibold ml-2 text-[#83358E]">({activeOrgName})</span>}
+            {activeOrgName && <span className="font-semibold ml-2 text-[#0E4EBD]">({activeOrgName})</span>}
           </p>
         </div>
         <div className="flex items-center gap-3">
           <select
             value={selectedSemId}
             onChange={(e) => setSelectedSemId(e.target.value)}
-            className="px-4 py-2 border border-[#E0E0E0] rounded-lg text-sm bg-white focus:ring-2 focus:ring-[#83358E] focus:border-transparent outline-none"
+            className="px-4 py-2 border border-[#E0E0E0] rounded-lg text-sm bg-white focus:ring-2 focus:ring-[#0E4EBD] focus:border-transparent outline-none"
           >
             <option value="all">All Semesters</option>
             {availableSemesters.map((s) => (
@@ -1429,16 +1853,21 @@ export default function FinanceCenter() {
         </div>
       )}
 
-      {/* Three-Tab Area */}
+      {/* Four-Tab Area */}
       <div>
-        <div className="flex border-b border-gray-200 mb-4">
-          {([["budget", "Budget Tracker"], ["payables", "Student Payables"], ["liquidation", "Liquidation Reports"]] as const).map(([key, label]) => (
+        <div className="flex border-b border-gray-200 mb-4 overflow-x-auto">
+          {([
+            ["budget", "Budget Tracker"],
+            ["collections", "Student Collections"],
+            ["payables", "Student Payables"],
+            ["liquidation", "Liquidation Reports"],
+          ] as const).map(([key, label]) => (
             <button
               key={key}
               onClick={() => setActiveTab(key)}
-              className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors ${
+              className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap cursor-pointer ${
                 activeTab === key
-                  ? "bg-[#001A4D] text-white border-[#FFD41C] -mb-px rounded-t-lg"
+                  ? "bg-[#001A4D] text-white border-[#FFD41C] -mb-px rounded-t-lg font-bold"
                   : "border-transparent text-gray-500 hover:text-gray-700"
               }`}
             >
@@ -1454,6 +1883,16 @@ export default function FinanceCenter() {
             semesterId={selectedSemId}
             organizationId={activeOrgId}
             organizationName={activeOrgName}
+            officerStudentId={officerStudentId}
+          />
+        )}
+
+        {activeTab === "collections" && (
+          <OrgCollectionsTab
+            isPast={isPast}
+            organizationId={activeOrgId}
+            organizationName={activeOrgName}
+            semesterId={selectedSemId}
             officerStudentId={officerStudentId}
           />
         )}

@@ -20,6 +20,8 @@ export interface AttendanceRecord {
 }
 
 export interface EnrichedAttendanceRecord extends AttendanceRecord {
+  studentAuthUid?: string;
+  studentSchoolId?: string;
   departmentId?: string;
   departmentName?: string;
   departmentCode?: string;

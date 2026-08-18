@@ -1,7 +1,14 @@
 import { Timestamp } from 'firebase/firestore';
 
 export type TransactionType = 'income' | 'expense';
-export type TransactionSource = 'allocation' | 'student_collection' | 'manual_expense' | 'carry_over';
+export type TransactionSource =
+  | 'allocation'
+  | 'student_collection'
+  | 'manual_expense'
+  | 'carry_over'
+  | 'event_budget'
+  | 'liquidation_surplus'
+  | 'liquidation_deficit';
 
 export interface SaoLedgerDocument {
   id: string;

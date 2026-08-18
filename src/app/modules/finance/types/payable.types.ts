@@ -41,6 +41,7 @@ export interface PayableDocument {
   qrTicketUnlocked?: boolean;              // Explicit toggle: true = student event QR ticket unlocked for gate scan
   transferredToBudget?: boolean;           // True if event fee collection transferred to SAO budget
   transferredAt?: Timestamp | null;
+  fineViolations?: FineViolationDetail[];  // Granular breakdown of session fine violations
 
   // ─── Audit ───
   createdBy: string;
@@ -48,13 +49,57 @@ export interface PayableDocument {
   updatedAt: Timestamp;
 }
 
+export interface FineViolationDetail {
+  sessionId: string;
+  sessionTitle: string;
+  violationType: 'time_in_absent' | 'time_in_late' | 'time_out_absent';
+  amount: number;
+  description: string;
+}
+
+export interface SessionFineRule {
+  sessionId: string;
+  sessionTitle: string;
+  timeInAbsentAmount: number;     // ₱ fine for absent at time-in
+  timeInLateAmount: number;       // ₱ fine for late check-in
+  timeOutAbsentAmount: number;    // ₱ fine for missing time-out (if session has timeout)
+  enableTimeInAbsent: boolean;
+  enableTimeInLate: boolean;
+  enableTimeOutAbsent: boolean;
+}
+
+export interface GenerateEventFinesPayload {
+  eventId: string;
+  eventTitle: string;
+  semesterId: string;
+  rules: SessionFineRule[];
+  createdBy: string;
+  isOfficer: boolean;
+  hostingOrgId?: string | null;
+  hostingOrgName?: string | null;
+  dueDate?: Date | Timestamp | string | null;
+  studentViolations?: Array<{
+    studentId: string;
+    studentName: string;
+    studentSchoolId?: string;
+    violations: FineViolationDetail[];
+    totalFine: number;
+  }>;
+  rawAttendanceRecords?: any[];
+}
+
 export interface StudentEventCollectionGroup {
   id: string;
   eventId: string;
   eventName: string;
   eventDate: string;
+  type?: PayableType;
+  organizationId?: string | null;
   payablePerStudent: number;
   totalStudents: number;
+  totalAssigned?: number;
+  totalCollected?: number;
+  untransferredAmount?: number;
   transferredToBudget: boolean;
   transferredDate?: string;
   payments: Array<{
@@ -81,6 +126,7 @@ export interface CreatePayablePayload {
   assignedAmount: number;
   dueDate?: Date | Timestamp | null;
   createdBy: string;
+  fineViolations?: FineViolationDetail[];
 }
 
 export interface GenerateDuesPayload {

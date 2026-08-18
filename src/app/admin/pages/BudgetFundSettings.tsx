@@ -19,12 +19,13 @@ import {
   FileText,
   ChevronRight,
 } from "lucide-react";
+import { toast } from "sonner";
 import { useSemesters } from "../../modules/academic/hooks/useAcademicStream";
 import { useSaoLedger } from "../../modules/finance/hooks/useFinanceStream";
 import { useAllEventPayablesStream } from "../../modules/finance/hooks/usePayableStream";
 import { useAllEvents } from "../../modules/events/hooks/useEventStream";
 import { addLedgerTransaction } from "../../modules/finance/services/finance.service";
-import { markEventPayablesTransferred } from "../../modules/finance/services/payable.service";
+import { transferCollectionGroupToLedger } from "../../modules/finance/services/payable.service";
 import type { SaoLedgerDocument, TransactionSource, TransactionType } from "../../modules/finance/types/finance.types";
 import type { StudentEventCollectionGroup } from "../../modules/finance/types/payable.types";
 import { Timestamp } from "firebase/firestore";
@@ -299,7 +300,7 @@ function CollectionDetailModal({
         </div>
 
         <div className="px-5 py-4 border-t border-gray-200 flex gap-3">
-          <button onClick={onClose} className="flex-1 py-2.5 border border-gray-300 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-50">
+          <button onClick={onClose} className="flex-1 py-2.5 border border-gray-300 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-50 cursor-pointer">
             Close
           </button>
           {alreadyTransferred ? (
@@ -307,10 +308,14 @@ function CollectionDetailModal({
               <CheckCircle className="w-4 h-4" />
               Transferred to Budget
             </div>
+          ) : totalCollected <= 0 ? (
+            <div className="flex-1 py-2.5 bg-gray-100 text-gray-400 rounded-xl text-sm font-medium text-center flex items-center justify-center gap-2 select-none">
+              No Collected Cash to Transfer
+            </div>
           ) : (
             <button
               onClick={() => { onTransfer(); onClose(); }}
-              className="flex-1 py-2.5 bg-green-600 text-white rounded-xl text-sm font-bold hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
+              className="flex-1 py-2.5 bg-green-600 text-white rounded-xl text-sm font-bold hover:bg-green-700 transition-colors flex items-center justify-center gap-2 cursor-pointer"
             >
               <ArrowDownLeft className="w-4 h-4" />
               Transfer {formatCurrency(totalCollected)} to School Budget
@@ -411,12 +416,18 @@ const sourceBadgeMap: Record<TransactionSource, string> = {
   student_collection: "bg-green-100 text-green-700",
   manual_expense: "bg-red-100 text-red-600",
   carry_over: "bg-blue-50 text-[#001A4D] font-bold border border-blue-100",
+  event_budget: "bg-purple-100 text-purple-700",
+  liquidation_surplus: "bg-emerald-100 text-emerald-700",
+  liquidation_deficit: "bg-rose-100 text-rose-700",
 };
 const sourceLabel: Record<TransactionSource, string> = {
   allocation: "School Allocation",
   student_collection: "Student Collection",
   manual_expense: "SAO Expense",
   carry_over: "Carry-Over",
+  event_budget: "Event Budget Allocation",
+  liquidation_surplus: "Liquidation Surplus Refund",
+  liquidation_deficit: "Liquidation Deficit Expense",
 };
 
 // ─── Main Page ─────────────────────────────────────────────────────────────────
@@ -446,18 +457,28 @@ export function BudgetFundSettings() {
   }, [dbEvents]);
 
   // Calculate dynamic balances for the ledger
-  const transactions = rawTransactions.map((tx, idx, arr) => {
-    const runningBalance = arr.slice(0, idx + 1).reduce((s, curr) => {
-      return curr.type === "income" ? s + curr.amount : s - curr.amount;
-    }, 0);
-    return { ...tx, balance: runningBalance };
-  });
+  const transactions = useMemo(() => {
+    return rawTransactions.map((tx, idx, arr) => {
+      const runningBalance = arr.slice(0, idx + 1).reduce((s, curr) => {
+        return curr.type === "income" ? s + curr.amount : s - curr.amount;
+      }, 0);
+      return { ...tx, balance: runningBalance };
+    });
+  }, [rawTransactions]);
 
-  const filteredTx = transactions.filter((t) => {
-    const passType = txFilter === "all" ? true : t.type === txFilter;
-    const passSem = semesterFilter === "all" ? true : t.semesterId === semesterFilter;
-    return passType && passSem;
-  });
+  const filteredTx = useMemo(() => {
+    return transactions.filter((t) => {
+      const typeLower = (t.type || '').toLowerCase();
+      const passType =
+        txFilter === "all"
+          ? true
+          : txFilter === "income"
+          ? typeLower === "income"
+          : typeLower === "expense";
+      const passSem = semesterFilter === "all" ? true : t.semesterId === semesterFilter;
+      return passType && passSem;
+    });
+  }, [transactions, txFilter, semesterFilter]);
 
   // Calculate totals based on the filtered transactions view
   const currentBalance = transactions[transactions.length - 1]?.balance ?? 0;
@@ -479,24 +500,25 @@ export function BudgetFundSettings() {
   };
 
   const handleTransferCollection = async (collectionItem: StudentEventCollectionGroup) => {
-    const totalCollected = collectionItem.payments
-      .filter((p) => p.status === "Paid")
-      .reduce((s, p) => s + p.amount, 0);
+    try {
+      const res = await transferCollectionGroupToLedger({
+        collectionGroupId: collectionItem.id,
+        eventId: collectionItem.eventId !== 'unassigned' ? collectionItem.eventId : null,
+        type: collectionItem.type,
+        targetLedger: 'sao',
+        semesterId: activeSemester?.id || null,
+        recordedByUid: 'Admin SAO',
+        collectionName: collectionItem.eventName,
+      });
 
-    await handleSaveTransaction({
-      semesterId: activeSemester?.id || null,
-      date: Timestamp.fromDate(new Date()),
-      description: `Student Collections – ${collectionItem.eventName}`,
-      eventId: collectionItem.eventId !== 'unassigned' ? collectionItem.eventId : null,
-      type: "income",
-      source: "student_collection",
-      amount: totalCollected,
-      addedBy: "Admin SAO",
-      collectionId: collectionItem.id,
-    });
-
-    if (collectionItem.eventId && collectionItem.eventId !== 'unassigned') {
-      await markEventPayablesTransferred(collectionItem.eventId);
+      if (res.transferredCount > 0) {
+        toast.success(`Transferred ${formatCurrency(res.transferredAmount)} across ${res.transferredCount} payment(s) to SAO School Budget.`);
+      } else {
+        toast.info('No pending paid collections available to transfer.');
+      }
+    } catch (err: any) {
+      console.error('Failed to transfer collection to school budget:', err);
+      toast.error(err?.message || 'Failed to transfer collection.');
     }
   };
 
@@ -504,127 +526,91 @@ export function BudgetFundSettings() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* ── Header ── */}
       <div className="flex items-start justify-between">
         <div>
           <h2 className="text-2xl font-bold text-[#001A4D]">School Budget & Fund Management</h2>
-          <p className="text-gray-500 text-sm">Settings › Budget & Fund Management</p>
+          <p className="text-gray-500 text-sm">
+            Finance &rsaquo; {tab === "ledger" ? "Budget Tracker" : "Student Collections"}
+          </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-3">
           <button
             onClick={() => setShowAddExpense(true)}
-            className="px-4 py-2.5 border border-red-300 text-red-600 rounded-lg text-sm font-medium flex items-center gap-2 hover:bg-red-50 transition-colors"
+            className="px-4 py-2.5 border border-red-200 text-red-600 hover:bg-red-50 rounded-xl text-sm font-semibold flex items-center gap-2 transition-colors cursor-pointer"
           >
             <ArrowUpRight className="w-4 h-4" />
             Add Expense
           </button>
           <button
             onClick={() => setShowAddBudget(true)}
-            className="px-4 py-2.5 bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] text-white rounded-lg text-sm font-medium flex items-center gap-2 hover:opacity-90 transition-opacity"
+            className="px-4 py-2.5 bg-[#001A4D] hover:bg-[#0E4EBD] text-white rounded-xl text-sm font-semibold flex items-center gap-2 transition-colors shadow-xs cursor-pointer"
           >
-            <Plus className="w-4 h-4" />
-            Add School Budget Allocation
+            <Plus className="w-4 h-4 text-[#FFD41C]" />
+            Add School Budget
           </button>
         </div>
       </div>
 
-      {/* Info banner */}
-      <div className="flex items-start gap-3 p-4 bg-blue-50 border border-blue-200 rounded-xl">
-        <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-        <div>
-          <p className="text-blue-700 font-bold text-sm mb-0.5">SAO School Budget — Independent from Club Budgets</p>
-          <p className="text-gray-700 text-sm">This is the institutional SAO fund managed by the school. Club and organization budgets are entirely self-managed by their own officers. When events collect student payables, you can view the collection detail and transfer the amount into this school budget.</p>
+      {/* ── KPI Summary Cards ── */}
+      <div className="grid grid-cols-4 gap-4">
+        <div className="bg-white border border-[#E0E0E0] rounded-2xl p-5 shadow-xs">
+          <div className="flex items-center justify-between text-gray-500 mb-2">
+            <span className="text-xs font-semibold uppercase tracking-wider">Current Balance</span>
+            <Wallet className="w-5 h-5 text-gray-400" />
+          </div>
+          <p className="text-2xl font-bold text-[#001A4D]">{formatCurrency(currentBalance)}</p>
+          <p className="text-xs text-gray-400 mt-1">Total Available Budget</p>
+        </div>
+
+        <div className="bg-white border border-[#E0E0E0] rounded-2xl p-5 shadow-xs">
+          <div className="flex items-center justify-between text-gray-500 mb-2">
+            <span className="text-xs font-semibold uppercase tracking-wider">Total Income</span>
+            <ArrowDownLeft className="w-5 h-5 text-green-500" />
+          </div>
+          <p className="text-2xl font-bold text-green-600">+{formatCurrency(filteredIncome)}</p>
+          <p className="text-xs text-gray-400 mt-1">Allocations, Collections, Refunds</p>
+        </div>
+
+        <div className="bg-white border border-[#E0E0E0] rounded-2xl p-5 shadow-xs">
+          <div className="flex items-center justify-between text-gray-500 mb-2">
+            <span className="text-xs font-semibold uppercase tracking-wider">Total Expenses</span>
+            <ArrowUpRight className="w-5 h-5 text-red-500" />
+          </div>
+          <p className="text-2xl font-bold text-red-600">−{formatCurrency(filteredExpense)}</p>
+          <p className="text-xs text-gray-400 mt-1">Expenses, Events, Deficits</p>
+        </div>
+
+        <div className="bg-white border border-[#E0E0E0] rounded-2xl p-5 shadow-xs">
+          <div className="flex items-center justify-between text-gray-500 mb-2">
+            <span className="text-xs font-semibold uppercase tracking-wider">Pending Collections</span>
+            <Clock className="w-5 h-5 text-amber-500" />
+          </div>
+          <p className="text-2xl font-bold text-amber-600">{formatCurrency(pendingTotal)}</p>
+          <p className="text-xs text-gray-400 mt-1">{pendingCollections.length} Collection Group(s)</p>
         </div>
       </div>
 
-      {/* Flagship Financial Overview Hero Card (Mobile-Inspired) */}
-      <div className="relative bg-gradient-to-br from-[#001A4D] via-[#002B7F] to-[#0A47B8] rounded-3xl p-6 sm:p-7 text-white overflow-hidden shadow-lg shadow-[#001A4D]/15 border border-blue-900/40">
-        <div className="relative z-10">
-          <div className="flex flex-wrap items-center justify-between gap-3 mb-6 pb-4 border-b border-white/10">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-white/15 backdrop-blur-sm flex items-center justify-center">
-                <Wallet className="w-4 h-4 text-[#FFD41C]" />
-              </div>
-              <div>
-                <span className="text-white/80 font-bold text-xs tracking-wider uppercase">Institutional Financial Overview</span>
-                <p className="text-white/60 text-[11px]">SAO Campus Ledger & Student Collections</p>
-              </div>
-            </div>
-            {pendingCollections.length > 0 ? (
-              <button
-                onClick={() => setTab("collections")}
-                className="px-3.5 py-1 rounded-full bg-[#FFD41C] text-[#001A4D] text-xs font-black tracking-wide flex items-center gap-1.5 shadow-sm hover:opacity-90 transition-opacity cursor-pointer"
-              >
-                <Clock className="w-3.5 h-3.5" />
-                {pendingCollections.length} Pending Transfers
-              </button>
-            ) : (
-              <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-semibold">
-                All Settled
-              </span>
-            )}
-          </div>
-
-          {/* Metric Columns */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-            <div>
-              <p className="text-white/70 text-xs font-medium uppercase tracking-wider mb-1">Current Balance</p>
-              <div className="text-2xl sm:text-3xl font-extrabold font-mono text-[#FFD41C] tracking-tight">
-                {formatCurrency(currentBalance)}
-              </div>
-              <p className="text-white/50 text-[11px] mt-1">Running school fund</p>
-            </div>
-
-            <div>
-              <p className="text-white/70 text-xs font-medium uppercase tracking-wider mb-1">Total Income</p>
-              <div className="text-2xl sm:text-3xl font-extrabold font-mono text-emerald-400 tracking-tight flex items-center gap-1">
-                +{formatCurrency(filteredIncome)}
-              </div>
-              <p className="text-white/50 text-[11px] mt-1">{filteredTx.filter((t) => t.type === "income").length} credit entries</p>
-            </div>
-
-            <div>
-              <p className="text-white/70 text-xs font-medium uppercase tracking-wider mb-1">Total Expenses</p>
-              <div className="text-2xl sm:text-3xl font-extrabold font-mono text-rose-300 tracking-tight">
-                −{formatCurrency(filteredExpense)}
-              </div>
-              <p className="text-white/50 text-[11px] mt-1">{filteredTx.filter((t) => t.type === "expense").length} debit entries</p>
-            </div>
-
-            <div
-              className={`p-3.5 rounded-2xl border transition-all cursor-pointer ${
-                pendingTotal > 0
-                  ? "bg-white/10 border-amber-400/40 hover:bg-white/15"
-                  : "bg-white/5 border-white/10"
-              }`}
-              onClick={() => setTab("collections")}
-            >
-              <p className="text-white/70 text-xs font-medium uppercase tracking-wider mb-1">Pending Transfers</p>
-              <div className={`text-xl sm:text-2xl font-extrabold font-mono tracking-tight ${pendingTotal > 0 ? "text-[#FFD41C]" : "text-white/60"}`}>
-                {formatCurrency(pendingTotal)}
-              </div>
-              <p className="text-white/50 text-[11px] mt-0.5">{pendingCollections.length} events pending</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
+      {/* ── Tabs ── */}
+      <div className="flex border-b border-gray-200 gap-1">
         {([
-          { key: "ledger", label: "Budget Ledger", icon: FileText },
-          { key: "collections", label: "Student Collections", icon: Users, badge: pendingCollections.length },
-        ] as { key: MainTab; label: string; icon: ElementType; badge?: number }[]).map(({ key, label, icon: Icon, badge }) => (
+          { id: "ledger" as MainTab, label: "Budget Tracker" },
+          { id: "collections" as MainTab, label: "Student Collections", badge: pendingCollections.length ? `${pendingCollections.length} pending` : undefined },
+        ]).map(({ id, label, badge }) => (
           <button
-            key={key}
-            onClick={() => setTab(key)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors relative ${tab === key ? "bg-white text-[#001A4D] shadow-sm" : "text-gray-500 hover:text-gray-700"
-              }`}
+            key={id}
+            onClick={() => setTab(id)}
+            className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-all cursor-pointer ${
+              tab === id
+                ? "bg-[#001A4D] text-white border-[#FFD41C] -mb-px rounded-t-xl"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            }`}
           >
-            <Icon className="w-4 h-4" />
             {label}
             {badge ? (
-              <span className="w-4 h-4 bg-amber-500 text-white text-[10px] rounded-full flex items-center justify-center font-bold">
+              <span className={`px-2 py-0.5 text-xs rounded-full font-bold ${
+                tab === id ? "bg-[#FFD41C] text-[#001A4D]" : "bg-amber-100 text-amber-800"
+              }`}>
                 {badge}
               </span>
             ) : null}
@@ -644,7 +630,7 @@ export function BudgetFundSettings() {
               <select
                 value={semesterFilter}
                 onChange={(e) => setSemesterFilter(e.target.value)}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-50 border border-gray-200 text-gray-700 outline-none focus:ring-2 focus:ring-[#0E4EBD]/20"
+                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-50 border border-gray-200 text-gray-700 outline-none focus:ring-2 focus:ring-[#0E4EBD]/20 cursor-pointer"
               >
                 <option value="all">All Semesters</option>
                 {semesters?.map((s) => (
@@ -653,78 +639,92 @@ export function BudgetFundSettings() {
               </select>
               <div className="w-px h-6 bg-gray-200 self-center mx-1"></div>
               {(["all", "income", "expense"] as const).map((f) => (
-                <button key={f} onClick={() => setTxFilter(f)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-colors ${txFilter === f ? "bg-[#001A4D] text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-                    }`}>
+                <button
+                  key={f}
+                  onClick={() => setTxFilter(f)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold capitalize transition-colors cursor-pointer ${
+                    txFilter === f
+                      ? "bg-[#001A4D] text-[#FFD41C] shadow-xs"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  }`}
+                >
                   {f === "all" ? "All" : f === "income" ? "Income +" : "Expenses −"}
                 </button>
               ))}
             </div>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
+          <div className="overflow-x-auto max-h-[520px] overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+            <table className="w-full relative">
+              <thead className="bg-gray-50 sticky top-0 z-10 shadow-xs border-b border-[#E0E0E0]">
                 <tr>
                   {["Date", "Description", "Related Event", "Source", "Amount", "Running Balance", ""].map((col) => (
-                    <th key={col} className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide border-b border-[#E0E0E0]">{col}</th>
+                    <th key={col} className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide bg-gray-50 border-b border-[#E0E0E0]">{col}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {[...filteredTx].reverse().map((tx) => {
-                  const linkedCollection = tx.collectionId
-                    ? collections.find((c) => c.id === tx.collectionId) ?? null
-                    : null;
+                {filteredTx.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-12 text-center text-gray-400 text-sm">
+                      No {txFilter === "all" ? "" : txFilter} transactions found.
+                    </td>
+                  </tr>
+                ) : (
+                  [...filteredTx].reverse().map((tx) => {
+                    const linkedCollection = tx.collectionId
+                      ? collections.find((c) => c.id === tx.collectionId) ?? null
+                      : null;
 
-                  const displayEventName = tx.eventId
-                    ? (eventMap.get(tx.eventId) || tx.eventId)
-                    : (linkedCollection?.eventName ?? null);
+                    const displayEventName = tx.eventId
+                      ? (eventMap.get(tx.eventId) || tx.eventId)
+                      : (linkedCollection?.eventName ?? null);
 
-                  return (
-                    <tr key={tx.id} className={`transition-colors ${tx.source === "student_collection" ? "bg-green-50/40 hover:bg-green-50" : "hover:bg-gray-50"
-                      }`}>
-                      <td className="px-4 py-3 text-gray-500 text-sm whitespace-nowrap">
-                        {formatAppDate(tx.date, "—")}
-                      </td>
-                      <td className="px-4 py-3">
-                        <p className="text-[#001A4D] text-sm font-medium">{tx.description}</p>
-                      </td>
-                      <td className="px-4 py-3 text-gray-700 font-medium text-sm">
-                        {displayEventName ? displayEventName : <span className="text-gray-300">—</span>}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${sourceBadgeMap[tx.source]}`}>
-                          {sourceLabel[tx.source]}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`text-sm font-bold flex items-center gap-1 ${tx.type === "income" ? "text-green-600" : "text-red-500"}`}>
-                          {tx.type === "income" ? <ArrowDownLeft className="w-3.5 h-3.5" /> : <ArrowUpRight className="w-3.5 h-3.5" />}
-                          {tx.type === "income" ? `+${formatCurrency(tx.amount)}` : `−${formatCurrency(tx.amount)}`}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-[#001A4D] font-semibold text-sm">
-                        {formatCurrency(tx.balance)}
-                      </td>
-                      <td className="px-4 py-3">
-                        {linkedCollection && (
-                          <button
-                            onClick={() => setViewCollection(linkedCollection)}
-                            className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-medium whitespace-nowrap"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                            View Details
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
+                    return (
+                      <tr key={tx.id} className={`transition-colors ${tx.source === "student_collection" ? "bg-green-50/40 hover:bg-green-50" : "hover:bg-gray-50"
+                        }`}>
+                        <td className="px-4 py-3 text-gray-500 text-sm whitespace-nowrap">
+                          {formatAppDate(tx.date, "—")}
+                        </td>
+                        <td className="px-4 py-3">
+                          <p className="text-[#001A4D] text-sm font-medium">{tx.description}</p>
+                        </td>
+                        <td className="px-4 py-3 text-gray-700 font-medium text-sm">
+                          {displayEventName ? displayEventName : <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${sourceBadgeMap[tx.source]}`}>
+                            {sourceLabel[tx.source]}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`text-sm font-bold flex items-center gap-1 ${tx.type === "income" ? "text-green-600" : "text-red-500"}`}>
+                            {tx.type === "income" ? <ArrowDownLeft className="w-3.5 h-3.5" /> : <ArrowUpRight className="w-3.5 h-3.5" />}
+                            {tx.type === "income" ? `+${formatCurrency(tx.amount)}` : `−${formatCurrency(tx.amount)}`}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-[#001A4D] font-semibold text-sm">
+                          {formatCurrency(tx.balance)}
+                        </td>
+                        <td className="px-4 py-3">
+                          {linkedCollection && (
+                            <button
+                              onClick={() => setViewCollection(linkedCollection)}
+                              className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-medium whitespace-nowrap cursor-pointer"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              View Details
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
-              <tfoot>
-                <tr className="bg-[#001A4D]">
-                  <td colSpan={4} className="px-4 py-3 text-white font-bold text-sm">Current Balance</td>
-                  <td colSpan={3} className="px-4 py-3 text-[#FFD41C] font-bold text-lg">{formatCurrency(currentBalance)}</td>
+              <tfoot className="sticky bottom-0 z-10">
+                <tr className="bg-[#001A4D] shadow-md">
+                  <td colSpan={4} className="px-4 py-3 text-white font-bold text-sm bg-[#001A4D]">Current Balance</td>
+                  <td colSpan={3} className="px-4 py-3 text-[#FFD41C] font-bold text-lg bg-[#001A4D]">{formatCurrency(currentBalance)}</td>
                 </tr>
               </tfoot>
             </table>
