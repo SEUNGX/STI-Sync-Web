@@ -161,6 +161,7 @@ export default function AttendanceLogs() {
 
           const deptObj = (departments || []).find(d => d.id === matchedStudent?.departmentId || d.code === matchedStudent?.departmentId);
           const courseObj = (courses || []).find(c => c.id === matchedStudent?.courseId || c.code === matchedStudent?.courseCode);
+          const sessionObj = evt.sessions?.find(s => s.id === rec.sessionId);
 
           const isFlagged = rec.status === 'Flagged' || !!rec.flaggedReason;
           const isCheckedOut = rec.checkOut && rec.checkOut !== '—';

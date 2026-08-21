@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { Search, Bell, ChevronDown, LogOut, Settings, User } from "lucide-react";
+import { Search, Bell, ChevronDown, LogOut, Settings, User, Zap } from "lucide-react";
 import { Input } from "../../../components/ui/input";
 import { useAdviserProfile, signOutAdviser } from '../../../modules/auth';
+import { DevDataSeederModal } from '../../../../dev/components/DevDataSeederModal';
 
 interface TopNavProps {
   title: string;
@@ -13,6 +14,7 @@ interface TopNavProps {
 
 export function TopNav({ title, globalSearch, onSearchChange, onLogout, onNavigateSettings }: TopNavProps) {
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showSeederModal, setShowSeederModal] = useState(false);
   const { profile } = useAdviserProfile();
 
   // Initials derived from live profile
@@ -38,7 +40,17 @@ export function TopNav({ title, globalSearch, onSearchChange, onLogout, onNaviga
       <h1 className="text-lg font-bold text-[#001A4D]">{title}</h1>
 
       {/* Right Side */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3">
+        {/* Quick Dev Data Seeder Trigger */}
+        <button
+          onClick={() => setShowSeederModal(true)}
+          title="Open Dev Test Data Seeder"
+          className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-xl text-amber-700 font-bold text-xs transition-all cursor-pointer shadow-2xs"
+        >
+          <Zap className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
+          <span className="hidden sm:inline">Dev Seeder</span>
+        </button>
+
         {/* Search */}
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -123,6 +135,9 @@ export function TopNav({ title, globalSearch, onSearchChange, onLogout, onNaviga
           )}
         </div>
       </div>
+
+      {/* Dev Test Data Seeder Modal */}
+      <DevDataSeederModal isOpen={showSeederModal} onClose={() => setShowSeederModal(false)} />
     </div>
   );
 }
