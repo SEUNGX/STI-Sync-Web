@@ -126,7 +126,7 @@ export function LiquidationExportPreviewModal({
   </Style>
   <Style ss:ID="HeaderStyle">
    <Font ss:FontName="Calibri" ss:Size="11" ss:Bold="1" ss:Color="#FFFFFF"/>
-   <Interior ss:Color="#83358E" ss:Pattern="Solid"/>
+   <Interior ss:Color="#001A4D" ss:Pattern="Solid"/>
    <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
   </Style>
   <Style ss:ID="RowEven">
@@ -229,21 +229,21 @@ export function LiquidationExportPreviewModal({
         {/* Modal Header */}
         <div className="bg-[#001A4D] px-6 py-4 flex items-center justify-between flex-shrink-0 text-white">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-[#83358E] rounded-xl flex items-center justify-center text-white">
-              <FileSpreadsheet className="w-5 h-5" />
+            <div className="w-9 h-9 bg-[#0E4EBD] rounded-xl flex items-center justify-center text-white">
+              <FileSpreadsheet className="w-5 h-5 text-[#FFD41C]" />
             </div>
             <div>
               <h3 className="font-bold text-base text-white">Export Liquidation Report — Interactive Excel Preview</h3>
               <p className="text-xs text-white/70">Inspect financial line items, select export columns, and preview before downloading.</p>
             </div>
           </div>
-          <button onClick={onClose} className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors">
+          <button onClick={onClose} className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors cursor-pointer">
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Info & Financial Summary Banner */}
-        <div className="bg-purple-50 border-b border-purple-100 px-6 py-3.5 flex flex-wrap items-center justify-between gap-3 flex-shrink-0">
+        <div className="bg-blue-50/70 border-b border-blue-100 px-6 py-3.5 flex flex-wrap items-center justify-between gap-3 flex-shrink-0">
           <div>
             <div className="flex items-center gap-2">
               <h4 className="font-bold text-sm text-[#001A4D]">{report.eventTitle}</h4>
@@ -257,15 +257,15 @@ export function LiquidationExportPreviewModal({
           </div>
 
           <div className="flex items-center gap-4 text-xs">
-            <div className="bg-white px-3 py-1.5 rounded-lg border border-purple-200">
+            <div className="bg-white px-3 py-1.5 rounded-lg border border-blue-200">
               <span className="text-gray-500 block text-[10px] uppercase font-bold">Approved Budget</span>
               <span className="font-bold text-[#001A4D] text-sm">{formatCurrency(report.allocatedBudget)}</span>
             </div>
-            <div className="bg-white px-3 py-1.5 rounded-lg border border-purple-200">
+            <div className="bg-white px-3 py-1.5 rounded-lg border border-blue-200">
               <span className="text-gray-500 block text-[10px] uppercase font-bold">Actual Spending</span>
-              <span className="font-bold text-[#83358E] text-sm">{formatCurrency(report.totalActualSpending)}</span>
+              <span className="font-bold text-[#0E4EBD] text-sm">{formatCurrency(report.totalActualSpending)}</span>
             </div>
-            <div className="bg-white px-3 py-1.5 rounded-lg border border-purple-200">
+            <div className="bg-white px-3 py-1.5 rounded-lg border border-blue-200">
               <span className="text-gray-500 block text-[10px] uppercase font-bold">{isDeficit ? 'Net Deficit' : 'Net Surplus'}</span>
               <span className={`font-bold text-sm ${isDeficit ? 'text-red-600' : 'text-green-600'}`}>
                 {formatVariance(isDeficit ? -varianceAmount : varianceAmount)}
@@ -277,7 +277,7 @@ export function LiquidationExportPreviewModal({
         {/* Column Configurator & Preview Search */}
         <div className="px-6 py-3 bg-gray-50 border-b border-gray-200 flex flex-wrap items-center justify-between gap-3 flex-shrink-0">
           <div className="flex items-center gap-2">
-            <Layers className="w-4 h-4 text-[#83358E]" />
+            <Layers className="w-4 h-4 text-[#0E4EBD]" />
             <span className="text-xs font-bold text-[#001A4D]">Included Columns:</span>
             <span className="text-xs text-gray-500 font-mono">({enabledColumns.length}/{columns.length})</span>
           </div>
@@ -289,7 +289,7 @@ export function LiquidationExportPreviewModal({
                 onClick={() => toggleColumn(col.key)}
                 className={`px-2.5 py-1 rounded-md text-xs font-semibold border transition-all flex items-center gap-1 cursor-pointer ${
                   col.enabled
-                    ? 'bg-[#83358E] text-white border-[#83358E]'
+                    ? 'bg-[#001A4D] text-white border-[#001A4D]'
                     : 'bg-white text-gray-500 border-gray-300 hover:border-gray-400'
                 }`}
               >
@@ -305,7 +305,7 @@ export function LiquidationExportPreviewModal({
               placeholder="Search line items..."
               value={previewSearch}
               onChange={e => setPreviewSearch(e.target.value)}
-              className="w-full pl-7 pr-3 py-1 bg-white border border-gray-300 rounded-md text-xs focus:ring-1 focus:ring-[#83358E] outline-none"
+              className="w-full pl-7 pr-3 py-1 bg-white border border-gray-300 rounded-md text-xs focus:ring-1 focus:ring-[#0E4EBD] outline-none"
             />
             <Eye className="w-3.5 h-3.5 text-gray-400 absolute left-2 top-1/2 -translate-y-1/2" />
           </div>
@@ -327,7 +327,7 @@ export function LiquidationExportPreviewModal({
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
-                  <tr className="bg-[#83358E] text-white font-bold divide-x divide-[#6D2A78]">
+                  <tr className="bg-[#001A4D] text-white font-bold divide-x divide-blue-900">
                     {enabledColumns.map(col => (
                       <th key={col.key} className="px-3 py-2.5 uppercase tracking-wider text-[11px] whitespace-nowrap">
                         {col.label}
@@ -344,7 +344,7 @@ export function LiquidationExportPreviewModal({
                     </tr>
                   ) : (
                     displayItems.map((item, idx) => (
-                      <tr key={item.id || idx} className={`hover:bg-purple-50/50 transition-colors ${idx % 2 === 1 ? 'bg-gray-50/70' : 'bg-white'}`}>
+                      <tr key={item.id || idx} className={`hover:bg-blue-50/50 transition-colors ${idx % 2 === 1 ? 'bg-gray-50/70' : 'bg-white'}`}>
                         {enabledColumns.map(col => {
                           const val = getItemValue(item, idx, col.key);
                           const isAllocated = col.key === 'allocatedCost';
@@ -354,7 +354,7 @@ export function LiquidationExportPreviewModal({
                           return (
                             <td key={col.key} className="px-3 py-2 whitespace-nowrap text-gray-800">
                               {isActual ? (
-                                <span className="font-bold text-[#83358E]">{val}</span>
+                                <span className="font-bold text-[#0E4EBD]">{val}</span>
                               ) : isAllocated ? (
                                 <span className="font-semibold text-gray-700">{val}</span>
                               ) : isVariance ? (
@@ -421,9 +421,9 @@ export function LiquidationExportPreviewModal({
             <button
               onClick={exportToExcelXML}
               disabled={isExporting || report.lineItems.length === 0}
-              className="px-6 py-2.5 bg-gradient-to-r from-[#83358E] to-[#001A4D] text-white rounded-xl text-sm font-bold hover:from-[#6D2A78] hover:to-[#00143D] disabled:opacity-50 transition-all shadow-md flex items-center gap-2 cursor-pointer"
+              className="px-6 py-2.5 bg-[#001A4D] hover:bg-[#0E4EBD] text-white rounded-xl text-sm font-bold disabled:opacity-50 transition-all shadow-xs flex items-center gap-2 cursor-pointer"
             >
-              <FileSpreadsheet className="w-4 h-4 text-[#FFC107]" />
+              <FileSpreadsheet className="w-4 h-4 text-[#FFD41C]" />
               {isExporting ? 'Generating Excel File...' : 'Download Excel (.xlsx)'}
             </button>
           </div>

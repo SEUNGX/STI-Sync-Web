@@ -2,9 +2,11 @@ import { Timestamp } from 'firebase/firestore';
 
 // ─── Student ──────────────────────────────────────────────────────────────────
 
+export type AcademicLevel    = 'COLLEGE' | 'SHS';
 export type StudentSex       = 'Male' | 'Female';
-export type StudentYearLevel = '1st Year' | '2nd Year' | '3rd Year' | '4th Year';
-export type StudentSemester  = '1st Semester' | '2nd Semester';
+export type StudentYearLevel = 'Grade 11' | 'Grade 12' | '1st Year' | '2nd Year' | '3rd Year' | '4th Year';
+export type StudentSemester  = '1st Semester' | '2nd Semester' | 'Summer' | '1st Trimester' | '2nd Trimester' | '3rd Trimester';
+export type StudentTerm      = StudentSemester;
 export type StudentStatus    = 'ACTIVE' | 'PENDING' | 'RETURNED' | 'INACTIVE' | 'ARCHIVED';
 
 export interface StudentDocument {
@@ -19,6 +21,7 @@ export interface StudentDocument {
   contactNumber: string;      // digits only, no country code
 
   // ── Academic ──────────────────────────────────────────────────────────────
+  academicLevel?: AcademicLevel; // 'COLLEGE' | 'SHS' (defaults to 'COLLEGE')
   courseId:     string;       // ref → courses collection
   courseName:   string;       // denormalised for query speed
   courseCode:   string;
@@ -28,12 +31,15 @@ export interface StudentDocument {
   section:      string;
   schoolYear:   string;       // e.g. "2026-2027"
   semester:     StudentSemester;
+  term?:        StudentTerm;  // alias for semester
 
   // ── Account ───────────────────────────────────────────────────────────────
   email:        string;
   /** hashed password stored by Firebase Auth — NOT in Firestore directly.
    *  We keep the email here; Auth is created separately via createUserWithEmailAndPassword. */
   authUid:      string;       // Firebase Auth UID, filled after account creation
+  requiresPasswordChange?: boolean; // Set true when admin creates temporary credentials
+  requiresChangePassword?: boolean; // Alias for mobile app compatibility
 
   // ── Media ─────────────────────────────────────────────────────────────────
   profilePhotoUrl: string;    // Cloudinary URL, '' if not yet uploaded

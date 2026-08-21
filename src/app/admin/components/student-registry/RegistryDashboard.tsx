@@ -5,7 +5,7 @@ import { getMillis } from '../../../modules/students/utils/date.utils';
 import { formatAppDate } from '../../../utils/date';
 
 interface RegistryDashboardProps {
-  onNavigate: (view: string) => void;
+  onNavigate: (view: string, studentIdOrSearch?: string) => void;
   categorizedStudents: {
     pending: StudentDocument[];
     active: StudentDocument[];
@@ -212,7 +212,7 @@ export default function RegistryDashboard({ onNavigate, categorizedStudents, act
                       <div className="text-xs text-gray-500">{student.submitted}</div>
                     </div>
                     <button
-                      onClick={() => onNavigate('pending')}
+                      onClick={() => onNavigate('pending', student.studentId || student.id)}
                       className="ml-4 px-4 py-2 bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] text-white rounded-lg text-sm font-bold hover:opacity-90 transition-opacity cursor-pointer shadow-xs"
                     >
                       Review

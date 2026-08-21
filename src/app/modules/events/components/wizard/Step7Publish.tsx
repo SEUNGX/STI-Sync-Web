@@ -1,4 +1,4 @@
-import { CheckCircle, Calendar, Users, DollarSign, Shield, Rocket, Clock, MapPin, Award, Bell } from 'lucide-react';
+import { CheckCircle, Calendar, Users, DollarSign, Shield, Rocket, Clock, MapPin, Award } from 'lucide-react';
 import type { EventFormData } from '../../types/event.types';
 import { useOfficerProfile } from '../../../../auth/hooks/useOfficerProfile';
 import { useAdviserProfile } from '../../../auth/hooks/useAdviserProfile';
@@ -16,17 +16,23 @@ export default function Step7Publish({ data, onUpdate, onPublish, isPublishing, 
   const { profile: officerProfile } = useOfficerProfile();
   const { profile: adviserProfile } = useAdviserProfile();
 
-  const showOfficerMode = isOfficer || !!officerProfile;
+  const showOfficerMode = isOfficer !== undefined ? isOfficer : !!officerProfile;
   const creatorName = showOfficerMode
     ? (officerProfile?.studentName || data.createdByName || 'Student Officer')
     : (adviserProfile?.displayName || 'SAS Adviser');
 
+  // Dynamic Theme Styling based on Officer vs Admin
+  const accentBorder = 'border-[#0E4EBD]';
+  const accentText = 'text-[#0E4EBD]';
+  const accentBg = 'bg-[#0E4EBD]';
+  const accentGradient = 'from-[#001A4D] to-[#0E4EBD]';
+
   // Validate steps based on real data (Admin does not require club hostingOrgId)
   const isDetailsComplete = showOfficerMode
-    ? (!!data.title && !!data.description && !!data.eventTypeId && !!data.hostingOrgId)
-    : (!!data.title && !!data.description && !!data.eventTypeId);
+    ? (!!data.title && !!data.eventTypeId && !!data.hostingOrgId)
+    : (!!data.title && !!data.eventTypeId);
 
-  const isScheduleComplete = !!data.semesterId && !!data.venueId && (data.sessions?.length ?? 0) > 0;
+  const isScheduleComplete = !!data.semesterId && (!!data.venueId || !!data.customVenueName) && (data.sessions?.length ?? 0) > 0;
   const isStaffComplete = true; // Automatically valid for admin & officer
   const isBudgetValid = (data.totalApprovedBudget ?? 0) >= 0;
 
@@ -47,9 +53,9 @@ export default function Step7Publish({ data, onUpdate, onPublish, isPublishing, 
 
         {/* Admin / Officer Event Summary Card */}
         <div className="border border-gray-200 rounded-lg overflow-hidden shadow-sm">
-          <div className="p-6 bg-gradient-to-r from-[#001A4D] to-[#83358E] relative">
+          <div className={`p-6 bg-gradient-to-r ${accentGradient} relative`}>
             <div className="flex gap-4">
-              <div className="w-24 h-24 bg-gradient-to-br from-[#0E4EBD] to-[#83358E] rounded-lg flex items-center justify-center flex-shrink-0">
+              <div className={`w-24 h-24 bg-gradient-to-br ${accentGradient} rounded-lg flex items-center justify-center flex-shrink-0 shadow-xs`}>
                 <Calendar className="w-10 h-10 text-white" />
               </div>
 
@@ -57,23 +63,23 @@ export default function Step7Publish({ data, onUpdate, onPublish, isPublishing, 
                 <h2 className="text-white font-bold text-2xl mb-1">
                   {data.title || 'Event Title'}
                 </h2>
-                <p className="text-[#FFD41C] text-sm mb-3">
-                  {data.tagline || 'Event tagline'}
+                <p className="text-[#FFD41C] text-sm mb-3 line-clamp-2">
+                  {data.description || 'No event description provided'}
                 </p>
                 <div className="flex items-center gap-2 text-white text-sm">
                   <div className="w-6 h-6 rounded-full bg-white/20"></div>
-                  <span className="px-2 py-0.5 bg-purple-500 rounded text-xs font-semibold">
-                    {isOfficer ? 'Officer Proposal' : 'SAS Institutional Event'}
+                  <span className={`px-2 py-0.5 ${showOfficerMode ? 'bg-purple-500' : 'bg-blue-600'} rounded text-xs font-semibold`}>
+                    {showOfficerMode ? 'Officer Proposal' : 'SAS Institutional Event'}
                   </span>
                 </div>
               </div>
 
               <div className="absolute top-4 right-4">
-                <div className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-medium text-sm ${
-                  isOfficer ? 'bg-amber-400 text-[#001A4D]' : 'bg-green-500 text-white'
+                <div className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-medium text-sm shadow-xs ${
+                  showOfficerMode ? 'bg-amber-400 text-[#001A4D]' : 'bg-green-500 text-white'
                 }`}>
                   <Shield className="w-4 h-4" />
-                  {isOfficer ? 'REQUIRES SAS REVIEW' : 'SAS APPROVED'}
+                  {showOfficerMode ? 'REQUIRES SAS REVIEW' : 'SAS APPROVED'}
                 </div>
               </div>
             </div>
@@ -116,7 +122,7 @@ export default function Step7Publish({ data, onUpdate, onPublish, isPublishing, 
                   </div>
                   <div className="flex items-center gap-2">
                     <MapPin className="w-4 h-4 text-gray-500" />
-                    <span className="text-gray-900">{data.eventFormat || 'On-Campus'}</span>
+                    <span className="text-gray-900">{data.customVenueName || data.eventFormat || 'On-Campus'}</span>
                   </div>
                 </div>
               </div>
@@ -127,7 +133,9 @@ export default function Step7Publish({ data, onUpdate, onPublish, isPublishing, 
               <div className="flex-1">
                 <h3 className="text-sm font-bold text-gray-700 mb-2">Participants & Settings</h3>
                 <div className="text-sm text-gray-900 flex flex-col gap-1">
-                  <span>Target: {data.targetYearLevels?.length || 0} Year Levels, {data.targetDepartmentIds?.length || 0} Depts</span>
+                  <span>
+                    Target: <strong>{data.targetAudienceScope === 'members' ? 'Org Members Only' : 'Campus-Wide'}</strong> • {data.targetCourses?.length ? `${data.targetCourses.length} Courses` : 'All Courses'}, {data.targetYearLevels?.length ? `${data.targetYearLevels.length} Year Levels` : 'All Years'}{data.targetSections?.length ? `, ${data.targetSections.length} Sections` : ''}
+                  </span>
                   {data.attendanceEnabled && <span className="text-green-600 font-medium">✓ Attendance Required (Min {data.minAttendancePercent || 80}%)</span>}
                   {data.certificatesEnabled && <span className="text-green-600 font-medium">✓ Certificates {data.autoIssueCertificates ? 'Auto-Issued' : 'Configured'}</span>}
                   {data.studentPayablesEnabled && <span className="text-blue-600 font-medium">✓ Required Payment: {formatCurrency(data.adminFeeOverride || 0)}</span>}
@@ -198,33 +206,33 @@ export default function Step7Publish({ data, onUpdate, onPublish, isPublishing, 
 
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
-              <div className="p-3 bg-gradient-to-br from-green-600 to-green-500 rounded-lg text-white text-center">
+              <div className="p-3 bg-gradient-to-br from-green-600 to-green-500 rounded-lg text-white text-center shadow-xs">
                 <Calendar className="w-5 h-5 mx-auto mb-1" />
                 <div className="text-xl font-bold">{data.sessions?.length || 0}</div>
                 <div className="text-xs opacity-90">Sessions</div>
               </div>
 
-              <div className="p-3 bg-gradient-to-br from-[#0E4EBD] to-[#1E70E8] rounded-lg text-white text-center">
+              <div className="p-3 bg-gradient-to-br from-[#0E4EBD] to-[#1E70E8] rounded-lg text-white text-center shadow-xs">
                 <Users className="w-5 h-5 mx-auto mb-1" />
                 <div className="text-xl font-bold">{data.expectedParticipantCount?.toLocaleString() || 0}</div>
                 <div className="text-xs opacity-90">Expected</div>
               </div>
 
-              <div className="p-3 bg-gradient-to-br from-[#83358E] to-[#A855F7] rounded-lg text-white text-center">
-                <DollarSign className="w-5 h-5 mx-auto mb-1" />
-                <div className="text-xl font-bold">{(data.totalApprovedBudget || 0)/1000}K</div>
+              <div className="p-3 bg-gradient-to-br from-[#001A4D] to-[#0E4EBD] rounded-lg text-white text-center shadow-xs">
+                <DollarSign className="w-5 h-5 mx-auto mb-1 text-[#FFD41C]" />
+                <div className="text-xl font-bold">{((data.totalApprovedBudget || 0)/1000).toFixed(1)}K</div>
                 <div className="text-xs opacity-90">Budget</div>
               </div>
 
-              <div className="p-3 bg-gradient-to-br from-[#FFC107] to-[#FFD41C] rounded-lg text-white text-center">
-                <Award className="w-5 h-5 mx-auto mb-1" />
-                <div className="text-xl font-bold">83%</div>
-                <div className="text-xs opacity-90">Compliance</div>
+              <div className="p-3 bg-gradient-to-br from-[#FFC107] to-[#FFD41C] rounded-lg text-white text-center shadow-xs">
+                <Award className="w-5 h-5 mx-auto mb-1 text-[#001A4D]" />
+                <div className="text-xl font-bold text-[#001A4D]">83%</div>
+                <div className="text-xs text-[#001A4D]/80 font-medium">Compliance</div>
               </div>
             </div>
 
             {/* Post-Creation Actions */}
-            <div className="border-2 border-[#83358E] rounded-lg p-3">
+            <div className={`border-2 ${accentBorder} rounded-lg p-3`}>
               <h5 className="text-sm font-bold text-gray-900 mb-3">Post-Creation Actions</h5>
               <div className="space-y-2 text-xs">
                 {[
@@ -243,18 +251,19 @@ export default function Step7Publish({ data, onUpdate, onPublish, isPublishing, 
 
             {/* Large Submit / Publish Button */}
             <button
+              type="button"
               onClick={onPublish}
               disabled={!allValid || isPublishing}
-              className={`w-full py-3 text-white rounded-lg font-bold text-base transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${
-                isOfficer
-                  ? 'bg-[#83358E] hover:bg-[#6D2A78]'
+              className={`w-full py-3 text-white rounded-lg font-bold text-base transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer ${
+                showOfficerMode
+                  ? 'bg-[#001A4D] hover:bg-[#0E4EBD] shadow-xs'
                   : 'bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600'
               }`}
             >
               <Rocket className="w-5 h-5" />
               {isPublishing
                 ? 'Submitting...'
-                : isOfficer
+                : showOfficerMode
                 ? (data.proposalStatus === 'rejected' ? 'Revise & Resubmit Proposal' : 'Submit Proposal for SAO Approval')
                 : 'Create & Publish Event'}
             </button>

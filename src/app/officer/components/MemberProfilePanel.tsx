@@ -190,7 +190,7 @@ export function MemberProfilePanel({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
-        <div className="bg-gradient-to-r from-[#001A4D] via-[#0E4EBD] to-[#83358E] px-6 py-4 flex items-center justify-between text-white flex-shrink-0">
+        <div className="bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] px-6 py-4 flex items-center justify-between text-white flex-shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 bg-white/20 rounded-full flex items-center justify-center text-white font-bold text-base shadow-inner backdrop-blur-sm">
               {getInitials(member.studentName)}
@@ -217,7 +217,7 @@ export function MemberProfilePanel({
 
           <button
             onClick={onClose}
-            className="p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-xl transition-colors"
+            className="p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-xl transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -236,9 +236,9 @@ export function MemberProfilePanel({
           <div className="flex items-center gap-6">
             <button
               onClick={() => setActiveTab('ledger')}
-              className={`py-3.5 text-sm font-bold border-b-2 transition-all flex items-center gap-2 ${
+              className={`py-3.5 text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
                 activeTab === 'ledger'
-                  ? 'border-[#83358E] text-[#83358E]'
+                  ? 'border-[#0E4EBD] text-[#0E4EBD]'
                   : 'border-transparent text-gray-500 hover:text-gray-800'
               }`}
             >
@@ -342,7 +342,7 @@ export function MemberProfilePanel({
               <div className="bg-white border border-[#E0E0E0] rounded-2xl overflow-hidden shadow-2xs">
                 <div className="px-5 py-3.5 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
                   <h4 className="font-bold text-[#001A4D] text-sm flex items-center gap-2">
-                    <Receipt className="w-4 h-4 text-[#83358E]" />
+                    <Receipt className="w-4 h-4 text-[#0E4EBD]" />
                     Statement of Account & Organization Dues
                   </h4>
                   <span className="text-xs text-gray-500 font-mono">
@@ -352,7 +352,7 @@ export function MemberProfilePanel({
 
                 {loadingPayables ? (
                   <div className="p-10 text-center text-gray-400">
-                    <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-[#83358E]" />
+                    <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-[#0E4EBD]" />
                     Loading student ledger...
                   </div>
                 ) : orgPayables.length === 0 ? (
@@ -465,7 +465,7 @@ export function MemberProfilePanel({
               {/* Organization & Contact Details */}
               <div className="bg-gray-50/70 border border-gray-200 rounded-2xl p-5 space-y-4">
                 <h4 className="font-bold text-[#001A4D] text-sm flex items-center gap-2">
-                  <Building2 className="w-4 h-4 text-[#83358E]" /> Organization Membership Details
+                  <Building2 className="w-4 h-4 text-[#0E4EBD]" /> Organization Membership Details
                 </h4>
 
                 <div className="space-y-2.5 text-xs">

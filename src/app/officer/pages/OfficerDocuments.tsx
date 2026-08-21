@@ -23,7 +23,7 @@ type MainTab = "submissions" | "inbox";
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 const CATEGORY_COLORS: Record<string, string> = {
-  "Activity Letter": "bg-[#F3E8FF] text-[#83358E]",
+  "Activity Letter": "bg-indigo-50 text-indigo-700",
   "Accreditation Paper": "bg-blue-100 text-blue-700",
   "Waiver": "bg-amber-100 text-amber-700",
   "Financial Report": "bg-green-100 text-green-700",
@@ -186,7 +186,7 @@ function SubmitDocModal({ onClose, orgId, orgName, orgAcronym, orgTypeId, office
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-[600px] max-h-[88vh] flex flex-col overflow-hidden">
-        <div className="bg-gradient-to-r from-[#83358E] to-[#5B1F6B] px-6 py-4 flex items-center justify-between flex-shrink-0">
+        <div className="bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] px-6 py-4 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
               <Upload className="w-5 h-5 text-white" />
@@ -208,7 +208,7 @@ function SubmitDocModal({ onClose, orgId, orgName, orgAcronym, orgTypeId, office
               <p className="text-white/90 text-sm">The SAS Adviser has been notified and will review your submission.</p>
             </div>
             <div className="px-6 py-4 border-t border-gray-200 flex gap-3">
-              <button onClick={onClose} className="flex-1 py-2.5 border border-[#83358E] text-[#83358E] rounded-lg text-sm font-medium hover:bg-[#83358E]/5 transition-colors">Submit Another</button>
+              <button onClick={onClose} className="flex-1 py-2.5 border border-[#0E4EBD] text-[#0E4EBD] rounded-lg text-sm font-medium hover:bg-blue-50 transition-colors">Submit Another</button>
               <button onClick={onClose} className="flex-1 py-2.5 bg-[#001A4D] text-[#FFD41C] rounded-lg text-sm font-bold hover:bg-[#001A4D]/90 transition-colors">View My Submissions</button>
             </div>
           </div>
@@ -217,19 +217,19 @@ function SubmitDocModal({ onClose, orgId, orgName, orgAcronym, orgTypeId, office
             <div className="flex-1 overflow-y-auto p-6 space-y-5">
               {/* Document Details */}
               <div>
-                <div className="border-l-4 border-[#83358E] pl-3 mb-4">
+                <div className="border-l-4 border-[#0E4EBD] pl-3 mb-4">
                   <p className="text-[#001A4D] font-bold text-sm">Document Details</p>
                 </div>
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1.5">Document Title <span className="text-red-500">*</span></label>
-                    <input type="text" maxLength={150} placeholder="e.g. Activity Letter for IT Guild GenAss 2026" className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent text-sm" value={title} onChange={(e) => setTitle(e.target.value)} />
+                    <input type="text" maxLength={150} placeholder="e.g. Activity Letter for IT Guild GenAss 2026" className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD] focus:border-transparent text-sm" value={title} onChange={(e) => setTitle(e.target.value)} />
                     <p className="text-right text-xs text-gray-400 mt-0.5">{title.length}/150</p>
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1.5">Category <span className="text-red-500">*</span></label>
-                    <select className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent text-sm" value={category} onChange={(e) => {
+                    <select className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD] focus:border-transparent text-sm" value={category} onChange={(e) => {
                       setCategory(e.target.value);
                       const cat = activeCategories.find(c => c.name === e.target.value);
                       setCategoryId(cat?.id ?? '');
@@ -244,7 +244,7 @@ function SubmitDocModal({ onClose, orgId, orgName, orgAcronym, orgTypeId, office
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1.5">Semester <span className="text-red-500">*</span></label>
-                      <select className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent text-sm" value={semesterId} onChange={(e) => handleSemesterChange(e.target.value)}>
+                      <select className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD] focus:border-transparent text-sm" value={semesterId} onChange={(e) => handleSemesterChange(e.target.value)}>
                         <option value="">Select semester...</option>
                         {semesters.filter(s => !s.archived).map(s => (
                           <option key={s.id} value={s.id}>{s.semester} — A.Y. {s.academicYear}</option>
@@ -259,7 +259,7 @@ function SubmitDocModal({ onClose, orgId, orgName, orgAcronym, orgTypeId, office
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1.5">Submission Notes</label>
-                    <textarea rows={3} placeholder="Add any context or instructions for the SAS Adviser reviewing this document... (optional)" className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent resize-none text-sm" value={notes} onChange={(e) => setNotes(e.target.value)} />
+                    <textarea rows={3} placeholder="Add any context or instructions for the SAS Adviser reviewing this document... (optional)" className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD] focus:border-transparent resize-none text-sm" value={notes} onChange={(e) => setNotes(e.target.value)} />
                     <p className="text-xs text-gray-400 mt-0.5">These notes are visible to the SAS Adviser during review.</p>
                   </div>
                 </div>
@@ -267,13 +267,13 @@ function SubmitDocModal({ onClose, orgId, orgName, orgAcronym, orgTypeId, office
 
               {/* File Attachment */}
               <div>
-                <div className="border-l-4 border-[#83358E] pl-3 mb-4">
+                <div className="border-l-4 border-[#0E4EBD] pl-3 mb-4">
                   <p className="text-[#001A4D] font-bold text-sm">Attach Document</p>
                 </div>
                 <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx,.xlsx,.xls,.jpg,.jpeg,.png" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileSelect(f); e.target.value = ''; }} />
 
                 {uploadedFile ? (
-                  <div className="flex items-center gap-4 p-4 bg-white border-2 border-[#83358E] rounded-xl">
+                  <div className="flex items-center gap-4 p-4 bg-white border-2 border-[#0E4EBD] rounded-xl">
                     <div className="w-14 h-14 bg-red-500 rounded-xl flex items-center justify-center flex-shrink-0">
                       <FileText className="w-7 h-7 text-white" />
                     </div>
@@ -285,11 +285,11 @@ function SubmitDocModal({ onClose, orgId, orgName, orgAcronym, orgTypeId, office
                         <span className="text-green-600 text-xs font-medium">Ready to submit</span>
                       </div>
                     </div>
-                    <button onClick={() => setUploadedFile(null)} className="text-red-500 hover:text-red-700 p-1.5"><X className="w-5 h-5" /></button>
+                    <button onClick={() => setUploadedFile(null)} className="text-red-500 hover:text-red-700 p-1.5 cursor-pointer"><X className="w-5 h-5" /></button>
                   </div>
                 ) : uploading ? (
-                  <div className="w-full h-[140px] flex flex-col items-center justify-center border-2 border-dashed border-[#83358E]/50 bg-[#F3E8FF]/50 rounded-xl">
-                    <Loader2 className="w-12 h-12 text-[#83358E] mb-2 animate-spin" />
+                  <div className="w-full h-[140px] flex flex-col items-center justify-center border-2 border-dashed border-[#0E4EBD]/40 bg-blue-50/50 rounded-xl">
+                    <Loader2 className="w-12 h-12 text-[#0E4EBD] mb-2 animate-spin" />
                     <p className="text-[#001A4D] font-bold text-sm">Uploading...</p>
                   </div>
                 ) : (
@@ -298,12 +298,12 @@ function SubmitDocModal({ onClose, orgId, orgName, orgAcronym, orgTypeId, office
                     onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
                     onDragLeave={() => setDragging(false)}
                     onDrop={(e) => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files?.[0]; if (f) handleFileSelect(f); }}
-                    className={`w-full h-[140px] flex flex-col items-center justify-center border-2 border-dashed rounded-xl cursor-pointer transition-colors ${dragging ? "border-[#83358E] bg-[#F3E8FF]" : "border-[#83358E]/50 bg-[#F3E8FF]/50 hover:border-[#83358E] hover:bg-[#F3E8FF]"}`}
+                    className={`w-full h-[140px] flex flex-col items-center justify-center border-2 border-dashed rounded-xl cursor-pointer transition-colors ${dragging ? "border-[#0E4EBD] bg-blue-50" : "border-gray-300 bg-gray-50 hover:border-[#0E4EBD] hover:bg-blue-50/40"}`}
                   >
-                    <Upload className="w-12 h-12 text-[#83358E] mb-2" />
+                    <Upload className="w-12 h-12 text-[#0E4EBD] mb-2" />
                     <p className="text-[#001A4D] font-bold text-sm">Drag and drop your file here</p>
                     <p className="text-gray-500 text-xs mb-1">or</p>
-                    <span className="text-[#83358E] text-sm underline cursor-pointer">Browse Files</span>
+                    <span className="text-[#0E4EBD] text-sm font-semibold underline cursor-pointer">Browse Files</span>
                     <p className="text-gray-400 text-xs italic mt-2">PDF, DOCX, DOC, XLSX, JPG, PNG · Max 25MB</p>
                   </div>
                 )}
@@ -312,11 +312,11 @@ function SubmitDocModal({ onClose, orgId, orgName, orgAcronym, orgTypeId, office
 
               {/* Reference Preview */}
               {canSubmit && (
-                <div className="flex items-center gap-3 p-3 bg-[#F3E8FF] border border-[#83358E]/30 rounded-xl">
-                  <FileText className="w-4 h-4 text-[#83358E] flex-shrink-0" />
+                <div className="flex items-center gap-3 p-3 bg-blue-50/70 border border-blue-200 rounded-xl">
+                  <FileText className="w-4 h-4 text-[#0E4EBD] flex-shrink-0" />
                   <div>
-                    <p className="text-[#83358E] text-xs">Your submission will be assigned a reference number upon submit.</p>
-                    <p className="text-gray-400 text-xs italic">This reference number will be used to track your document.</p>
+                    <p className="text-[#0E4EBD] text-xs font-semibold">Your submission will be assigned a reference number upon submit.</p>
+                    <p className="text-gray-500 text-xs italic">This reference number will be used to track your document.</p>
                   </div>
                 </div>
               )}
@@ -324,16 +324,16 @@ function SubmitDocModal({ onClose, orgId, orgName, orgAcronym, orgTypeId, office
 
             {/* Footer */}
             <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between flex-shrink-0">
-              <button className="flex items-center gap-2 px-4 py-2 border border-[#83358E] text-[#83358E] rounded-lg text-sm font-medium hover:bg-[#83358E]/5 transition-colors">
+              <button className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors cursor-pointer">
                 <Save className="w-4 h-4" />
                 Save as Draft
               </button>
               <button
                 onClick={handleSubmit}
                 disabled={!canSubmit}
-                className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-bold transition-colors ${canSubmit ? "bg-[#83358E] text-white hover:bg-[#6D2A78]" : "bg-gray-100 text-gray-400 cursor-not-allowed"}`}
+                className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-bold transition-colors cursor-pointer ${canSubmit ? "bg-[#001A4D] hover:bg-[#0E4EBD] text-white shadow-xs" : "bg-gray-100 text-gray-400 cursor-not-allowed"}`}
               >
-                {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4 text-[#FFD41C]" />}
                 Submit to SAS
               </button>
             </div>
@@ -429,9 +429,9 @@ function ResubmitModal({ doc, onClose, orgId, orgName, orgAcronym, orgTypeId, of
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-xs" onClick={onClose} />
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-[560px] max-h-[88vh] flex flex-col overflow-hidden">
-        <div className="bg-gradient-to-r from-[#83358E] to-[#5B1F6B] px-6 py-4 flex items-center justify-between flex-shrink-0">
+        <div className="bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] px-6 py-4 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3">
             <RefreshCw className="w-5 h-5 text-white" />
             <div>
@@ -439,7 +439,7 @@ function ResubmitModal({ doc, onClose, orgId, orgName, orgAcronym, orgTypeId, of
               <p className="text-white/80 text-xs">Addressing SAS Feedback</p>
             </div>
           </div>
-          <button onClick={onClose} className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10 cursor-pointer"><X className="w-5 h-5" /></button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
@@ -455,7 +455,7 @@ function ResubmitModal({ doc, onClose, orgId, orgName, orgAcronym, orgTypeId, of
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">What Changed? <span className="text-red-500">*</span></label>
-            <textarea rows={4} placeholder="Describe what you changed or corrected in the new version... (required)" className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent resize-none text-sm" value={changes} onChange={(e) => setChanges(e.target.value)} />
+            <textarea rows={4} placeholder="Describe what you changed or corrected in the new version... (required)" className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] resize-none text-sm" value={changes} onChange={(e) => setChanges(e.target.value)} />
             <p className="text-xs text-gray-400 mt-0.5">This message is sent to the SAS Adviser alongside your resubmission.</p>
           </div>
 
@@ -463,7 +463,7 @@ function ResubmitModal({ doc, onClose, orgId, orgName, orgAcronym, orgTypeId, of
             <p className="text-sm font-medium text-gray-700 mb-2">Upload Corrected Document</p>
             <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx,.xlsx,.xls,.jpg,.jpeg,.png" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileSelect(f); e.target.value = ''; }} />
             {uploadedFile ? (
-              <div className="flex items-center gap-3 p-3 bg-white border-2 border-[#83358E] rounded-xl">
+              <div className="flex items-center gap-3 p-3 bg-white border-2 border-[#0E4EBD] rounded-xl">
                 <div className="w-10 h-10 bg-red-500 rounded-lg flex items-center justify-center flex-shrink-0">
                   <FileText className="w-5 h-5 text-white" />
                 </div>
@@ -474,16 +474,16 @@ function ResubmitModal({ doc, onClose, orgId, orgName, orgAcronym, orgTypeId, of
                     <span className="text-green-600 text-xs">Ready</span>
                   </div>
                 </div>
-                <button onClick={() => setUploadedFile(null)} className="text-red-500 p-1"><X className="w-4 h-4" /></button>
+                <button onClick={() => setUploadedFile(null)} className="text-red-500 p-1 cursor-pointer"><X className="w-4 h-4" /></button>
               </div>
             ) : uploading ? (
-              <div className="w-full h-28 flex flex-col items-center justify-center border-2 border-dashed border-[#83358E]/50 bg-[#F3E8FF]/50 rounded-xl">
-                <Loader2 className="w-8 h-8 text-[#83358E] mb-1 animate-spin" />
+              <div className="w-full h-28 flex flex-col items-center justify-center border-2 border-dashed border-[#0E4EBD]/40 bg-blue-50/50 rounded-xl">
+                <Loader2 className="w-8 h-8 text-[#0E4EBD] mb-1 animate-spin" />
                 <p className="text-sm text-gray-600">Uploading...</p>
               </div>
             ) : (
-              <div onClick={() => fileInputRef.current?.click()} className="w-full h-28 flex flex-col items-center justify-center border-2 border-dashed border-[#83358E]/50 bg-[#F3E8FF]/50 rounded-xl cursor-pointer hover:border-[#83358E] hover:bg-[#F3E8FF] transition-colors">
-                <Upload className="w-8 h-8 text-[#83358E] mb-1" />
+              <div onClick={() => fileInputRef.current?.click()} className="w-full h-28 flex flex-col items-center justify-center border-2 border-dashed border-gray-300 bg-gray-50 rounded-xl cursor-pointer hover:border-[#0E4EBD] hover:bg-blue-50/40 transition-colors">
+                <Upload className="w-8 h-8 text-[#0E4EBD] mb-1" />
                 <p className="text-sm text-gray-600">Click to upload corrected document</p>
               </div>
             )}
@@ -495,19 +495,19 @@ function ResubmitModal({ doc, onClose, orgId, orgName, orgAcronym, orgTypeId, of
           </div>
 
           <div className="flex gap-2">
-            <span className="px-2.5 py-1 bg-[#F3E8FF] text-[#83358E] text-xs rounded-full font-medium">{doc.title.slice(0, 30)}...</span>
+            <span className="px-2.5 py-1 bg-blue-50 text-[#0E4EBD] border border-blue-200 text-xs rounded-full font-medium">{doc.title.slice(0, 30)}...</span>
             <CategoryPill category={doc.category} />
           </div>
         </div>
 
         <div className="px-5 py-4 border-t border-gray-200 flex justify-between flex-shrink-0">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 transition-colors">Cancel</button>
+          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 transition-colors cursor-pointer">Cancel</button>
           <button
             disabled={!changes.trim() || !uploadedFile || submitting}
             onClick={handleResubmit}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-colors ${changes.trim() && uploadedFile ? "bg-[#83358E] text-white hover:bg-[#6D2A78]" : "bg-gray-100 text-gray-400 cursor-not-allowed"}`}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-bold transition-colors cursor-pointer ${changes.trim() && uploadedFile ? "bg-[#001A4D] hover:bg-[#0E4EBD] text-white shadow-xs" : "bg-gray-100 text-gray-400 cursor-not-allowed"}`}
           >
-            {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+            {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4 text-[#FFD41C]" />}
             Submit Corrected Document
           </button>
         </div>
@@ -599,30 +599,30 @@ function SubmissionsTab({ orgId, orgName, orgAcronym, orgTypeId, officerName, of
 
   const uniqueCategories = useMemo(() => [...new Set(submissions.map(d => d.category))], [submissions]);
 
-  if (loading) return <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 text-[#83358E] animate-spin" /></div>;
+  if (loading) return <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 text-[#0E4EBD] animate-spin" /></div>;
 
   return (
     <div className="space-y-4">
       {/* Filter bar */}
-      <div className="bg-white border border-[#E0E0E0] rounded-xl p-4 flex items-center gap-3 flex-wrap">
+      <div className="bg-white border border-[#E0E0E0] rounded-xl p-4 flex items-center gap-3 flex-wrap shadow-xs">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input type="text" placeholder="Search by document title or reference..." className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] focus:border-transparent" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+          <input type="text" placeholder="Search by document title or reference..." className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
         </div>
-        <select className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] focus:border-transparent" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
+        <select className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
           <option value="All">All Categories</option>
           {uniqueCategories.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
         <div className="flex gap-1">
           {["All", ...statuses].map((s) => (
-            <button key={s} onClick={() => setStatusFilter(s)} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${statusFilter === s ? "bg-[#001A4D] text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>{s}</button>
+            <button key={s} onClick={() => setStatusFilter(s)} className={`px-3 py-1.5 rounded-full text-xs font-bold transition-colors cursor-pointer ${statusFilter === s ? "bg-[#001A4D] text-white shadow-xs" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>{s}</button>
           ))}
         </div>
         <p className="text-gray-400 text-xs ml-auto">Showing {filtered.length} documents</p>
       </div>
 
       {/* Table */}
-      <div className="bg-white border border-[#E0E0E0] rounded-2xl overflow-hidden">
+      <div className="bg-white border border-[#E0E0E0] rounded-2xl overflow-hidden shadow-xs">
         {filtered.length === 0 ? (
           <div className="text-center py-16">
             <FileText className="w-12 h-12 text-gray-300 mx-auto mb-4" />
@@ -645,7 +645,7 @@ function SubmissionsTab({ orgId, orgName, orgAcronym, orgTypeId, officerName, of
                   const updatedDate = toDate(doc.updatedAt);
                   return (
                     <React.Fragment key={doc.id}>
-                      <tr className="border-b border-[#E0E0E0] hover:bg-[#F3E8FF]/30 transition-colors cursor-pointer group" onClick={() => setExpanded(expanded === doc.id ? null : doc.id)}>
+                      <tr className="border-b border-[#E0E0E0] hover:bg-blue-50/40 transition-colors cursor-pointer group" onClick={() => setExpanded(expanded === doc.id ? null : doc.id)}>
                         <td className="px-4 py-3 font-mono text-xs text-gray-500 whitespace-nowrap">
                           <div className="flex items-center gap-2">
                             {doc.status === "Pending" && <span className="w-2 h-2 bg-amber-500 rounded-full animate-pulse flex-shrink-0" />}
@@ -681,10 +681,10 @@ function SubmissionsTab({ orgId, orgName, orgAcronym, orgTypeId, officerName, of
                         </td>
                         <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button onClick={() => setPreviewDoc(doc)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-blue-50 text-blue-600 transition-colors" title="View Document"><Eye className="w-4 h-4" /></button>
+                            <button onClick={() => setPreviewDoc(doc)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-blue-50 text-blue-600 transition-colors cursor-pointer" title="View Document"><Eye className="w-4 h-4" /></button>
                             <a href={doc.fileUrl} download className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-50 text-[#001A4D] transition-colors"><Download className="w-4 h-4" /></a>
                             {(doc.status === "Rejected" || doc.status === "Draft") && (
-                              <button onClick={() => setResubmitDoc(doc)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[#F3E8FF] text-[#83358E] transition-colors"><RefreshCw className="w-4 h-4" /></button>
+                              <button onClick={() => setResubmitDoc(doc)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-blue-50 text-[#0E4EBD] transition-colors cursor-pointer"><RefreshCw className="w-4 h-4" /></button>
                             )}
                             {expanded === doc.id ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
                           </div>
@@ -732,12 +732,12 @@ function InboxTab({ orgId }: { orgId: string }) {
     }
   };
 
-  if (loading) return <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 text-[#83358E] animate-spin" /></div>;
+  if (loading) return <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 text-[#0E4EBD] animate-spin" /></div>;
 
   return (
     <div className="space-y-4">
       {/* Context card */}
-      <div className="flex items-start justify-between p-4 bg-blue-50 border border-blue-200 rounded-xl">
+      <div className="flex items-start justify-between p-4 bg-blue-50/70 border border-blue-200 rounded-xl shadow-xs">
         <div className="flex items-start gap-3">
           <Mail className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
           <div>
@@ -748,20 +748,20 @@ function InboxTab({ orgId }: { orgId: string }) {
       </div>
 
       {/* Filter */}
-      <div className="bg-white border border-[#E0E0E0] rounded-xl p-4 flex items-center gap-3">
+      <div className="bg-white border border-[#E0E0E0] rounded-xl p-4 flex items-center gap-3 shadow-xs">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input type="text" placeholder="Search documents from SAS..." className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] focus:border-transparent" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+          <input type="text" placeholder="Search documents from SAS..." className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
         </div>
         <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
-          <input type="checkbox" className="accent-[#83358E]" checked={showUnreadOnly} onChange={(e) => setShowUnreadOnly(e.target.checked)} />
+          <input type="checkbox" className="accent-[#0E4EBD]" checked={showUnreadOnly} onChange={(e) => setShowUnreadOnly(e.target.checked)} />
           Show Unread Only
         </label>
       </div>
 
       {/* Table */}
       {filtered.length === 0 ? (
-        <div className="text-center py-16 bg-white border border-[#E0E0E0] rounded-2xl">
+        <div className="text-center py-16 bg-white border border-[#E0E0E0] rounded-2xl shadow-xs">
           <Mailbox className="w-12 h-12 text-blue-400 mx-auto mb-4" />
           <p className="text-[#001A4D] font-bold text-lg mb-1">
             {inbox.length === 0 ? "Your inbox is empty" : "No matching documents"}
@@ -769,7 +769,7 @@ function InboxTab({ orgId }: { orgId: string }) {
           <p className="text-gray-500 text-sm">Documents sent to your organization by the SAS will appear here.</p>
         </div>
       ) : (
-        <div className="bg-white border border-[#E0E0E0] rounded-2xl overflow-hidden">
+        <div className="bg-white border border-[#E0E0E0] rounded-2xl overflow-hidden shadow-xs">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-[#E0E0E0]">
@@ -818,7 +818,7 @@ function InboxTab({ orgId }: { orgId: string }) {
                         {doc.distribution === "all" ? (
                           <span className="px-2 py-0.5 bg-[#001A4D]/10 text-[#001A4D] text-xs rounded-full font-medium">All Organizations</span>
                         ) : (
-                          <span className="px-2 py-0.5 bg-[#F3E8FF] text-[#83358E] text-xs rounded-full font-medium">Your Organization</span>
+                          <span className="px-2 py-0.5 bg-blue-50 text-[#0E4EBD] border border-blue-200 text-xs rounded-full font-medium">Your Organization</span>
                         )}
                       </td>
                       <td className="px-4 py-3">
@@ -833,7 +833,7 @@ function InboxTab({ orgId }: { orgId: string }) {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button onClick={() => handleOpenDoc(doc)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-blue-50 text-blue-600 transition-colors"><Eye className="w-4 h-4" /></button>
+                          <button onClick={() => handleOpenDoc(doc)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-blue-50 text-blue-600 transition-colors cursor-pointer" title="View Document"><Eye className="w-4 h-4" /></button>
                           <a href={doc.fileUrl} download className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-50 text-[#001A4D] transition-colors"><Download className="w-4 h-4" /></a>
                         </div>
                       </td>
@@ -886,30 +886,30 @@ export default function OfficerDocuments() {
         </div>
         <button
           onClick={() => setShowSubmit(true)}
-          className="flex items-center gap-2 px-5 py-2.5 bg-[#83358E] text-white rounded-lg font-bold text-sm hover:bg-[#6D2A78] transition-colors"
+          className="flex items-center gap-2 px-5 py-2.5 bg-[#001A4D] hover:bg-[#0E4EBD] text-white rounded-xl font-bold text-sm transition-colors cursor-pointer shadow-xs"
         >
-          <Upload className="w-4 h-4" />
+          <Upload className="w-4 h-4 text-[#FFD41C]" />
           Submit Document
         </button>
       </div>
 
       {/* Context Banner */}
-      <div className="flex items-center justify-between p-4 bg-[#F3E8FF] border border-[#83358E]/30 rounded-2xl">
+      <div className="flex items-center justify-between p-4 bg-blue-50/70 border border-blue-200 rounded-2xl shadow-xs">
         <div className="flex items-center gap-3">
-          <FileText className="w-6 h-6 text-[#83358E]" />
+          <FileText className="w-6 h-6 text-[#0E4EBD]" />
           <div>
-            <p className="text-[#83358E] font-bold text-sm">Electronic Document Management System</p>
+            <p className="text-[#0E4EBD] font-bold text-sm">Electronic Document Management System</p>
             <p className="text-[#001A4D] text-xs leading-relaxed">Submit documents to the SAS for approval and receive official files, memos, and guidelines directly from the Student Affairs Services.</p>
           </div>
         </div>
         <div className="flex gap-2 flex-shrink-0">
-          <div className="flex items-center gap-1.5 px-3 py-2 bg-white border border-[#83358E]/30 rounded-lg">
-            <ArrowUp className="w-3.5 h-3.5 text-[#83358E]" />
-            <span className="text-[#001A4D] text-xs font-medium">{submissions.length} Submitted</span>
+          <div className="flex items-center gap-1.5 px-3 py-2 bg-white border border-blue-200 rounded-lg">
+            <ArrowUp className="w-3.5 h-3.5 text-[#0E4EBD]" />
+            <span className="text-[#001A4D] text-xs font-semibold">{submissions.length} Submitted</span>
           </div>
-          <div className="flex items-center gap-1.5 px-3 py-2 bg-white border border-[#83358E]/30 rounded-lg">
+          <div className="flex items-center gap-1.5 px-3 py-2 bg-white border border-blue-200 rounded-lg">
             <ArrowDown className="w-3.5 h-3.5 text-blue-600" />
-            <span className="text-[#001A4D] text-xs font-medium">{inbox.length} Received from SAS</span>
+            <span className="text-[#001A4D] text-xs font-semibold">{inbox.length} Received from SAS</span>
           </div>
         </div>
       </div>
@@ -922,7 +922,7 @@ export default function OfficerDocuments() {
           { label: "Rejected", value: rejectedCount, note: "require resubmission", color: "text-red-600", Icon: XCircle },
           { label: "From SAS (Unread)", value: unreadInbox, note: "new documents from SAS", color: "text-blue-600", Icon: Mail, pulse: unreadInbox > 0 },
         ].map((card) => (
-          <div key={card.label} className="bg-white border border-[#E0E0E0] rounded-xl p-5">
+          <div key={card.label} className="bg-white border border-[#E0E0E0] rounded-xl p-5 shadow-xs">
             <div className="flex items-start justify-between mb-3">
               <p className="text-gray-500 text-xs">{card.label}</p>
               <div className="relative">
@@ -937,16 +937,22 @@ export default function OfficerDocuments() {
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-gray-200">
+      <div className="flex border-b border-gray-200 gap-2 pb-2">
         {([["submissions", "My Submissions"], ["inbox", "From SAS — Inbox"]] as const).map(([key, label]) => (
           <button
             key={key}
             onClick={() => setTab(key)}
-            className={`relative px-5 py-3 text-sm font-medium border-b-2 transition-colors ${tab === key ? "bg-[#001A4D] text-white border-[#83358E] -mb-px rounded-t-lg" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+            className={`relative px-5 py-2.5 text-sm font-bold rounded-xl transition-all cursor-pointer ${
+              tab === key
+                ? "bg-[#001A4D] text-white shadow-xs"
+                : "bg-white text-gray-600 hover:text-gray-900 border border-gray-200 hover:bg-gray-50"
+            }`}
           >
             {label}
             {key === "inbox" && unreadInbox > 0 && (
-              <span className="ml-2 w-4 h-4 bg-blue-600 text-white text-[10px] font-bold rounded-full inline-flex items-center justify-center">{unreadInbox}</span>
+              <span className="ml-2 px-1.5 py-0.5 bg-blue-600 text-white text-[10px] font-bold rounded-full">
+                {unreadInbox}
+              </span>
             )}
           </button>
         ))}

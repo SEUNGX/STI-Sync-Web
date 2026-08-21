@@ -467,7 +467,7 @@ export function AttendanceMonitoring() {
   const { data: courses } = useCourses();
   const { data: dbSections } = useSections();
 
-  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [eventSearch, setEventSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [orgFilter, setOrgFilter] = useState("all");
@@ -683,11 +683,16 @@ export function AttendanceMonitoring() {
     };
   }), [mappedEvents]);
 
-  if (selectedEvent) {
+  const activeSelectedEvent = useMemo(() => {
+    if (!selectedEventId) return null;
+    return mappedEvents.find(e => e.id === selectedEventId) || null;
+  }, [mappedEvents, selectedEventId]);
+
+  if (activeSelectedEvent) {
     return (
       <EventDetail
-        event={selectedEvent}
-        onBack={() => setSelectedEvent(null)}
+        event={activeSelectedEvent}
+        onBack={() => setSelectedEventId(null)}
         departments={departments || []}
         courses={courses || []}
         sections={availableSections}
@@ -851,7 +856,7 @@ export function AttendanceMonitoring() {
         {filteredEvents.map((evt) => (
           <div
             key={evt.id}
-            onClick={() => setSelectedEvent(evt)}
+            onClick={() => setSelectedEventId(evt.id)}
             className="bg-white border border-gray-200 hover:border-[#0E4EBD] rounded-2xl p-5 shadow-xs hover:shadow-md transition-all cursor-pointer space-y-4"
           >
             <div className="flex items-start justify-between">

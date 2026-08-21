@@ -98,7 +98,7 @@ export default function OfficerDashboardPage() {
     pending: 'bg-[#BA7517]',
     pending_review: 'bg-[#BA7517]',
     draft: 'bg-[#888780]',
-    returned: 'bg-purple-600',
+    returned: 'bg-[#D97706]',
     rejected: 'bg-[#E24B4A]',
     completed: 'bg-[#0E4EBD]',
   };
@@ -108,7 +108,7 @@ export default function OfficerDashboardPage() {
     pending: 'bg-[#BA7517]',
     pending_review: 'bg-[#BA7517]',
     draft: 'bg-[#888780]',
-    returned: 'bg-purple-600',
+    returned: 'bg-amber-500',
     rejected: 'bg-[#E24B4A]',
     completed: 'bg-[#0E4EBD]',
   };
@@ -116,51 +116,51 @@ export default function OfficerDashboardPage() {
   return (
     <div className="space-y-6">
       {/* Welcome Banner */}
-      <div className="bg-[#EEEDFE] rounded-xl p-6 flex items-center justify-between">
+      <div className="bg-blue-50/70 border border-blue-200/80 rounded-2xl p-6 flex items-center justify-between shadow-xs">
         <div>
           <h2 className="text-[#001A4D] text-[20px] font-bold mb-1">Good day, {officerName} 👋</h2>
-          <p className="text-[#888780] text-[14px]">Here's what's happening with <span className="font-bold text-[#83358E]">{activeOrgName}</span> today.</p>
+          <p className="text-gray-600 text-[14px]">Here's what's happening with <span className="font-bold text-[#0E4EBD]">{activeOrgName}</span> today.</p>
         </div>
-        <div className="w-12 h-12 bg-[#7F77DD]/20 rounded-lg flex items-center justify-center">
-          <Calendar className="w-6 h-6 text-[#7F77DD]" />
+        <div className="w-12 h-12 bg-blue-100/80 rounded-xl flex items-center justify-center border border-blue-200">
+          <Calendar className="w-6 h-6 text-[#0E4EBD]" />
         </div>
       </div>
 
       {/* Metric Summary Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white border border-[#E0E0E0] rounded-xl p-5 shadow-sm">
+        <div className="bg-white border border-[#E0E0E0] rounded-2xl p-5 shadow-xs">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[#888780] text-[13px]">Upcoming Events</span>
-            <Calendar className="w-5 h-5 text-[#7F77DD]" />
+            <span className="text-gray-500 text-[13px] font-medium">Upcoming Events</span>
+            <Calendar className="w-5 h-5 text-[#0E4EBD]" />
           </div>
-          <div className="text-[#7F77DD] text-[24px] font-bold">
+          <div className="text-[#001A4D] text-[24px] font-bold">
             {eventsLoading ? '...' : upcomingEventsList.length}
           </div>
         </div>
 
-        <div className="bg-white border border-[#E0E0E0] rounded-xl p-5 shadow-sm">
+        <div className="bg-white border border-[#E0E0E0] rounded-2xl p-5 shadow-xs">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[#888780] text-[13px]">Pending Liquidations</span>
-            <Receipt className="w-5 h-5 text-[#BA7517]" />
+            <span className="text-gray-500 text-[13px] font-medium">Pending Liquidations</span>
+            <Receipt className="w-5 h-5 text-amber-500" />
           </div>
-          <div className="text-[#BA7517] text-[24px] font-bold">
+          <div className="text-amber-600 text-[24px] font-bold">
             {liquidationsLoading ? '...' : pendingLiquidationsCount}
           </div>
         </div>
 
-        <div className="bg-white border border-[#E0E0E0] rounded-xl p-5 shadow-sm">
+        <div className="bg-white border border-[#E0E0E0] rounded-2xl p-5 shadow-xs">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[#888780] text-[13px]">Total Members</span>
-            <Users className="w-5 h-5 text-[#888780]" />
+            <span className="text-gray-500 text-[13px] font-medium">Total Members</span>
+            <Users className="w-5 h-5 text-gray-400" />
           </div>
           <div className="text-[#001A4D] text-[24px] font-bold">
             {membersLoading ? '...' : members.length}
           </div>
         </div>
 
-        <div className="bg-white border border-[#E0E0E0] rounded-xl p-5 shadow-sm">
+        <div className="bg-white border border-[#E0E0E0] rounded-2xl p-5 shadow-xs">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[#888780] text-[13px]">Events This Month</span>
+            <span className="text-gray-500 text-[13px] font-medium">Events This Month</span>
             <BarChart3 className="w-5 h-5 text-[#0E4EBD]" />
           </div>
           <div className="text-[#0E4EBD] text-[24px] font-bold">
@@ -172,11 +172,11 @@ export default function OfficerDashboardPage() {
       {/* Two-column section */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Upcoming Events */}
-        <div className="lg:col-span-7 bg-white border border-[#E0E0E0] rounded-xl overflow-hidden shadow-sm flex flex-col justify-between">
+        <div className="lg:col-span-7 bg-white border border-[#E0E0E0] rounded-2xl overflow-hidden shadow-xs flex flex-col justify-between">
           <div>
             <div className="p-5 border-b border-[#E0E0E0] flex items-center justify-between">
               <h3 className="text-[#001A4D] text-[16px] font-bold">Upcoming Events</h3>
-              <Link to="/officer/events" className="text-[#7F77DD] text-[13px] font-bold hover:underline flex items-center gap-1">
+              <Link to="/officer/events" className="text-[#0E4EBD] text-[13px] font-bold hover:underline flex items-center gap-1">
                 View All Events <ArrowRight className="w-3.5 h-3.5" />
               </Link>
             </div>
@@ -195,22 +195,22 @@ export default function OfficerDashboardPage() {
                   const statusKey = (event.proposalStatus || 'draft').toLowerCase();
 
                   return (
-                    <div key={event.id} className="flex items-start gap-3 pb-4 border-b border-[#E0E0E0] last:border-0 last:pb-0">
-                      <div className={`w-2.5 h-2.5 ${dotColors[statusKey] || 'bg-[#7F77DD]'} rounded-full mt-2 flex-shrink-0`} />
+                    <div key={event.id} className="flex items-start gap-3 pb-4 border-b border-gray-100 last:border-0 last:pb-0">
+                      <div className={`w-2.5 h-2.5 ${dotColors[statusKey] || 'bg-[#0E4EBD]'} rounded-full mt-2 flex-shrink-0`} />
                       <div className="flex-1">
                         <h4 className="text-[#001A4D] text-[14px] font-bold mb-1">{event.title}</h4>
-                        <div className="flex flex-wrap items-center gap-3 text-[#888780] text-[12px]">
+                        <div className="flex flex-wrap items-center gap-3 text-gray-500 text-[12px]">
                           <div className="flex items-center gap-1">
-                            <Clock className="w-3.5 h-3.5 text-[#83358E]" />
+                            <Clock className="w-3.5 h-3.5 text-[#0E4EBD]" />
                             <span>{dateStr} {timeStr ? `· ${timeStr}` : ''}</span>
                           </div>
                           <div className="flex items-center gap-1">
-                            <MapPin className="w-3.5 h-3.5 text-[#83358E]" />
+                            <MapPin className="w-3.5 h-3.5 text-[#0E4EBD]" />
                             <span>{event.eventFormat || 'On-Campus'}</span>
                           </div>
                         </div>
                       </div>
-                      <span className={`px-2.5 py-1 ${statusColors[statusKey] || 'bg-[#888780]'} text-white rounded-full text-[11px] font-bold capitalize flex-shrink-0`}>
+                      <span className={`px-2.5 py-1 ${statusColors[statusKey] || 'bg-gray-500'} text-white rounded-full text-[11px] font-bold capitalize flex-shrink-0`}>
                         {event.proposalStatus === 'pending_review' ? 'Pending' : event.proposalStatus}
                       </span>
                     </div>
@@ -222,7 +222,7 @@ export default function OfficerDashboardPage() {
         </div>
 
         {/* Pending Tasks */}
-        <div className="lg:col-span-5 bg-white border border-[#E0E0E0] rounded-xl overflow-hidden shadow-sm flex flex-col justify-between">
+        <div className="lg:col-span-5 bg-white border border-[#E0E0E0] rounded-2xl overflow-hidden shadow-xs flex flex-col justify-between">
           <div>
             <div className="p-5 border-b border-[#E0E0E0]">
               <h3 className="text-[#001A4D] text-[16px] font-bold">Pending Action Items</h3>
@@ -236,19 +236,19 @@ export default function OfficerDashboardPage() {
                 </div>
               ) : (
                 pendingTasks.slice(0, 5).map((task) => (
-                  <div key={task.id} className="flex items-start gap-3 pb-3 border-b border-[#E0E0E0] last:border-0 last:pb-0">
-                    <div className="w-5 h-5 border-2 border-[#83358E] rounded-full mt-0.5 flex-shrink-0 flex items-center justify-center">
-                      <div className="w-2 h-2 bg-[#83358E] rounded-full" />
+                  <div key={task.id} className="flex items-start gap-3 pb-3 border-b border-gray-100 last:border-0 last:pb-0">
+                    <div className="w-5 h-5 border-2 border-[#0E4EBD] rounded-full mt-0.5 flex-shrink-0 flex items-center justify-center">
+                      <div className="w-2 h-2 bg-[#0E4EBD] rounded-full" />
                     </div>
                     <div className="flex-1">
                       <p className="text-[#001A4D] text-[13px] font-bold mb-0.5">{task.task}</p>
-                      <p className={`text-[11px] ${task.isDueDays ? 'text-[#E24B4A] font-semibold' : 'text-[#888780]'}`}>
+                      <p className={`text-[11px] ${task.isDueDays ? 'text-[#E24B4A] font-semibold' : 'text-gray-500'}`}>
                         {task.dueDate}
                       </p>
                     </div>
                     <Link
                       to={task.link}
-                      className="px-3 py-1.5 bg-[#83358E] text-white rounded-lg text-[12px] font-bold hover:bg-[#6D2A78] transition-colors flex-shrink-0"
+                      className="px-3 py-1.5 bg-[#001A4D] hover:bg-[#0E4EBD] text-white rounded-lg text-[12px] font-bold transition-colors flex-shrink-0 shadow-xs"
                     >
                       Act
                     </Link>
@@ -261,7 +261,7 @@ export default function OfficerDashboardPage() {
       </div>
 
       {/* Recent Attendance Activity */}
-      <div className="bg-white border border-[#E0E0E0] rounded-xl overflow-hidden shadow-sm">
+      <div className="bg-white border border-[#E0E0E0] rounded-2xl overflow-hidden shadow-xs">
         <div className="p-5 border-b border-[#E0E0E0] flex items-center justify-between">
           <div className="flex items-center gap-3">
             <h3 className="text-[#001A4D] text-[16px] font-bold">Recent Attendance Activity</h3>
@@ -270,7 +270,7 @@ export default function OfficerDashboardPage() {
               <span className="text-[#639922] text-[11px] font-bold">Live Stream</span>
             </div>
           </div>
-          <Link to="/officer/attendance" className="text-[#7F77DD] text-[13px] font-bold hover:underline flex items-center gap-1">
+          <Link to="/officer/attendance" className="text-[#0E4EBD] text-[13px] font-bold hover:underline flex items-center gap-1">
             View Full Logs <ArrowRight className="w-3.5 h-3.5" />
           </Link>
         </div>
@@ -279,10 +279,10 @@ export default function OfficerDashboardPage() {
           <table className="w-full">
             <thead className="bg-[#F8F8F8] border-b border-[#E0E0E0]">
               <tr>
-                <th className="px-5 py-3 text-left text-[#888780] text-[12px] font-bold uppercase tracking-wider">Student</th>
-                <th className="px-5 py-3 text-left text-[#888780] text-[12px] font-bold uppercase tracking-wider">Event</th>
-                <th className="px-5 py-3 text-left text-[#888780] text-[12px] font-bold uppercase tracking-wider">Scan Time</th>
-                <th className="px-5 py-3 text-left text-[#888780] text-[12px] font-bold uppercase tracking-wider">Status</th>
+                <th className="px-5 py-3 text-left text-gray-500 text-[12px] font-bold uppercase tracking-wider">Student</th>
+                <th className="px-5 py-3 text-left text-gray-500 text-[12px] font-bold uppercase tracking-wider">Event</th>
+                <th className="px-5 py-3 text-left text-gray-500 text-[12px] font-bold uppercase tracking-wider">Scan Time</th>
+                <th className="px-5 py-3 text-left text-gray-500 text-[12px] font-bold uppercase tracking-wider">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#E0E0E0]">
@@ -310,10 +310,10 @@ export default function OfficerDashboardPage() {
                   const isFlagged = scan.status === 'Flagged';
 
                   return (
-                    <tr key={scan.id} className="hover:bg-[#F3E8FF]/40 transition-colors">
+                    <tr key={scan.id} className="hover:bg-blue-50/40 transition-colors">
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 bg-[#83358E] rounded-full flex items-center justify-center text-white font-bold text-xs flex-shrink-0">
+                          <div className="w-8 h-8 bg-gradient-to-br from-[#001A4D] to-[#0E4EBD] rounded-full flex items-center justify-center text-white font-bold text-xs flex-shrink-0 shadow-xs">
                             {initials}
                           </div>
                           <div>
@@ -323,7 +323,7 @@ export default function OfficerDashboardPage() {
                         </div>
                       </td>
                       <td className="px-5 py-3.5 text-[#001A4D] text-[13px] font-medium">{scan.event}</td>
-                      <td className="px-5 py-3.5 text-[#888780] text-[13px]">
+                      <td className="px-5 py-3.5 text-gray-500 text-[13px]">
                         {scan.checkIn !== '—' ? scan.checkIn : scan.checkOut}
                       </td>
                       <td className="px-5 py-3.5">

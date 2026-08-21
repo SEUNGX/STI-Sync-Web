@@ -72,11 +72,17 @@ export async function generatePayablesForEvent(
     const snapshot = await getDocs(q);
 
     const targetYearLevels = eventData.targetYearLevels || [];
+    const targetCourses = eventData.targetCourses || eventData.allowedCourses || [];
+    const targetSections = eventData.targetSections || [];
     const targetDeptIds = eventData.targetDepartmentIds || [];
     const isAllStudents =
+      eventData.targetAudienceScope === 'all' ||
       eventData.targetAudience === 'all' ||
-      !eventData.targetAudience ||
-      (targetYearLevels.length === 0 && targetDeptIds.length === 0);
+      (!eventData.targetAudienceScope &&
+        targetYearLevels.length === 0 &&
+        targetCourses.length === 0 &&
+        targetSections.length === 0 &&
+        targetDeptIds.length === 0);
 
     const studentsToCharge = snapshot.docs
       .map((d) => ({ id: d.id, ...d.data() }))
@@ -103,12 +109,20 @@ export async function generatePayablesForEvent(
         }
         if (isAllStudents) return true;
 
+        const matchesCourse =
+          targetCourses.length === 0 ||
+          targetCourses.includes(student.courseId) ||
+          targetCourses.includes(student.courseCode);
+        const matchesSection =
+          targetSections.length === 0 ||
+          targetSections.includes(student.section) ||
+          targetSections.includes(student.id);
         const matchesDept =
           targetDeptIds.length === 0 || targetDeptIds.includes(student.departmentId);
         const matchesYear =
           targetYearLevels.length === 0 || targetYearLevels.includes(student.yearLevel);
 
-        return matchesDept && matchesYear;
+        return matchesCourse && matchesSection && matchesDept && matchesYear;
       });
 
     console.log(
@@ -340,11 +354,15 @@ const buildEventSnapshot = (data: any) => {
     semesterId: data.semesterId || '',
     schoolYear: data.schoolYear || '',
     venueId: data.venueId || '',
+    customVenueName: data.customVenueName || null,
     eventFormat: data.eventFormat || '',
     gracePeriodMinutes: data.gracePeriodMinutes ?? null,
     lateThresholdMinutes: data.lateThresholdMinutes ?? null,
     sessions: data.sessions || [],
+    targetAudienceScope: data.targetAudienceScope || 'all',
+    targetCourses: data.targetCourses || data.allowedCourses || [],
     targetYearLevels: data.targetYearLevels || [],
+    targetSections: data.targetSections || [],
     targetDepartmentIds: data.targetDepartmentIds || [],
     attendanceEnabled: data.attendanceEnabled !== false,
     certificatesEnabled: data.certificatesEnabled !== false,
@@ -353,8 +371,8 @@ const buildEventSnapshot = (data: any) => {
     maxAttendees: data.maxAttendees || 0,
     registrationDeadline: data.registrationDeadline || '',
     requiresRegistration: data.requiresRegistration !== false,
-    allowedCourses: data.allowedCourses || [],
-    allowedYearLevels: data.allowedYearLevels || [],
+    allowedCourses: data.allowedCourses || data.targetCourses || [],
+    allowedYearLevels: data.allowedYearLevels || data.targetYearLevels || [],
     eventHeadUid: data.eventHeadUid || '',
     officerInChargeUid: data.officerInChargeUid || '',
     scanners: data.scanners || [],

@@ -505,7 +505,7 @@ export default function AttendanceLogs() {
                       {filteredRecords.map((rec, idx) => (
                         <tr
                           key={rec.id || idx}
-                          className={`hover:bg-purple-50/40 transition-colors ${
+                          className={`hover:bg-blue-50/40 transition-colors ${
                             rec.status === 'Absent' ? 'bg-red-50/20' :
                             rec.status === 'Flagged' ? 'bg-amber-50/30' :
                             rec.status === 'Late' ? 'bg-orange-50/20' : ''
@@ -519,8 +519,8 @@ export default function AttendanceLogs() {
                               {rec.departmentCode || rec.departmentName || 'N/A'}
                             </span>
                           </td>
-                          <td className="px-4 py-3 font-semibold text-purple-900">{rec.courseCode || rec.courseName || 'N/A'}</td>
-                          <td className="px-4 py-3 font-semibold text-[#83358E]">{rec.section || 'N/A'}</td>
+                          <td className="px-4 py-3 font-semibold text-blue-900">{rec.courseCode || rec.courseName || 'N/A'}</td>
+                          <td className="px-4 py-3 font-semibold text-[#0E4EBD]">{rec.section || 'N/A'}</td>
                           <td className="px-4 py-3 text-gray-600">{rec.yearLevel || 'N/A'}</td>
                           <td className="px-4 py-3 font-mono text-green-700">{rec.checkIn || '—'}</td>
                           <td className="px-4 py-3 font-mono text-blue-700">{rec.checkOut || '—'}</td>
@@ -585,7 +585,7 @@ export default function AttendanceLogs() {
                           {flaggedEntries.map((rec, i) => (
                             <tr key={rec.id || i}>
                               <td className="px-3 py-2 font-bold">{rec.name} ({rec.studentId})</td>
-                              <td className="px-3 py-2 font-mono text-[#83358E]">{rec.section}</td>
+                              <td className="px-3 py-2 font-mono text-[#0E4EBD]">{rec.section}</td>
                               <td className="px-3 py-2 text-amber-800 italic">{rec.flaggedReason || 'Scan anomaly'}</td>
                               <td className="px-3 py-2 font-mono">{rec.checkIn || rec.checkOut || 'N/A'}</td>
                             </tr>

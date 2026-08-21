@@ -106,7 +106,7 @@ export default function OrganizationProfile({ embedded = false }: { embedded?: b
   const activeOfficersList = officers.filter(o => o.isActive);
   const establishedDate = formatAppDate(activeOrg.createdAt, 'Unknown');
 
-  const inputClass = `w-full px-4 py-2 border border-[#E0E0E0] rounded-lg text-sm transition-colors focus:ring-2 focus:ring-[#83358E] focus:border-transparent outline-none ${
+  const inputClass = `w-full px-4 py-2 border border-[#E0E0E0] rounded-lg text-sm transition-colors focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] outline-none ${
     !canEdit ? 'bg-gray-50 text-gray-600 cursor-not-allowed' : 'bg-white'
   }`;
 
@@ -130,7 +130,7 @@ export default function OrganizationProfile({ embedded = false }: { embedded?: b
           <button 
             onClick={handleSave}
             disabled={isSubmitting}
-            className="flex items-center gap-2 px-5 py-2 bg-[#83358E] text-white rounded-lg text-[14px] font-bold hover:bg-[#6D2A78] transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 px-5 py-2 bg-[#001A4D] text-white rounded-lg text-[14px] font-bold hover:bg-[#0E4EBD] transition-colors disabled:opacity-50 cursor-pointer shadow-xs"
           >
             {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             {isSubmitting ? 'Saving...' : 'Save Changes'}
@@ -335,7 +335,7 @@ export default function OrganizationProfile({ embedded = false }: { embedded?: b
                   
                   return (
                     <div key={officer.id} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg transition-colors">
-                      <div className="w-9 h-9 rounded-full bg-[#EEEDFE] text-[#7F77DD] font-bold flex items-center justify-center text-xs flex-shrink-0">
+                      <div className="w-9 h-9 rounded-full bg-blue-50 text-[#0E4EBD] font-bold flex items-center justify-center text-xs flex-shrink-0 border border-blue-200">
                         {initials}
                       </div>
                       <div className="min-w-0 flex-1">

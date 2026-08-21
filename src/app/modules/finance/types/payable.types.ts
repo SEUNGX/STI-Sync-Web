@@ -39,8 +39,10 @@ export interface PayableDocument {
   recordedBy: string | null;
   paymentMethod: string | null;
   qrTicketUnlocked?: boolean;              // Explicit toggle: true = student event QR ticket unlocked for gate scan
+  transferredAmount?: number;              // Amount from this payable already transferred to budget
   transferredToBudget?: boolean;           // True if event fee collection transferred to SAO budget
   transferredAt?: Timestamp | null;
+  transferredBatchId?: string | null;
   fineViolations?: FineViolationDetail[];  // Granular breakdown of session fine violations
 
   // ─── Audit ───
@@ -88,6 +90,23 @@ export interface GenerateEventFinesPayload {
   rawAttendanceRecords?: any[];
 }
 
+export interface CollectionPaymentItem {
+  id: string;
+  name: string;
+  studentId: string;
+  amount: number;
+  paidDate: string;
+  status: "Paid" | "Pending";
+  transferredAmount?: number;
+  untransferredAmount?: number;
+  transferredToBudget?: boolean;
+  transferredAt?: string;
+  transferredBatchId?: string;
+  paymentMethod?: string;
+  fineViolations?: FineViolationDetail[];
+  description?: string;
+}
+
 export interface StudentEventCollectionGroup {
   id: string;
   eventId: string;
@@ -99,17 +118,11 @@ export interface StudentEventCollectionGroup {
   totalStudents: number;
   totalAssigned?: number;
   totalCollected?: number;
+  transferredAmount?: number;
   untransferredAmount?: number;
   transferredToBudget: boolean;
   transferredDate?: string;
-  payments: Array<{
-    id: string;
-    name: string;
-    studentId: string;
-    amount: number;
-    paidDate: string;
-    status: "Paid" | "Pending";
-  }>;
+  payments: CollectionPaymentItem[];
 }
 
 export interface CreatePayablePayload {

@@ -99,3 +99,42 @@ export function useSemesters() {
 
   return { data, loading, error };
 }
+
+export function useActiveAcademicPeriods() {
+  const { data: periods = [], loading, error } = useSemesters();
+
+  const activeCollegePeriod = periods.find(
+    (p) => !p.archived && (p.academicLevel === 'COLLEGE' || (!p.academicLevel && !String(p.semester).includes('Trimester'))) && p.status === 'ACTIVE'
+  );
+
+  const activeShsPeriod = periods.find(
+    (p) => !p.archived && (p.academicLevel === 'SHS' || String(p.semester).includes('Trimester')) && p.status === 'ACTIVE'
+  );
+
+  /** Helper to get active period matching a specific academic level */
+  const getActivePeriodFor = (level: import('../types/academic.types').AcademicLevel | undefined) => {
+    return level === 'SHS' ? activeShsPeriod : activeCollegePeriod;
+  };
+
+  /** Helper to evaluate if a student needs re-enrollment */
+  const isStudentPendingReEnrollment = (student: { academicLevel?: import('../types/academic.types').AcademicLevel; schoolYear?: string; semester?: string; term?: string }) => {
+    const activePeriod = getActivePeriodFor(student.academicLevel || (student.semester && String(student.semester).includes('Trimester') ? 'SHS' : 'COLLEGE'));
+    if (!activePeriod) return false;
+
+    const studentTerm = student.term || student.semester;
+    return (
+      student.schoolYear !== activePeriod.academicYear ||
+      studentTerm !== activePeriod.semester
+    );
+  };
+
+  return {
+    periods,
+    activeCollegePeriod,
+    activeShsPeriod,
+    getActivePeriodFor,
+    isStudentPendingReEnrollment,
+    loading,
+    error,
+  };
+}

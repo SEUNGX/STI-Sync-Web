@@ -179,7 +179,7 @@ export function EventPayablesQRControl({
   if (loading) {
     return (
       <div className="bg-white border border-[#E0E0E0] rounded-xl p-8 text-center space-y-2">
-        <Loader2 className="w-6 h-6 animate-spin text-[#83358E] mx-auto" />
+        <Loader2 className="w-6 h-6 animate-spin text-[#0E4EBD] mx-auto" />
         <p className="text-gray-500 text-xs font-medium">Loading event student payables & QR access control...</p>
       </div>
     );

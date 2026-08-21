@@ -55,6 +55,40 @@ graph TD
 | **Dashboard Greeting Banner** | Displays single `activeSemester.label`. | Needs to reflect both active College Semester & SHS Trimester. | Show dual active badges (e.g., `College: 2nd Sem` \| `SHS: 3rd Tri`). |
 | **Semester Rollover Engine** | Rolls over all students at once. | College & SHS cannot be rolled over on the same date. | Track-specific Rollover: Rollover College OR Rollover SHS independently. |
 
+### Detailed Impact on Key Modules
+
+#### 1. Semester Rollover Engine
+- **Current Behavior**: The rollover process is global. Calling `executeSemesterRollover()` updates the status of the current active semester to `COMPLETED`, marks the next semester as `ACTIVE`, and rolls over year levels for all students.
+- **Dual-Track Impact**: College semesters and SHS trimesters rollover on entirely different dates. Doing a global rollover will prematurely advance SHS students while College is still in session, or vice-versa.
+- **Required Changes**:
+  - Refactor `executeSemesterRollover(academicLevel: 'COLLEGE' | 'SHS')` to target only the specified level.
+  - Filter students to be rolled over based on their `academicLevel`.
+  - Ensure track-specific logs and history records are created independently.
+
+#### 2. Student Registry & Registration
+- **Current Behavior**: Handles registration and queries using global `activeSemester` assumptions. Flags students as "Pending Re-enrollment" if their term does not match the single active semester.
+- **Dual-Track Impact**: SHS students will be incorrectly flagged as pending re-enrollment during periods when College starts a new semester but SHS is still in the middle of a trimester.
+- **Required Changes**:
+  - Update `useActiveAcademicPeriods` hook to provide level-specific indicators.
+  - Refactor checking logic in `StudentRegistry.tsx` to compare College students against `activeCollegePeriod` and SHS students against `activeShsPeriod`.
+  - Update the student registration form (both self-registration and admin manual creation) to dynamically filter year levels (`Grade 11/12` vs `1st-4th Year`) and term options based on the chosen department's `academicLevel`.
+
+#### 3. Events & Attendance Proposals
+- **Current Behavior**: Events are linked to `activeSemester.id` for budgeting, proposals, and scheduling.
+- **Dual-Track Impact**: Events might target SHS-only, College-only, or both tracks. The calendar and event filters need to know which academic periods are applicable.
+- **Required Changes**:
+  - Add `targetAcademicLevels: ('COLLEGE' | 'SHS')[]` to the event schema.
+  - Update `Step2Schedule.tsx` in the event proposal wizard to allow selecting the correct active period based on the target academic level.
+  - Ensure event listings and search filters can filter by academic track.
+
+#### 4. Financial Liquidations & Budgeting
+- **Current Behavior**: The budget, fund settings, and ledger transactions are grouped and filtered by a single `semesterId` (`activeSemester.id`).
+- **Dual-Track Impact**: Since the ledger has dual active terms, financial reports, budget allocations, and collections need to distinguish between College funds and SHS funds.
+- **Required Changes**:
+  - Update ledger transactions to include `academicLevel` and the corresponding `termId`.
+  - Group and display running balances in `FinanceCenter.tsx` separately or introduce filter tabs for `College` and `SHS` transactions.
+  - In `GenerateDuesModal.tsx` and `AddPayableModal.tsx`, allow selecting whether the due is for College, SHS, or both, automatically assigning them the correct active term IDs.
+
 ---
 
 ## 3. Proposed Core Solution: Dual-Track Academic Architecture

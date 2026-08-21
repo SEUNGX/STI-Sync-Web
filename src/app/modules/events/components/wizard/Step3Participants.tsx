@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Users, Lock } from 'lucide-react';
-import { useDepartments } from '../../../academic';
+import { Users, Globe, UserCheck, CheckSquare, Layers, BookOpen } from 'lucide-react';
+import { useCourses, useSections } from '../../../academic';
 import { useStudents } from '../../../students/hooks/useStudentStream';
 import { useOrgMembers } from '../../../organizations/hooks/useOrgMembers';
 import { useOrganizationStream } from '../../../organizations';
@@ -12,7 +12,7 @@ interface Step3Props {
   isOfficer?: boolean;
 }
 
-const YEAR_LEVELS = ['All', '1st Year', '2nd Year', '3rd Year', '4th Year', 'G11', 'G12'];
+const YEAR_LEVELS = ['1st Year', '2nd Year', '3rd Year', '4th Year', 'G11', 'G12'];
 
 function formatTime12Hour(timeStr?: string): string {
   if (!timeStr) return 'TBA';
@@ -43,19 +43,37 @@ function addMinutesToTime(timeStr: string, minutesToAdd: number): string {
 }
 
 export default function Step3Participants({ data, onUpdate, isOfficer }: Step3Props) {
-  const { data: departments, loading: deptsLoading } = useDepartments();
+  const { data: courses, loading: coursesLoading } = useCourses();
+  const { data: sections, loading: sectionsLoading } = useSections();
   const { data: students, loading: studentsLoading } = useStudents();
   const { data: orgs } = useOrganizationStream();
   const { members: orgMembers, loading: membersLoading } = useOrgMembers(data.hostingOrgId || '');
 
-  const activeDepartments = departments.filter(d => !d.archived);
-  const currentOrg = orgs.find(o => o.id === data.hostingOrgId);
+  const activeCourses = useMemo(() => courses.filter(c => !c.archived), [courses]);
+  const activeSections = useMemo(() => sections.filter(s => !s.archived), [sections]);
+  const currentOrg = useMemo(() => orgs.find(o => o.id === data.hostingOrgId), [orgs, data.hostingOrgId]);
 
-  // Initialize defaults if undefined without triggering redundant state updates
+  // Dynamic Theme Styling based on Officer vs Admin
+  const accentBorder = 'border-[#0E4EBD]';
+  const accentText = 'text-[#0E4EBD]';
+  const accentBg = 'bg-[#0E4EBD]';
+  const accentBgLight = 'bg-blue-50';
+  const accentBorderLight = 'border-blue-200';
+  const accentFocusRing = 'focus:ring-[#0E4EBD]';
+  const accentGradient = 'from-[#001A4D] via-[#002B7F] to-[#0E4EBD]';
+
+  // Selected filters
+  const selectedScope = data.targetAudienceScope || 'all';
+  const selectedCourses = data.targetCourses || data.allowedCourses || [];
+  const selectedYears = data.targetYearLevels || [];
+  const selectedSections = data.targetSections || [];
+
+  // Initialize defaults
   useEffect(() => {
     const updates: Partial<EventFormData> = {};
     if (data.attendanceEnabled === undefined) updates.attendanceEnabled = true;
     if (data.certificatesEnabled === undefined) updates.certificatesEnabled = true;
+    if (!data.targetAudienceScope) updates.targetAudienceScope = 'all';
     if (Object.keys(updates).length > 0) {
       onUpdate(updates);
     }
@@ -65,33 +83,93 @@ export default function Step3Participants({ data, onUpdate, isOfficer }: Step3Pr
     onUpdate({ [field]: value });
   };
 
+  // Scope toggle (All Students vs Org Members) for Officers
+  const setAudienceScope = (scope: 'all' | 'members') => {
+    updateField('targetAudienceScope', scope);
+  };
+
+  // Course Toggles & Select All
+  const toggleCourse = (courseId: string) => {
+    const next = selectedCourses.includes(courseId)
+      ? selectedCourses.filter(id => id !== courseId)
+      : [...selectedCourses, courseId];
+    updateField('targetCourses', next);
+    updateField('allowedCourses', next);
+  };
+
+  const selectAllCourses = () => {
+    const allCourseIds = activeCourses.map(c => c.id);
+    updateField('targetCourses', allCourseIds);
+    updateField('allowedCourses', allCourseIds);
+  };
+
+  const clearAllCourses = () => {
+    updateField('targetCourses', []);
+    updateField('allowedCourses', []);
+  };
+
+  // Year Level Toggles & Select All
   const toggleYear = (year: string) => {
-    const current = data.targetYearLevels || [];
-    if (year === 'All') {
-      updateField('targetYearLevels', current.length === YEAR_LEVELS.length ? [] : [...YEAR_LEVELS]);
-    } else {
-      updateField('targetYearLevels', current.includes(year) ? current.filter(y => y !== year) : [...current, year]);
-    }
+    const next = selectedYears.includes(year)
+      ? selectedYears.filter(y => y !== year)
+      : [...selectedYears, year];
+    updateField('targetYearLevels', next);
   };
 
-  const toggleDept = (deptId: string) => {
-    const current = data.targetDepartmentIds || [];
-    updateField('targetDepartmentIds', current.includes(deptId) ? current.filter(id => id !== deptId) : [...current, deptId]);
+  const selectAllYears = () => {
+    updateField('targetYearLevels', [...YEAR_LEVELS]);
   };
 
-  const toggleHasTimeOut = (id: string) => {
-    const sessions = data.sessions || [];
-    updateField('sessions', sessions.map(s => s.id === id ? { ...s, hasTimeOut: !s.hasTimeOut } : s));
+  const clearAllYears = () => {
+    updateField('targetYearLevels', []);
   };
 
-  const updateSession = (id: string, field: keyof EventSession, value: any) => {
-    const sessions = data.sessions || [];
-    updateField('sessions', sessions.map(s => s.id === id ? { ...s, [field]: value } : s));
+  // Cascading Sections Filter based on selected courses and year levels
+  const availableSections = useMemo(() => {
+    return activeSections.filter(sec => {
+      // Filter by Course if any courses are selected
+      if (selectedCourses.length > 0) {
+        const matchesCourse = selectedCourses.includes(sec.courseId) || selectedCourses.some(cId => {
+          const c = activeCourses.find(item => item.id === cId);
+          return c && (sec.name.startsWith(c.code) || sec.name.includes(c.code));
+        });
+        if (!matchesCourse) return false;
+      }
+
+      // Filter by Year Level if any year levels are selected
+      if (selectedYears.length > 0) {
+        const matchesYear = selectedYears.some(yearStr => {
+          if (yearStr === '1st Year') return sec.yearLevel === 1 || sec.name.includes('-1') || sec.name.includes('101');
+          if (yearStr === '2nd Year') return sec.yearLevel === 2 || sec.name.includes('-2') || sec.name.includes('201');
+          if (yearStr === '3rd Year') return sec.yearLevel === 3 || sec.name.includes('-3') || sec.name.includes('301');
+          if (yearStr === '4th Year') return sec.yearLevel === 4 || sec.name.includes('-4') || sec.name.includes('401');
+          if (yearStr === 'G11') return sec.yearLevel === 11 || sec.name.includes('11');
+          if (yearStr === 'G12') return sec.yearLevel === 12 || sec.name.includes('12');
+          return false;
+        });
+        if (!matchesYear) return false;
+      }
+
+      return true;
+    });
+  }, [activeSections, selectedCourses, selectedYears, activeCourses]);
+
+  // Section Toggles & Select All
+  const toggleSection = (secNameOrId: string) => {
+    const next = selectedSections.includes(secNameOrId)
+      ? selectedSections.filter(s => s !== secNameOrId)
+      : [...selectedSections, secNameOrId];
+    updateField('targetSections', next);
   };
 
-  const sessions = data.sessions || [];
-  const selectedYears = data.targetYearLevels || [];
-  const selectedDepts = data.targetDepartmentIds || [];
+  const selectAllFilteredSections = () => {
+    const allFilteredSecNames = availableSections.map(s => s.name);
+    updateField('targetSections', allFilteredSecNames);
+  };
+
+  const clearAllSections = () => {
+    updateField('targetSections', []);
+  };
 
   // Build member ID sets for fast lookup
   const memberStudentIds = useMemo(() => {
@@ -104,110 +182,279 @@ export default function Step3Participants({ data, onUpdate, isOfficer }: Step3Pr
     return set;
   }, [orgMembers]);
 
-  // Calculate actual matching students based on selected Departments and Year Levels
+  // Calculate actual matching students based on Audience Scope, Courses, Year Levels, and Sections
   const matchingStudents = useMemo(() => {
     return students.filter(s => {
       const active = !s.status || s.status.toUpperCase() === 'ACTIVE';
       if (!active) return false;
 
-      // If officer mode, constrain to org members (or org department if members list is empty)
-      if (isOfficer) {
+      // If scope is members only (officer option), constrain to org members
+      if (isOfficer && selectedScope === 'members') {
         const isOrgMember =
           memberStudentIds.size > 0
             ? memberStudentIds.has(s.studentId) || memberStudentIds.has(s.id) || (s.authUid && memberStudentIds.has(s.authUid))
-            : currentOrg?.departmentId && currentOrg.departmentId !== 'cross-departmental'
-            ? s.departmentId === currentOrg.departmentId
             : true;
-
         if (!isOrgMember) return false;
       }
 
-      const matchesDept = selectedDepts.length === 0 || selectedDepts.some(dId => {
-        const dObj = activeDepartments.find(ad => ad.id === dId);
-        return s.departmentId === dId || (dObj && (s.departmentId === dObj.code || s.departmentId === dObj.name));
-      });
+      // Course Filter
+      if (selectedCourses.length > 0) {
+        const matchesCourse = selectedCourses.includes(s.courseId) || selectedCourses.some(cId => {
+          const c = activeCourses.find(item => item.id === cId);
+          return c && (s.courseName === c.name || s.courseCode === c.code || s.courseId === c.id);
+        });
+        if (!matchesCourse) return false;
+      }
 
-      const matchesYear = selectedYears.length === 0 || selectedYears.includes('All') || selectedYears.includes(s.yearLevel);
+      // Year Level Filter
+      if (selectedYears.length > 0) {
+        const matchesYear = selectedYears.includes(s.yearLevel);
+        if (!matchesYear) return false;
+      }
 
-      return matchesDept && matchesYear;
+      // Section Filter
+      if (selectedSections.length > 0) {
+        const matchesSection = selectedSections.includes(s.section) || selectedSections.includes(s.id);
+        if (!matchesSection) return false;
+      }
+
+      return true;
     });
-  }, [students, selectedDepts, selectedYears, activeDepartments, isOfficer, memberStudentIds, currentOrg]);
+  }, [students, isOfficer, selectedScope, selectedCourses, selectedYears, selectedSections, activeCourses, memberStudentIds]);
 
-  // Sync expectedParticipantCount to data if uninitialized
+  // Sync expectedParticipantCount to data
   useEffect(() => {
     const count = matchingStudents.length;
-    if (data.expectedParticipantCount === undefined && count > 0) {
-      onUpdate({ expectedParticipantCount: count });
-    }
+    updateField('expectedParticipantCount', count);
   }, [matchingStudents.length]);
 
+  const sessions = data.sessions || [];
+
+  const updateSession = (id: string, field: keyof EventSession, value: any) => {
+    updateField('sessions', sessions.map(s => s.id === id ? { ...s, [field]: value } : s));
+  };
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-6">
+    <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
       <div className="space-y-6">
 
         {/* Section A — Target Audience */}
         <div>
-          <div className="border-l-4 border-[#83358E] pl-3 mb-4 flex items-center justify-between">
-            <h3 className="text-[#001A4D] font-bold text-base">Target Audience</h3>
-            <span className="text-xs font-semibold text-red-600 bg-red-50 px-2.5 py-1 rounded border border-red-200">
-              * Required Audience Selection
-            </span>
+          <div className={`border-l-4 ${accentBorder} pl-3 mb-4 flex items-center justify-between`}>
+            <h3 className="text-[#001A4D] font-bold text-base">
+              {isOfficer ? 'Target Audience Scope' : 'Target Audience & Academic Filter'}
+            </h3>
           </div>
 
+          {/* Scope Selector Cards — ONLY for Officers */}
           {isOfficer && (
-            <div className="p-3 bg-[#F3E8FF] border border-[#83358E]/30 rounded-xl mb-4 flex items-center gap-2 text-xs text-[#83358E]">
-              <Lock className="w-4 h-4 flex-shrink-0" />
-              <span>
-                <strong>Organization Scope:</strong> Reach is automatically scoped to designated members of <strong>{currentOrg?.acronym || currentOrg?.name || 'your organization'}</strong>. You can filter by year level below.
-              </span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+              <button
+                type="button"
+                onClick={() => setAudienceScope('all')}
+                className={`p-4 rounded-xl border-2 text-left transition-all cursor-pointer ${
+                  selectedScope === 'all'
+                    ? 'border-[#0E4EBD] bg-blue-50/70 ring-2 ring-[#0E4EBD]/20'
+                    : 'border-gray-200 hover:border-gray-300 bg-white'
+                }`}
+              >
+                <div className="flex items-center gap-2.5 mb-1.5">
+                  <div className={`p-2 rounded-lg ${selectedScope === 'all' ? 'bg-[#0E4EBD] text-white' : 'bg-gray-100 text-gray-600'}`}>
+                    <Globe className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-gray-900 text-sm">Campus-Wide / Open to All</h4>
+                    <p className="text-xs text-gray-500">Target all students matching course, year level, and section</p>
+                  </div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setAudienceScope('members')}
+                className={`p-4 rounded-xl border-2 text-left transition-all cursor-pointer ${
+                  selectedScope === 'members'
+                    ? 'border-[#0E4EBD] bg-blue-50/70 ring-2 ring-[#0E4EBD]/20'
+                    : 'border-gray-200 hover:border-gray-300 bg-white'
+                }`}
+              >
+                <div className="flex items-center gap-2.5 mb-1.5">
+                  <div className={`p-2 rounded-lg ${selectedScope === 'members' ? 'bg-[#0E4EBD] text-white' : 'bg-gray-100 text-gray-600'}`}>
+                    <UserCheck className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-gray-900 text-sm">Organization Members Only</h4>
+                    <p className="text-xs text-gray-500">
+                      Exclusive to registered members of {currentOrg?.acronym || 'your organization'}
+                    </p>
+                  </div>
+                </div>
+              </button>
             </div>
           )}
 
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Year Levels <span className="text-red-500">*</span>
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {YEAR_LEVELS.map((year) => (
+          <div className="space-y-5">
+            {/* 1. Courses Filter */}
+            <div className="p-4 border border-gray-200 rounded-xl bg-white space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <BookOpen className={`w-4 h-4 ${accentText}`} />
+                  <label className="text-xs font-bold text-gray-900 uppercase tracking-wider">
+                    Target Courses ({selectedCourses.length === 0 ? 'All Courses' : `${selectedCourses.length} Selected`})
+                  </label>
+                </div>
+                <div className="flex items-center gap-2">
                   <button
-                    key={year}
-                    onClick={() => toggleYear(year)}
-                    className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${selectedYears.includes(year)
-                        ? 'bg-[#83358E] text-white border-[#83358E]'
-                        : 'bg-white text-gray-700 border-gray-300 hover:border-[#83358E]'
-                      }`}
+                    type="button"
+                    onClick={selectAllCourses}
+                    className={`text-xs ${accentText} hover:underline font-semibold flex items-center gap-1 cursor-pointer`}
                   >
-                    {year}
+                    <CheckSquare className="w-3.5 h-3.5" /> Select All ({activeCourses.length})
                   </button>
-                ))}
+                  <span className="text-gray-300">|</span>
+                  <button
+                    type="button"
+                    onClick={clearAllCourses}
+                    className="text-xs text-gray-500 hover:text-gray-700 font-medium cursor-pointer"
+                  >
+                    Clear
+                  </button>
+                </div>
               </div>
-              {selectedYears.length === 0 && (
-                <p className="text-xs text-red-500 mt-1">Please select at least one target Year Level.</p>
+
+              {coursesLoading ? (
+                <div className="text-xs text-gray-400 py-2">Loading courses...</div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {activeCourses.map(course => {
+                    const isSelected = selectedCourses.includes(course.id);
+                    return (
+                      <button
+                        type="button"
+                        key={course.id}
+                        onClick={() => toggleCourse(course.id)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                          isSelected
+                            ? `${accentBg} text-white ${accentBorder} shadow-xs`
+                            : `bg-gray-50 text-gray-700 border-gray-200 hover:${accentBorder} ${isOfficer ? 'hover:bg-purple-50/50' : 'hover:bg-blue-50/50'}`
+                        }`}
+                      >
+                        {course.code || course.name}
+                      </button>
+                    );
+                  })}
+                </div>
               )}
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Departments / Colleges <span className="text-red-500">*</span>
-              </label>
-              <div className="space-y-2 max-h-48 overflow-y-auto p-2 border border-gray-200 rounded-lg">
-                {deptsLoading ? (
-                  <div className="text-sm text-gray-500">Loading departments...</div>
-                ) : activeDepartments.map((dept) => (
-                  <label key={dept.id} className="flex items-center gap-2 px-3 py-2 border border-gray-100 rounded-lg hover:bg-gray-50 cursor-pointer">
-                    <input 
-                      type="checkbox" 
-                      checked={selectedDepts.includes(dept.id)}
-                      onChange={() => toggleDept(dept.id)}
-                      className="text-[#83358E] focus:ring-[#83358E] rounded" 
-                    />
-                    <span className="text-sm text-gray-700">{dept.name} ({dept.code})</span>
+            {/* 2. Year Levels Filter */}
+            <div className="p-4 border border-gray-200 rounded-xl bg-white space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Layers className={`w-4 h-4 ${accentText}`} />
+                  <label className="text-xs font-bold text-gray-900 uppercase tracking-wider">
+                    Year Levels ({selectedYears.length === 0 ? 'All Year Levels' : `${selectedYears.length} Selected`})
                   </label>
-                ))}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={selectAllYears}
+                    className={`text-xs ${accentText} hover:underline font-semibold flex items-center gap-1 cursor-pointer`}
+                  >
+                    <CheckSquare className="w-3.5 h-3.5" /> Select All ({YEAR_LEVELS.length})
+                  </button>
+                  <span className="text-gray-300">|</span>
+                  <button
+                    type="button"
+                    onClick={clearAllYears}
+                    className="text-xs text-gray-500 hover:text-gray-700 font-medium cursor-pointer"
+                  >
+                    Clear
+                  </button>
+                </div>
               </div>
-              {selectedDepts.length === 0 && (
-                <p className="text-xs text-red-500 mt-1">Please select at least one target Department/College.</p>
+
+              <div className="flex flex-wrap gap-2">
+                {YEAR_LEVELS.map(year => {
+                  const isSelected = selectedYears.includes(year);
+                  return (
+                    <button
+                      type="button"
+                      key={year}
+                      onClick={() => toggleYear(year)}
+                      className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                        isSelected
+                          ? `${accentBg} text-white ${accentBorder} shadow-xs`
+                          : `bg-gray-50 text-gray-700 border-gray-200 hover:${accentBorder} ${isOfficer ? 'hover:bg-purple-50/50' : 'hover:bg-blue-50/50'}`
+                      }`}
+                    >
+                      {year}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 3. Sections Filter (Cascading) */}
+            <div className="p-4 border border-gray-200 rounded-xl bg-white space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="text-xs font-bold text-gray-900 uppercase tracking-wider">
+                    Sections ({selectedSections.length === 0 ? 'All Sections' : `${selectedSections.length} Selected`})
+                  </label>
+                  <p className="text-[11px] text-gray-500 mt-0.5">
+                    {selectedCourses.length > 0 || selectedYears.length > 0
+                      ? `Filtered by chosen course/year (${availableSections.length} available)`
+                      : `Showing all sections (${availableSections.length} available)`}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={selectAllFilteredSections}
+                    disabled={availableSections.length === 0}
+                    className={`text-xs ${accentText} hover:underline font-semibold flex items-center gap-1 disabled:opacity-50 cursor-pointer`}
+                  >
+                    <CheckSquare className="w-3.5 h-3.5" /> Select All ({availableSections.length})
+                  </button>
+                  <span className="text-gray-300">|</span>
+                  <button
+                    type="button"
+                    onClick={clearAllSections}
+                    className="text-xs text-gray-500 hover:text-gray-700 font-medium cursor-pointer"
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+
+              {sectionsLoading ? (
+                <div className="text-xs text-gray-400 py-2">Loading sections...</div>
+              ) : availableSections.length === 0 ? (
+                <div className="text-xs text-amber-600 bg-amber-50 p-2.5 rounded-lg border border-amber-200">
+                  No sections match the current Course and Year Level selection.
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-1.5 max-h-44 overflow-y-auto p-2 border border-gray-100 rounded-lg bg-gray-50/50">
+                  {availableSections.map(sec => {
+                    const isSelected = selectedSections.includes(sec.name) || selectedSections.includes(sec.id);
+                    return (
+                      <button
+                        type="button"
+                        key={sec.id}
+                        onClick={() => toggleSection(sec.name)}
+                        className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-all cursor-pointer ${
+                          isSelected
+                            ? `${accentBg} text-white ${accentBorder} font-bold shadow-xs`
+                            : 'bg-white text-gray-700 border-gray-200 hover:border-[#0E4EBD]'
+                        }`}
+                      >
+                        {sec.name}
+                      </button>
+                    );
+                  })}
+                </div>
               )}
             </div>
           </div>
@@ -215,7 +462,7 @@ export default function Step3Participants({ data, onUpdate, isOfficer }: Step3Pr
 
         {/* Section B — Attendance Rules per Session */}
         <div>
-          <div className="border-l-4 border-[#83358E] pl-3 mb-4">
+          <div className={`border-l-4 ${accentBorder} pl-3 mb-4`}>
             <h3 className="text-[#001A4D] font-bold text-base">Attendance Rules per Session</h3>
             <p className="text-xs text-gray-500 mt-0.5">Configure check-in and check-out scanning windows for each event session</p>
           </div>
@@ -239,7 +486,7 @@ export default function Step3Participants({ data, onUpdate, isOfficer }: Step3Pr
                     <div className="bg-[#001A4D] px-4 py-3 text-white">
                       <div className="flex items-center justify-between">
                         <p className="font-bold text-sm">{session.title || `Session ${index + 1}`}</p>
-                        <span className="px-2.5 py-0.5 bg-[#83358E] rounded-full text-xs font-semibold text-white">
+                        <span className={`px-2.5 py-0.5 ${accentBg} rounded-full text-xs font-semibold text-white`}>
                           {session.date || 'No Date'}
                         </span>
                       </div>
@@ -275,7 +522,7 @@ export default function Step3Participants({ data, onUpdate, isOfficer }: Step3Pr
                               step="600"
                               value={session.timeInOpen || ''}
                               onChange={(e) => updateSession(session.id, 'timeInOpen', e.target.value)}
-                              className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] focus:border-transparent ${
+                              className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 ${accentFocusRing} focus:border-transparent ${
                                 timeInOpenInvalid || timeInOrderInvalid ? 'border-red-400 bg-red-50/30' : 'border-gray-300'
                               }`}
                             />
@@ -296,7 +543,7 @@ export default function Step3Participants({ data, onUpdate, isOfficer }: Step3Pr
                               step="600"
                               value={session.timeInClose || ''}
                               onChange={(e) => updateSession(session.id, 'timeInClose', e.target.value)}
-                              className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] focus:border-transparent ${
+                              className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 ${accentFocusRing} focus:border-transparent ${
                                 timeInOrderInvalid ? 'border-red-400 bg-red-50/30' : 'border-gray-300'
                               }`}
                             />
@@ -326,8 +573,8 @@ export default function Step3Participants({ data, onUpdate, isOfficer }: Step3Pr
                           <button
                             type="button"
                             onClick={() => updateSession(session.id, 'hasTimeOut', !session.hasTimeOut)}
-                            className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${
-                              session.hasTimeOut ? 'bg-[#83358E]' : 'bg-gray-300'
+                            className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 cursor-pointer ${
+                              session.hasTimeOut ? accentBg : 'bg-gray-300'
                             }`}
                           >
                             <div
@@ -339,7 +586,7 @@ export default function Step3Participants({ data, onUpdate, isOfficer }: Step3Pr
                         </div>
 
                         {session.hasTimeOut && (
-                          <div className="space-y-2 bg-purple-50/40 p-3 rounded-lg border border-purple-100">
+                          <div className={`space-y-2 ${accentBgLight}/40 p-3 rounded-lg border ${accentBorderLight}`}>
                             <div className="grid grid-cols-2 gap-3">
                               <div>
                                 <label className="block text-xs text-gray-600 mb-1">Opens</label>
@@ -348,7 +595,7 @@ export default function Step3Participants({ data, onUpdate, isOfficer }: Step3Pr
                                   step="600"
                                   value={session.timeOutOpen || ''}
                                   onChange={(e) => updateSession(session.id, 'timeOutOpen', e.target.value)}
-                                  className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] focus:border-transparent ${
+                                  className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 ${accentFocusRing} focus:border-transparent ${
                                     timeOutBeforeInInvalid || timeOutOrderInvalid ? 'border-red-400 bg-red-50/30' : 'border-gray-300'
                                   }`}
                                 />
@@ -360,7 +607,7 @@ export default function Step3Participants({ data, onUpdate, isOfficer }: Step3Pr
                                   step="600"
                                   value={session.timeOutClose || ''}
                                   onChange={(e) => updateSession(session.id, 'timeOutClose', e.target.value)}
-                                  className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] focus:border-transparent ${
+                                  className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 ${accentFocusRing} focus:border-transparent ${
                                     timeOutOrderInvalid ? 'border-red-400 bg-red-50/30' : 'border-gray-300'
                                   }`}
                                 />
@@ -394,50 +641,72 @@ export default function Step3Participants({ data, onUpdate, isOfficer }: Step3Pr
         </div>
       </div>
 
-      {/* Right Panel */}
+      {/* Right Panel — Dynamic Reach Preview */}
       <div className="sticky top-0 h-fit">
-        <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
-          <h4 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
-            <Users className="w-5 h-5 text-[#83358E]" />
-            Estimated Reach
+        <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm space-y-4">
+          <h4 className="font-bold text-gray-900 flex items-center gap-2 text-sm">
+            <Users className={`w-4 h-4 ${accentText}`} />
+            Targeted Audience Reach
           </h4>
-          <div className="space-y-4">
-            <div className="p-4 bg-gradient-to-br from-[#0E4EBD] to-[#83358E] rounded-lg text-white text-center">
-              <div className="text-3xl font-bold mb-1">
-                {studentsLoading ? '...' : matchingStudents.length}
-              </div>
-              <div className="text-sm opacity-90">Matching Students</div>
-            </div>
 
-            <div className="border border-gray-200 rounded-lg p-3">
-              <div className="text-xs text-gray-500 mb-2">Selected Year Levels</div>
-              <div className="flex flex-wrap gap-1">
-                {selectedYears.length === 0
-                  ? <span className="text-xs text-gray-400">None selected</span>
-                  : selectedYears.map(y => (
-                    <span key={y} className="px-2 py-0.5 bg-[#83358E]/10 text-[#83358E] text-xs rounded-full">{y}</span>
-                  ))}
+          <div className={`p-4 bg-gradient-to-br ${accentGradient} rounded-xl text-white text-center shadow-xs`}>
+            <div className="text-3xl font-bold mb-0.5">
+              {studentsLoading ? '...' : matchingStudents.length}
+            </div>
+            <div className="text-xs opacity-90 font-medium">Eligible Students</div>
+          </div>
+
+          <div className="border border-gray-200 rounded-lg p-3 space-y-2">
+            <div className="text-xs text-gray-500 font-semibold">Scope & Filters</div>
+            <div className="text-xs text-gray-700 space-y-1">
+              {isOfficer && (
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Scope:</span>
+                  <span className={`font-bold ${accentText}`}>
+                    {selectedScope === 'members' ? 'Org Members Only' : 'Campus-Wide'}
+                  </span>
+                </div>
+              )}
+              <div className="flex justify-between">
+                <span className="text-gray-500">Courses:</span>
+                <span className="font-medium">
+                  {selectedCourses.length === 0 ? 'All Courses' : `${selectedCourses.length} selected`}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Year Levels:</span>
+                <span className="font-medium">
+                  {selectedYears.length === 0 ? 'All Years' : `${selectedYears.length} selected`}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Sections:</span>
+                <span className="font-medium">
+                  {selectedSections.length === 0 ? 'All Sections' : `${selectedSections.length} selected`}
+                </span>
               </div>
             </div>
+          </div>
 
-            <div className="border border-gray-200 rounded-lg p-3">
-              <div className="text-xs text-gray-500 mb-3">By Department</div>
-              <div className="space-y-2">
-                {activeDepartments.filter(d => selectedDepts.length === 0 || selectedDepts.includes(d.id)).map((dept) => {
+          {/* Breakdown by Course */}
+          <div className="border border-gray-200 rounded-lg p-3 space-y-2">
+            <div className="text-xs text-gray-500 font-semibold">Breakdown by Course</div>
+            <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+              {activeCourses
+                .filter(c => selectedCourses.length === 0 || selectedCourses.includes(c.id))
+                .map(course => {
                   const count = matchingStudents.filter(s =>
-                    s.departmentId === dept.id || s.departmentId === dept.code || s.departmentId === dept.name
+                    s.courseId === course.id || s.courseCode === course.code || s.courseName === course.name
                   ).length;
                   return (
-                    <div key={dept.id} className="flex items-center justify-between text-sm py-1 border-b border-gray-100 last:border-0">
-                      <span className="text-gray-700 font-medium">{dept.name} ({dept.code})</span>
-                      <span className="font-bold text-[#83358E] bg-[#83358E]/10 px-2 py-0.5 rounded text-xs">
+                    <div key={course.id} className="flex items-center justify-between text-xs py-1 border-b border-gray-100 last:border-0">
+                      <span className="text-gray-700 font-medium">{course.code || course.name}</span>
+                      <span className={`font-bold ${accentText} ${accentBgLight} px-2 py-0.5 rounded text-[11px]`}>
                         {studentsLoading ? '...' : count}
                       </span>
                     </div>
                   );
                 })}
-                {selectedDepts.length === 0 && <span className="text-xs text-gray-400">Showing all active departments</span>}
-              </div>
             </div>
           </div>
         </div>

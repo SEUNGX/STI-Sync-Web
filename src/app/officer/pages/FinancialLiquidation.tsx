@@ -104,9 +104,9 @@ export default function FinancialLiquidation() {
 
         <button
           onClick={handleOpenCreate}
-          className="flex items-center justify-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[#001A4D] to-[#83358E] text-white rounded-xl text-sm font-bold shadow-md hover:opacity-90 transition-opacity"
+          className="flex items-center justify-center gap-2 px-5 py-2.5 bg-[#001A4D] hover:bg-[#0E4EBD] text-white rounded-xl text-sm font-bold shadow-xs transition-colors cursor-pointer"
         >
-          <Plus className="w-5 h-5" />
+          <Plus className="w-5 h-5 text-[#FFD41C]" />
           New Liquidation Report
         </button>
       </div>
@@ -123,14 +123,14 @@ export default function FinancialLiquidation() {
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key as FilterTab)}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap cursor-pointer ${
               activeTab === tab.key
-                ? 'border-[#83358E] text-[#83358E] font-bold'
+                ? 'border-[#0E4EBD] text-[#0E4EBD] font-bold'
                 : 'border-transparent text-gray-500 hover:text-[#001A4D]'
             }`}
           >
             {tab.label}
-            <span className="ml-2 px-2 py-0.5 bg-gray-100 rounded-full text-xs text-gray-700">
+            <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-bold ${activeTab === tab.key ? 'bg-blue-100 text-[#0E4EBD]' : 'bg-gray-100 text-gray-700'}`}>
               {counts[tab.key as FilterTab]}
             </span>
           </button>
@@ -141,8 +141,8 @@ export default function FinancialLiquidation() {
       {loading ? (
         <div className="p-12 text-center text-gray-500">Loading liquidation reports...</div>
       ) : filteredReports.length === 0 ? (
-        <div className="p-12 bg-white border border-gray-200 rounded-2xl text-center space-y-3">
-          <div className="w-14 h-14 rounded-full bg-[#83358E]/10 flex items-center justify-center mx-auto text-[#83358E]">
+        <div className="p-12 bg-white border border-gray-200 rounded-2xl text-center space-y-3 shadow-xs">
+          <div className="w-14 h-14 rounded-full bg-blue-50 flex items-center justify-center mx-auto text-[#0E4EBD] border border-blue-200">
             <Receipt className="w-7 h-7" />
           </div>
           <h3 className="text-lg font-bold text-gray-900">No Liquidation Reports Found</h3>
@@ -161,7 +161,7 @@ export default function FinancialLiquidation() {
             return (
               <div
                 key={report.id}
-                className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm hover:shadow-md transition-shadow space-y-4"
+                className="bg-white border border-gray-200 rounded-2xl p-6 shadow-xs hover:shadow-md transition-shadow space-y-4"
               >
                 {/* Top Row: Event Title & Status Badge */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-gray-100 pb-3">
@@ -198,14 +198,14 @@ export default function FinancialLiquidation() {
 
                   <div>
                     <div className="text-xs text-gray-500 font-medium">Total Actual Spending</div>
-                    <div className="text-base font-bold text-[#83358E] mt-0.5">
+                    <div className="text-base font-bold text-[#0E4EBD] mt-0.5">
                       {formatCurrency(report.totalActualSpending)}
                     </div>
                   </div>
 
                   <div>
                     <div className="text-xs text-gray-500 font-medium">
-                      {isDeficit ? 'Net Deficit (Over Budget)' : 'Net Surplus (Remaining)'}
+                       {isDeficit ? 'Net Deficit (Over Budget)' : 'Net Surplus (Remaining)'}
                     </div>
                     <div
                       className={`text-base font-bold mt-0.5 ${
@@ -227,9 +227,9 @@ export default function FinancialLiquidation() {
                     {report.status === 'approved' && (
                       <button
                         onClick={() => setExportReport(report)}
-                        className="px-3.5 py-1.5 bg-gradient-to-r from-[#83358E] to-[#001A4D] text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm hover:opacity-90 cursor-pointer"
+                        className="px-3.5 py-1.5 bg-[#001A4D] hover:bg-[#0E4EBD] text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
                       >
-                        <FileSpreadsheet className="w-4 h-4 text-[#FFC107]" /> Export Report
+                        <FileSpreadsheet className="w-4 h-4 text-[#FFD41C]" /> Export Report
                       </button>
                     )}
 
@@ -243,7 +243,7 @@ export default function FinancialLiquidation() {
                     {(report.status === 'draft' || report.status === 'returned') && (
                       <button
                         onClick={() => handleOpenEdit(report)}
-                        className="px-4 py-1.5 bg-[#83358E] hover:bg-[#83358E]/90 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
+                        className="px-4 py-1.5 bg-[#001A4D] hover:bg-[#0E4EBD] text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
                       >
                         <Edit3 className="w-4 h-4" />
                         {report.status === 'returned' ? 'Edit & Resubmit' : 'Edit Draft'}
@@ -298,7 +298,7 @@ export default function FinancialLiquidation() {
                 </div>
                 <div>
                   <div className="text-xs text-gray-500">Actual Spending</div>
-                  <div className="font-bold text-sm text-[#83358E]">
+                  <div className="font-bold text-sm text-[#0E4EBD]">
                     {formatCurrency(viewingDetailReport.totalActualSpending)}
                   </div>
                 </div>
@@ -327,7 +327,7 @@ export default function FinancialLiquidation() {
                     <div key={idx} className="p-3 border border-gray-200 rounded-lg text-xs space-y-1.5 bg-gray-50/50">
                       <div className="flex items-center justify-between font-bold text-gray-900">
                         <span>{item.description} ({item.category})</span>
-                        <span className="text-[#83358E]">Actual Cost: {formatCurrency(item.totalCost)}</span>
+                        <span className="text-[#0E4EBD]">Actual Cost: {formatCurrency(item.totalCost)}</span>
                       </div>
 
                       <div className="flex flex-wrap items-center justify-between text-gray-600 gap-2">
@@ -402,9 +402,9 @@ export default function FinancialLiquidation() {
                       setExportReport(viewingDetailReport);
                       setViewingDetailReport(null);
                     }}
-                    className="px-4 py-2 bg-gradient-to-r from-[#83358E] to-[#001A4D] text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-sm"
+                    className="px-4 py-2 bg-[#001A4D] hover:bg-[#0E4EBD] text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
                   >
-                    <FileSpreadsheet className="w-4 h-4 text-[#FFC107]" /> Export Liquidation Report
+                    <FileSpreadsheet className="w-4 h-4 text-[#FFD41C]" /> Export Liquidation Report
                   </button>
                 )}
               </div>

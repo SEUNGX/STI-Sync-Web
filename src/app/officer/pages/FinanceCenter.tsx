@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { toast } from 'sonner';
 
-import { useOrgLedger } from '../../modules/finance/hooks/useFinanceStream';
+import { useOrgLedger, parseTimestampMillis } from '../../modules/finance/hooks/useFinanceStream';
 import { addOrgLedgerTransaction } from '../../modules/finance/services/finance.service';
 import { useSemesters } from '../../modules/academic/hooks/useAcademicStream';
 import { useOrgPayables, useOrgCollectionsStream } from '../../modules/finance/hooks/usePayableStream';
@@ -36,6 +36,7 @@ import {
   History,
   ArrowRight,
   ArrowDownLeft,
+  ArrowUpRight,
   Shield,
   RefreshCw,
   Info,
@@ -56,11 +57,13 @@ import { useOrgLiquidations } from '../../modules/finance/hooks/useLiquidationSt
 import OfficerLiquidationModal from '../components/OfficerLiquidationModal';
 import ReceiptLightboxModal from '../../modules/finance/components/ReceiptLightboxModal';
 import { LiquidationExportPreviewModal } from '../../modules/finance/components/LiquidationExportPreviewModal';
+import TransactionDetailModal from '../../modules/finance/components/TransactionDetailModal';
+import { useUserNameResolver } from '../../modules/finance/hooks/useUserNameResolver';
 import type { LiquidationDocument, LiquidationStatus } from '../../modules/finance/types/liquidation.types';
 
 
 
-// ─── Metrics Row ───────────────────────────────────────────────────────────────
+// ─── Metrics Row (Clean 4-Card KPI Layout) ──────────────────────────────────
 
 function MetricsRow({
   isPast,
@@ -79,41 +82,58 @@ function MetricsRow({
 
   const currentSemTransactions = useMemo(() => {
     if (semesterId === "all") return ledgerData;
-    return ledgerData.filter((t) => t.semesterId === semesterId);
+    return ledgerData.filter((t) => !t.semesterId || t.semesterId === semesterId);
   }, [ledgerData, semesterId]);
 
   const totalIncome = currentSemTransactions
-    .filter((t) => t.type === "income")
-    .reduce((s, t) => s + t.amount, 0);
+    .filter((t) => String(t.type || '').toLowerCase() === "income")
+    .reduce((s, t) => s + (Number(t.amount) || 0), 0);
   const totalExpenses = currentSemTransactions
-    .filter((t) => t.type === "expense")
-    .reduce((s, t) => s + t.amount, 0);
+    .filter((t) => String(t.type || '').toLowerCase() === "expense")
+    .reduce((s, t) => s + (Number(t.amount) || 0), 0);
   const currentBalance = totalIncome - totalExpenses;
 
-  const cards = [
-    { label: "Club Total Funds (Income)", value: formatCurrency(totalIncome), note: "this semester", color: "text-[#001A4D]", icon: Building2 },
-    { label: "Total Club Expenditures", value: formatCurrency(totalExpenses), note: "this semester", color: "text-blue-600", icon: TrendingUp },
-    { label: "Current Club Balance", value: formatCurrency(currentBalance), note: "available funds", color: "text-green-600", icon: Wallet },
-    { label: "Total Payables Assigned", value: formatCurrency(totalPayables), note: `across ${payablesData.length} payable doc(s)`, color: "text-[#001A4D]", icon: Coins },
-    { label: "Total Collected", value: formatCurrency(totalCollected), note: "collected payments", color: "text-green-600", icon: CheckCircle },
-    { label: "Total Outstanding", value: formatCurrency(totalOutstanding), note: `outstanding balance`, color: "text-red-600", icon: AlertCircle },
-  ];
-
   return (
-    <div className={`grid grid-cols-3 gap-4 ${isPast ? "opacity-80" : ""}`}>
-      {cards.map((c) => {
-        const Icon = c.icon;
-        return (
-          <div key={c.label} className="bg-white border border-[#E0E0E0] rounded-xl p-5">
-            <div className="flex items-start justify-between mb-3">
-              <p className="text-gray-500 text-xs">{c.label}</p>
-              <Icon className="w-5 h-5 text-gray-300" />
-            </div>
-            <p className={`text-2xl font-bold ${c.color}`}>{c.value}</p>
-            <p className="text-gray-500 text-xs mt-0.5">{c.note}</p>
-          </div>
-        );
-      })}
+    <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 ${isPast ? "opacity-80" : ""}`}>
+      {/* 1. Current Balance */}
+      <div className="bg-white border border-[#E0E0E0] rounded-2xl p-5 shadow-xs">
+        <div className="flex items-center justify-between text-gray-500 mb-2">
+          <span className="text-xs font-semibold uppercase tracking-wider">Current Balance</span>
+          <Wallet className="w-5 h-5 text-gray-400" />
+        </div>
+        <p className="text-2xl font-bold text-[#001A4D]">{formatCurrency(currentBalance)}</p>
+        <p className="text-xs text-gray-400 mt-1">Available Club Funds</p>
+      </div>
+
+      {/* 2. Total Income */}
+      <div className="bg-white border border-[#E0E0E0] rounded-2xl p-5 shadow-xs">
+        <div className="flex items-center justify-between text-gray-500 mb-2">
+          <span className="text-xs font-semibold uppercase tracking-wider">Total Income</span>
+          <ArrowDownLeft className="w-5 h-5 text-green-500" />
+        </div>
+        <p className="text-2xl font-bold text-green-600">+{formatCurrency(totalIncome)}</p>
+        <p className="text-xs text-gray-400 mt-1">Dues, Collections, Allocations</p>
+      </div>
+
+      {/* 3. Total Expenses */}
+      <div className="bg-white border border-[#E0E0E0] rounded-2xl p-5 shadow-xs">
+        <div className="flex items-center justify-between text-gray-500 mb-2">
+          <span className="text-xs font-semibold uppercase tracking-wider">Total Expenses</span>
+          <ArrowUpRight className="w-5 h-5 text-red-500" />
+        </div>
+        <p className="text-2xl font-bold text-red-600">−{formatCurrency(totalExpenses)}</p>
+        <p className="text-xs text-gray-400 mt-1">Events, Operations, Deficits</p>
+      </div>
+
+      {/* 4. Pending Collections */}
+      <div className="bg-white border border-[#E0E0E0] rounded-2xl p-5 shadow-xs">
+        <div className="flex items-center justify-between text-gray-500 mb-2">
+          <span className="text-xs font-semibold uppercase tracking-wider">Pending Dues</span>
+          <Clock className="w-5 h-5 text-amber-500" />
+        </div>
+        <p className="text-2xl font-bold text-amber-600">{formatCurrency(totalOutstanding)}</p>
+        <p className="text-xs text-gray-400 mt-1">Across {payablesData.length} payable record(s)</p>
+      </div>
     </div>
   );
 }
@@ -347,43 +367,96 @@ function BudgetTrackerTab({
 }) {
   const [showAddIncome, setShowAddIncome] = useState(false);
   const [showAddExpense, setShowAddExpense] = useState(false);
+  const [selectedTxForDetail, setSelectedTxForDetail] = useState<OrgLedgerDocument | null>(null);
+  const { resolveUserName } = useUserNameResolver();
+  
   const [txFilter, setTxFilter] = useState<'all' | 'income' | 'expense'>('all');
+  const [sourceFilter, setSourceFilter] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
   const currentSemTransactions = useMemo(() => {
     if (semesterId === "all") return ledgerData;
-    return ledgerData.filter((t) => t.semesterId === semesterId);
+    return ledgerData.filter((t) => !t.semesterId || t.semesterId === semesterId);
   }, [ledgerData, semesterId]);
 
-  let runningBalance = 0;
-  const tableRows = currentSemTransactions
-    .map((t) => {
-      if (t.type === 'income') runningBalance += t.amount;
-      else runningBalance -= t.amount;
-      return { ...t, runningBalance };
-    })
-    .reverse();
+  // Sort chronological (oldest first) to compute running balance accurately
+  const chronological = useMemo(() => {
+    return [...currentSemTransactions].sort((a, b) => {
+      const aTime = parseTimestampMillis(a.date) || parseTimestampMillis(a.createdAt) || 0;
+      const bTime = parseTimestampMillis(b.date) || parseTimestampMillis(b.createdAt) || 0;
+      return aTime - bTime;
+    });
+  }, [currentSemTransactions]);
+
+  const tableRows = useMemo(() => {
+    let running = 0;
+    const withBalances = chronological.map((t) => {
+      const amt = Number(t.amount) || 0;
+      const isInc = String(t.type || '').toLowerCase() === 'income';
+      if (isInc) running += amt;
+      else running -= amt;
+      return { ...t, amount: amt, runningBalance: running };
+    });
+    return withBalances.reverse(); // Newest first for table view
+  }, [chronological]);
 
   const filteredRows = useMemo(() => {
     return tableRows.filter((item) => {
-      if (txFilter === 'all') return true;
-      return (item.type || '').toLowerCase() === txFilter;
-    });
-  }, [tableRows, txFilter]);
+      const typeLower = (item.type || '').toLowerCase();
+      const passType = txFilter === 'all' ? true : typeLower === txFilter;
+      const passSource = sourceFilter === 'all' ? true : item.source === sourceFilter;
+      
+      const q = searchQuery.trim().toLowerCase();
+      const passSearch = !q
+        ? true
+        : (item.description || '').toLowerCase().includes(q) ||
+          (item.addedBy || '').toLowerCase().includes(q) ||
+          (item.collectionId || '').toLowerCase().includes(q);
 
-  const currentClubBalance = useMemo(() => {
-    const inc = currentSemTransactions.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
-    const exp = currentSemTransactions.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
-    return inc - exp;
-  }, [currentSemTransactions]);
+      return passType && passSource && passSearch;
+    });
+  }, [tableRows, txFilter, sourceFilter, searchQuery]);
+
+  const currentClubBalance = tableRows.length > 0 ? tableRows[0].runningBalance : 0;
 
   return (
     <div className="space-y-4">
-      <div className="bg-white border border-[#E0E0E0] rounded-xl overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+      <div className="bg-white border border-[#E0E0E0] rounded-xl overflow-hidden shadow-xs">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 px-5 py-4 border-b border-gray-100">
           <div className="border-l-4 border-[#0E4EBD] pl-3">
             <h3 className="text-[#001A4D] font-bold text-sm">Budget Ledger Transactions</h3>
+            <p className="text-gray-500 text-xs mt-0.5">Club treasury funds, income allocations, expenses, and transfers</p>
           </div>
-          <div className="flex items-center gap-2">
+          
+          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+            {/* Search */}
+            <div className="relative flex-1 md:w-52">
+              <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Search transactions..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-8 pr-3 py-1.5 rounded-lg text-xs bg-gray-50 border border-gray-200 text-gray-700 outline-none focus:ring-2 focus:ring-[#0E4EBD]/20"
+              />
+            </div>
+
+            {/* Source Filter */}
+            <select
+              value={sourceFilter}
+              onChange={(e) => setSourceFilter(e.target.value)}
+              className="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-gray-50 border border-gray-200 text-gray-700 outline-none focus:ring-2 focus:ring-[#0E4EBD]/20 cursor-pointer"
+            >
+              <option value="all">All Sources</option>
+              <option value="allocation">Club Allocation</option>
+              <option value="student_collection">Student Collections</option>
+              <option value="event_budget">Event Budgets</option>
+              <option value="liquidation_surplus">Liquidation Surplus</option>
+              <option value="liquidation_deficit">Liquidation Deficit</option>
+              <option value="manual_expense">Manual Expenses</option>
+              <option value="carry_over">Carry-Over</option>
+            </select>
+
             <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
               {(['all', 'income', 'expense'] as const).map((f) => (
                 <button
@@ -399,6 +472,7 @@ function BudgetTrackerTab({
                 </button>
               ))}
             </div>
+
             {!isPast && (
               <div className="flex items-center gap-2">
                 <button
@@ -429,7 +503,7 @@ function BudgetTrackerTab({
           <table className="w-full relative">
             <thead className="bg-gray-50 sticky top-0 z-10 shadow-xs border-b border-[#E0E0E0]">
               <tr>
-                {["Date", "Description", "Source", "Amount (₱)", "Balance (₱)"].map((col) => (
+                {["Date", "Description", "Source", "Amount (₱)", "Balance (₱)", "Action"].map((col) => (
                   <th key={col} className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide bg-gray-50 border-b border-[#E0E0E0]">
                     {col}
                   </th>
@@ -439,21 +513,29 @@ function BudgetTrackerTab({
             <tbody className="divide-y divide-gray-100">
               {filteredRows.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-gray-500 text-sm">
-                    No {txFilter === 'all' ? '' : txFilter} transactions found for this semester.
+                  <td colSpan={6} className="px-4 py-8 text-center text-gray-500 text-sm">
+                    No transactions found matching your filters.
                   </td>
                 </tr>
               ) : (
                 filteredRows.map((item) => (
                   <tr key={item.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-5 py-3.5 text-gray-500 font-mono text-xs">
+                    <td className="px-5 py-3.5 text-gray-500 font-mono text-xs whitespace-nowrap">
                       {formatAppDate(item.date, 'Unknown')}
                     </td>
-                    <td className="px-4 py-3 text-[#001A4D] text-sm">{item.description}</td>
+                    <td className="px-4 py-3 text-[#001A4D] text-sm">
+                      <p className="font-medium">{item.description}</p>
+                      {(() => {
+                        const creator = resolveUserName(item.addedBy);
+                        return creator ? (
+                          <p className="text-gray-400 text-[11px] mt-0.5">By {creator}</p>
+                        ) : null;
+                      })()}
+                    </td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-0.5 text-xs rounded font-medium ${
                         item.source === 'event_budget'
-                          ? 'bg-purple-100 text-purple-700'
+                          ? 'bg-blue-100 text-blue-800'
                           : item.source === 'student_collection'
                           ? 'bg-green-100 text-green-700'
                           : item.source === 'liquidation_surplus'
@@ -479,13 +561,22 @@ function BudgetTrackerTab({
                       {item.type === 'income' ? `+${formatCurrency(item.amount)}` : `-${formatCurrency(item.amount)}`}
                     </td>
                     <td className="px-4 py-3 text-gray-900 font-bold text-sm">{formatCurrency(item.runningBalance)}</td>
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => setSelectedTxForDetail(item)}
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-[#0E4EBD] hover:text-white hover:bg-[#0E4EBD] border border-[#0E4EBD]/30 rounded-lg font-medium whitespace-nowrap cursor-pointer transition-colors"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        View Details
+                      </button>
+                    </td>
                   </tr>
                 ))
               )}
             </tbody>
             <tfoot className="sticky bottom-0 z-10">
               <tr className="bg-[#001A4D] shadow-md">
-                <td colSpan={3} className="px-4 py-3 text-white font-bold text-sm bg-[#001A4D]">Current Club Balance</td>
+                <td colSpan={4} className="px-4 py-3 text-white font-bold text-sm bg-[#001A4D]">Current Club Balance</td>
                 <td colSpan={2} className="px-4 py-3 text-[#FFD41C] font-bold text-base bg-[#001A4D]">
                   {formatCurrency(currentClubBalance)}
                 </td>
@@ -512,6 +603,15 @@ function BudgetTrackerTab({
           onSuccess={() => setShowAddExpense(false)}
         />
       )}
+
+      {selectedTxForDetail && (
+        <TransactionDetailModal
+          transaction={selectedTxForDetail}
+          isOpen={true}
+          onClose={() => setSelectedTxForDetail(null)}
+          isOfficer={true}
+        />
+      )}
     </div>
   );
 }
@@ -520,13 +620,11 @@ function BudgetTrackerTab({
 
 function OrgCollectionDetailModal({
   collection,
-  alreadyTransferred,
   isPast,
   onClose,
   onTransfer,
 }: {
   collection: StudentEventCollectionGroup;
-  alreadyTransferred: boolean;
   isPast: boolean;
   onClose: () => void;
   onTransfer: () => void;
@@ -535,13 +633,24 @@ function OrgCollectionDetailModal({
   const pending = collection.payments.filter((p) => p.status === "Pending");
   const totalCollected = paid.reduce((s, p) => s + p.amount, 0);
 
+  const alreadyTransferred = paid.filter((p) => p.transferredToBudget);
+  const alreadyTransferredAmount = collection.payments.reduce((s, p) => s + (p.transferredAmount !== undefined ? p.transferredAmount : (p.transferredToBudget ? p.amount : 0)), 0);
+
+  const untransferred = paid.filter((p) => !p.transferredToBudget);
+  const untransferredAmount = collection.payments.reduce((s, p) => s + (p.untransferredAmount !== undefined ? p.untransferredAmount : (p.status === 'Paid' && !p.transferredToBudget ? p.amount : 0)), 0);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/55 backdrop-blur-xs" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-[620px] max-h-[90vh] flex flex-col overflow-hidden">
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-[680px] max-h-[90vh] flex flex-col overflow-hidden">
         <div className="bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] px-6 py-4 flex items-center justify-between flex-shrink-0">
           <div>
-            <h3 className="text-white font-bold text-base">{collection.eventName}</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="text-white font-bold text-base">{collection.eventName}</h3>
+              <span className="px-2 py-0.5 bg-[#FFD41C] text-[#001A4D] rounded-full text-xs font-bold capitalize">
+                {collection.type?.replace('_', ' ') || 'Collection'}
+              </span>
+            </div>
             <p className="text-blue-200 text-xs mt-0.5">Collection Breakdown & Treasury Transfer</p>
           </div>
           <button onClick={onClose} className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10 cursor-pointer">
@@ -549,97 +658,128 @@ function OrgCollectionDetailModal({
           </button>
         </div>
 
-        <div className="p-5 space-y-4 overflow-y-auto flex-1">
+        <div className="p-5 space-y-4 overflow-y-auto flex-1 bg-slate-50/50">
           {/* Summary KPIs */}
-          <div className="grid grid-cols-3 gap-3">
-            <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 text-center">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="bg-white border border-gray-200 rounded-xl p-3 text-center">
               <p className="text-xs text-gray-500">Assigned / Student</p>
               <p className="text-base font-bold text-[#001A4D] mt-0.5">{formatCurrency(collection.payablePerStudent)}</p>
+              <p className="text-[10px] text-gray-400">{collection.totalStudents} total</p>
             </div>
-            <div className="bg-green-50 border border-green-200 rounded-xl p-3 text-center">
+            <div className="bg-white border border-gray-200 rounded-xl p-3 text-center">
               <p className="text-xs text-green-700">Total Collected</p>
               <p className="text-base font-bold text-green-700 mt-0.5">{formatCurrency(totalCollected)}</p>
+              <p className="text-[10px] text-gray-400">{paid.length} paid</p>
             </div>
-            <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-center">
-              <p className="text-xs text-[#0E4EBD]">Completion</p>
-              <p className="text-base font-bold text-[#0E4EBD] mt-0.5">
-                {collection.totalStudents > 0 ? Math.round((paid.length / collection.totalStudents) * 100) : 0}%
-              </p>
+            <div className="bg-white border border-blue-200 rounded-xl p-3 text-center bg-blue-50/30">
+              <p className="text-xs text-blue-700">In Club Treasury</p>
+              <p className="text-base font-bold text-blue-700 mt-0.5">{formatCurrency(alreadyTransferredAmount)}</p>
+              <p className="text-[10px] text-blue-600">{alreadyTransferred.length} transferred</p>
+            </div>
+            <div className="bg-white border border-amber-200 rounded-xl p-3 text-center bg-amber-50/40">
+              <p className="text-xs text-amber-800">Ready to Transfer</p>
+              <p className="text-base font-bold text-amber-700 mt-0.5">{formatCurrency(untransferredAmount)}</p>
+              <p className="text-[10px] text-amber-600">{untransferred.length} newly paid</p>
             </div>
           </div>
 
           {/* Roster Table */}
-          <div className="border border-gray-200 rounded-xl overflow-hidden">
+          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-xs">
             <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
               <p className="text-[#001A4D] text-xs font-bold uppercase tracking-wide">Student Payment Records</p>
               <div className="flex gap-2">
-                <span className="flex items-center gap-1 text-xs text-green-600 font-medium">
+                <span className="flex items-center gap-1 text-xs text-green-700 font-medium bg-green-50 px-2 py-0.5 rounded-full border border-green-200">
                   <CheckCircle className="w-3 h-3" />{paid.length} Paid
                 </span>
                 {pending.length > 0 && (
-                  <span className="flex items-center gap-1 text-xs text-amber-600 font-medium">
+                  <span className="flex items-center gap-1 text-xs text-amber-700 font-medium bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
                     <Clock className="w-3 h-3" />{pending.length} Pending
                   </span>
                 )}
               </div>
             </div>
-            <div className="max-h-64 overflow-y-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 sticky top-0">
+            <div className="max-h-60 overflow-y-auto">
+              <table className="w-full text-left">
+                <thead className="bg-gray-50 sticky top-0 border-b border-gray-200 text-[11px] font-bold text-gray-500 uppercase tracking-wide">
                   <tr>
-                    {["Student", "Student ID", "Amount", "Status"].map((col) => (
-                      <th key={col} className="px-4 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-wide border-b border-gray-100">{col}</th>
-                    ))}
+                    <th className="px-3.5 py-2">Student</th>
+                    <th className="px-3.5 py-2">Student ID</th>
+                    <th className="px-3.5 py-2">Amount</th>
+                    <th className="px-3.5 py-2">Transfer State</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {collection.payments.map((p) => (
-                    <tr key={p.id} className={p.status === "Pending" ? "bg-amber-50/30" : "hover:bg-gray-50"}>
-                      <td className="px-4 py-2 text-[#001A4D] text-sm font-medium">{p.name}</td>
-                      <td className="px-4 py-2 text-gray-500 text-xs font-mono">{p.studentId}</td>
-                      <td className="px-4 py-2 text-sm font-bold text-gray-700">
-                        {p.status === "Paid" ? formatCurrency(p.amount) : "—"}
-                      </td>
-                      <td className="px-4 py-2">
-                        <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${
-                          p.status === "Paid" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
-                        }`}>
-                          {p.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
+                <tbody className="divide-y divide-gray-100 text-xs">
+                  {collection.payments.map((p) => {
+                    const isStudentPaid = p.status === "Paid";
+                    return (
+                      <tr key={p.id} className={!isStudentPaid ? "bg-amber-50/30" : "hover:bg-gray-50"}>
+                        <td className="px-3.5 py-2.5 text-[#001A4D] font-medium">{p.name}</td>
+                        <td className="px-3.5 py-2.5 text-gray-500 font-mono">{p.studentId}</td>
+                        <td className="px-3.5 py-2.5 font-bold text-gray-700">
+                          {isStudentPaid ? formatCurrency(p.amount) : "—"}
+                        </td>
+                        <td className="px-3.5 py-2.5">
+                          {isStudentPaid && p.transferredToBudget ? (
+                            <span className="px-2 py-0.5 text-[11px] rounded-full font-bold bg-blue-100 text-blue-700 inline-flex items-center gap-1">
+                              <CheckCircle className="w-2.5 h-2.5" /> Transferred {p.transferredAt ? `(${p.transferredAt})` : ''}
+                            </span>
+                          ) : isStudentPaid && (p.transferredAmount || 0) > 0 ? (
+                            <span className="px-2 py-0.5 text-[11px] rounded-full font-bold bg-indigo-100 text-indigo-700 inline-flex items-center gap-1">
+                              <Clock className="w-2.5 h-2.5" /> Partially Transferred (+{formatCurrency(p.untransferredAmount || 0)} new)
+                            </span>
+                          ) : isStudentPaid ? (
+                            <span className="px-2 py-0.5 text-[11px] rounded-full font-bold bg-green-100 text-green-700 inline-flex items-center gap-1">
+                              <Clock className="w-2.5 h-2.5" /> Newly Paid · Ready to Transfer
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 text-[11px] rounded-full font-medium bg-amber-100 text-amber-700">
+                              Pending Payment
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           </div>
+
+          {untransferredAmount > 0 && alreadyTransferredAmount > 0 && (
+            <div className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-xl">
+              <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+              <p className="text-blue-800 text-xs leading-relaxed">
+                <strong>Incremental Transfer:</strong> {formatCurrency(alreadyTransferredAmount)} was previously credited to your club treasury. You can now transfer the new {formatCurrency(untransferredAmount)} collected from {untransferred.length} additional student(s) without duplicate crediting.
+              </p>
+            </div>
+          )}
         </div>
 
-        <div className="px-5 py-4 border-t border-gray-200 flex gap-3 flex-shrink-0">
+        <div className="px-5 py-4 border-t border-gray-200 flex gap-3 flex-shrink-0 bg-white">
           <button onClick={onClose} className="flex-1 py-2.5 border border-gray-300 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-50 cursor-pointer">
             Close
           </button>
-          {alreadyTransferred ? (
-            <div className="flex-1 py-2.5 bg-green-50 border border-green-200 text-green-700 rounded-xl text-sm font-bold text-center flex items-center justify-center gap-2 select-none">
-              <CheckCircle className="w-4 h-4" />
-              Transferred to Treasury
-            </div>
-          ) : totalCollected <= 0 ? (
-            <div className="flex-1 py-2.5 bg-gray-100 text-gray-400 rounded-xl text-sm font-medium text-center flex items-center justify-center gap-2 select-none">
-              No Collected Cash to Transfer
-            </div>
-          ) : isPast ? (
+          {isPast ? (
             <div className="flex-1 py-2.5 bg-amber-50 text-amber-700 rounded-xl text-sm font-medium text-center flex items-center justify-center gap-2 select-none">
               Read-Only Past Semester
             </div>
-          ) : (
+          ) : untransferredAmount > 0 ? (
             <button
               onClick={() => { onTransfer(); onClose(); }}
               className="flex-1 py-2.5 bg-green-600 text-white rounded-xl text-sm font-bold hover:bg-green-700 transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-xs"
             >
               <ArrowDownLeft className="w-4 h-4" />
-              Transfer {formatCurrency(totalCollected)} to Club Treasury
+              Transfer {formatCurrency(untransferredAmount)} to Club Treasury
             </button>
+          ) : totalCollected > 0 ? (
+            <div className="flex-1 py-2.5 bg-blue-50 border border-blue-200 text-blue-700 rounded-xl text-sm font-bold text-center flex items-center justify-center gap-2 select-none">
+              <CheckCircle className="w-4 h-4" />
+              All Paid Collections Transferred ({formatCurrency(totalCollected)})
+            </div>
+          ) : (
+            <div className="flex-1 py-2.5 bg-gray-100 text-gray-400 rounded-xl text-sm font-medium text-center flex items-center justify-center gap-2 select-none">
+              No Collected Cash to Transfer
+            </div>
           )}
         </div>
       </div>
@@ -691,9 +831,7 @@ function OrgCollectionsTab({
     }
   };
 
-  const pendingTransferTotal = collections
-    .filter((c) => !c.transferredToBudget)
-    .reduce((s, c) => s + (c.untransferredAmount || 0), 0);
+  const pendingTransferTotal = collections.reduce((s, c) => s + (c.untransferredAmount || 0), 0);
 
   return (
     <div className="space-y-4">
@@ -703,7 +841,7 @@ function OrgCollectionsTab({
         <div>
           <p className="text-amber-900 font-bold text-sm">Centralized Club Collections & Treasury Transfer</p>
           <p className="text-amber-800 text-xs mt-0.5 leading-relaxed">
-            All student collections (Membership Dues, Event Fees, and Event Attendance Fines) recorded in Attendance Logs or Finance Center appear here. Click <strong>Transfer</strong> to atomically credit the collected cash into your Club Budget Ledger.
+            All student collections (Membership Dues, Event Fees, and Event Attendance Fines) recorded in Attendance Logs or Finance Center appear here. Click <strong>Transfer</strong> to atomically credit newly collected cash into your Club Budget Ledger.
           </p>
         </div>
       </div>
@@ -717,7 +855,7 @@ function OrgCollectionsTab({
           {pendingTransferTotal > 0 && !isPast && (
             <div className="px-3 py-1.5 bg-amber-100 text-amber-800 rounded-lg text-xs font-bold flex items-center gap-1.5">
               <Clock className="w-4 h-4 text-amber-600" />
-              Pending Transfer: {formatCurrency(pendingTransferTotal)}
+              Ready to Transfer: {formatCurrency(pendingTransferTotal)}
             </div>
           )}
         </div>
@@ -751,10 +889,12 @@ function OrgCollectionsTab({
                   const paid = c.payments.filter((p) => p.status === "Paid");
                   const totalCollected = c.totalCollected || paid.reduce((s, p) => s + p.amount, 0);
                   const pct = c.totalStudents > 0 ? Math.round((paid.length / c.totalStudents) * 100) : 0;
+                  const untransferred = c.untransferredAmount || 0;
+                  const hasTransferred = (c.transferredAmount || 0) > 0;
 
                   const typeBadge =
                     c.type === "membership_due"
-                      ? "bg-purple-100 text-purple-700"
+                      ? "bg-indigo-100 text-indigo-800"
                       : c.type === "org_fine"
                       ? "bg-rose-100 text-rose-700"
                       : "bg-blue-100 text-blue-700";
@@ -793,15 +933,24 @@ function OrgCollectionsTab({
                         <span className="text-green-700 font-bold text-sm">{formatCurrency(totalCollected)}</span>
                       </td>
                       <td className="px-4 py-3">
-                        {c.transferredToBudget ? (
-                          <span className="flex items-center gap-1 text-xs text-green-700 bg-green-100 px-2 py-1 rounded-full font-medium w-fit whitespace-nowrap">
+                        {untransferred > 0 && hasTransferred ? (
+                          <span className="flex items-center gap-1 text-xs text-amber-800 bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-full font-bold whitespace-nowrap">
+                            <Clock className="w-3 h-3 text-amber-600" />
+                            Partially Transferred (+{formatCurrency(untransferred)} new)
+                          </span>
+                        ) : untransferred > 0 ? (
+                          <span className="flex items-center gap-1 text-xs text-amber-800 bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-full font-bold whitespace-nowrap">
+                            <Clock className="w-3 h-3 text-amber-600" />
+                            Ready to Transfer ({formatCurrency(untransferred)})
+                          </span>
+                        ) : c.transferredToBudget ? (
+                          <span className="flex items-center gap-1 text-xs text-green-700 bg-green-100 border border-green-200 px-2 py-0.5 rounded-full font-bold whitespace-nowrap">
                             <CheckCircle className="w-3 h-3" />
-                            Transferred {c.transferredDate}
+                            Fully Transferred
                           </span>
                         ) : (
-                          <span className="flex items-center gap-1 text-xs text-amber-700 bg-amber-100 px-2 py-1 rounded-full font-medium w-fit whitespace-nowrap">
-                            <Clock className="w-3 h-3" />
-                            Pending Transfer
+                          <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+                            No Payments
                           </span>
                         )}
                       </td>
@@ -814,14 +963,14 @@ function OrgCollectionsTab({
                             <Eye className="w-3.5 h-3.5" />
                             Details
                           </button>
-                          {!c.transferredToBudget && totalCollected > 0 && !isPast && (
+                          {untransferred > 0 && !isPast && (
                             <button
                               onClick={() => handleTransfer(c)}
                               disabled={isTransferring}
                               className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-xs rounded-lg font-bold hover:bg-green-700 transition-colors cursor-pointer shadow-xs disabled:opacity-50 whitespace-nowrap"
                             >
                               <ArrowDownLeft className="w-3.5 h-3.5" />
-                              Transfer
+                              Transfer {formatCurrency(untransferred)}
                             </button>
                           )}
                         </div>
@@ -838,7 +987,6 @@ function OrgCollectionsTab({
       {viewCollection && (
         <OrgCollectionDetailModal
           collection={viewCollection}
-          alreadyTransferred={viewCollection.transferredToBudget}
           isPast={isPast}
           onClose={() => setViewCollection(null)}
           onTransfer={() => {

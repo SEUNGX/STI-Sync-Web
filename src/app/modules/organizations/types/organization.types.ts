@@ -10,6 +10,16 @@ export interface OrganizationTypeDocument {
   updatedAt: Timestamp;
 }
 
+export interface OrgAdviserData {
+  name: string;
+  employeeId?: string;
+  email: string;
+  departmentId: string;
+  title: string; // 'Club Adviser'
+  temporaryPassword?: string;
+  requiresPasswordChange?: boolean;
+}
+
 export interface OrganizationDocument {
   id: string;
   name: string;
@@ -17,6 +27,9 @@ export interface OrganizationDocument {
   typeId: string;                              // FK → /organization_types
   departmentId: string | 'cross-departmental'; // FK → /departments or sentinel
   description: string;
+
+  // ─── Adviser ───
+  adviser?: OrgAdviserData;
 
   // ─── Academic Context ───
   academicYear: string;                        // e.g. "2025-2026"
@@ -44,6 +57,7 @@ export interface CreateOrganizationPayload {
   semester: string;
   logoUrl: string | null;
   membershipFee?: number;
+  adviser?: OrgAdviserData;
 }
 
 export interface OrganizationRulesDocument {

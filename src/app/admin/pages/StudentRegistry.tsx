@@ -8,32 +8,49 @@ import ActiveStudents from '../components/student-registry/ActiveStudents';
 import InactiveSuspended from '../components/student-registry/InactiveSuspended';
 import ArchivedGraduates from '../components/student-registry/ArchivedGraduates';
 import { useStudents } from '../../modules/students/hooks/useStudentStream';
-import { useSemesters } from '../../modules/academic/hooks/useAcademicStream';
+import { useActiveAcademicPeriods } from '../../modules/academic/hooks/useAcademicStream';
 import { StudentDocument } from '../../modules/students/types/student.types';
 
 type RegistryView = 'dashboard' | 'pending' | 'reenrollment' | 'active' | 'inactive' | 'archived';
 
 export function StudentRegistry() {
   const [activeView, setActiveView] = useState<RegistryView>('dashboard');
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const targetStudentId = searchParams.get('id') || searchParams.get('studentId') || undefined;
 
   useEffect(() => {
     const tab = searchParams.get('tab');
     const id = searchParams.get('id') || searchParams.get('studentId');
     if (tab === 'pending' || id) {
       setActiveView('pending');
+    } else if (tab && ['dashboard', 'pending', 'reenrollment', 'active', 'inactive', 'archived'].includes(tab)) {
+      setActiveView(tab as RegistryView);
     }
   }, [searchParams]);
 
+  const handleNavigate = (view: string, studentIdOrSearch?: string) => {
+    if (studentIdOrSearch) {
+      setSearchParams({ tab: view, id: studentIdOrSearch });
+    } else {
+      setSearchParams({ tab: view });
+    }
+    setActiveView(view as RegistryView);
+  };
+
   const { data: students, loading: loadingStudents, error: errorStudents } = useStudents();
-  const { data: semesters, loading: loadingSemesters, error: errorSemesters } = useSemesters();
+  const {
+    activeCollegePeriod,
+    activeShsPeriod,
+    isStudentPendingReEnrollment,
+    loading: loadingSemesters,
+    error: errorSemesters,
+  } = useActiveAcademicPeriods();
 
   const loading = loadingStudents || loadingSemesters;
   const error = errorStudents || errorSemesters;
 
-  const activeSemester = useMemo(() => {
-    return semesters.find(s => s.status === 'ACTIVE');
-  }, [semesters]);
+  const activeSemester = activeCollegePeriod || activeShsPeriod;
 
   const categorizedStudents = useMemo(() => {
     const pending: StudentDocument[] = [];
@@ -49,7 +66,7 @@ export function StudentRegistry() {
           break;
         case 'ACTIVE':
           active.push(student);
-          if (activeSemester && (student.schoolYear !== activeSemester.academicYear || student.semester !== activeSemester.semester)) {
+          if (isStudentPendingReEnrollment(student)) {
             reenrollment.push(student);
           }
           break;
@@ -68,7 +85,7 @@ export function StudentRegistry() {
     });
 
     return { pending, active, inactive, archived, reenrollment };
-  }, [students, activeSemester]);
+  }, [students, isStudentPendingReEnrollment]);
 
   if (loading) {
     return (
@@ -94,13 +111,13 @@ export function StudentRegistry() {
     switch (activeView) {
       case 'dashboard':
         return <RegistryDashboard 
-          onNavigate={(v) => setActiveView(v as RegistryView)} 
+          onNavigate={handleNavigate} 
           categorizedStudents={{ ...categorizedStudents, suspended: [] }} 
           activeSemester={activeSemester} 
           allStudents={students}
         />;
       case 'pending':
-        return <PendingVerification students={pending} />;
+        return <PendingVerification students={pending} initialStudentId={targetStudentId} />;
       case 'reenrollment':
         return <ReEnrollmentManagement students={active} activeSemester={activeSemester} />;
       case 'active':
@@ -111,7 +128,7 @@ export function StudentRegistry() {
         return <ArchivedGraduates students={archived} />;
       default:
         return <RegistryDashboard 
-          onNavigate={(v) => setActiveView(v as RegistryView)} 
+          onNavigate={handleNavigate} 
           categorizedStudents={{ ...categorizedStudents, suspended: [] }} 
           activeSemester={activeSemester} 
           allStudents={students}

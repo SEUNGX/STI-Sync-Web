@@ -222,9 +222,11 @@ export async function recordPayment(
   }
 
   const data = snap.data() as PayableDocument;
-  const currentPaid = data.paidAmount || 0;
-  const assigned = data.assignedAmount || 0;
+  const currentPaid = Number(data.paidAmount) || 0;
+  const assigned = Number(data.assignedAmount) || 0;
   const newPaidAmount = currentPaid + paymentAmount;
+  const transferredAmt = typeof data.transferredAmount === 'number' ? data.transferredAmount : 0;
+  const isFullyTransferred = transferredAmt >= newPaidAmount && newPaidAmount > 0;
 
   let newStatus: PayableStatus = 'partial';
   let paidAtTimestamp: Timestamp | null = data.paidAt || null;
@@ -234,6 +236,7 @@ export async function recordPayment(
     paidAtTimestamp = Timestamp.now();
   } else if (newPaidAmount > 0) {
     newStatus = 'partial';
+    if (!paidAtTimestamp) paidAtTimestamp = Timestamp.now();
   }
 
   const updates: Record<string, any> = {
@@ -242,6 +245,7 @@ export async function recordPayment(
     paidAt: paidAtTimestamp,
     recordedBy,
     paymentMethod,
+    transferredToBudget: isFullyTransferred,
     updatedAt: serverTimestamp(),
   };
 
@@ -939,83 +943,23 @@ export async function transferEventFinesToBudget(
   orgId?: string | null,
   semesterId?: string
 ): Promise<{ transferredCount: number; totalAmount: number }> {
-  const payablesRef = collection(db, PAYABLES_COLLECTION);
   const targetType = isOfficer ? 'org_fine' : 'admin_fine';
+  const targetLedger = isOfficer ? 'org' : 'sao';
 
-  const q = query(
-    payablesRef,
-    where('eventId', '==', eventId),
-    where('type', '==', targetType),
-    where('status', '==', 'paid')
-  );
-  const snap = await getDocs(q);
-
-  // Filter those that have not yet been transferred
-  const eligibleDocs = snap.docs.filter((d) => !d.data().transferredToBudget);
-
-  if (eligibleDocs.length === 0) {
-    throw new Error('No untransferred collected fines found for this event.');
-  }
-
-  const totalAmount = eligibleDocs.reduce((sum, d) => sum + (d.data().paidAmount || d.data().assignedAmount || 0), 0);
-
-  if (totalAmount <= 0) {
-    throw new Error('Total collected amount is ₱0.00.');
-  }
-
-  const effectiveSemester = semesterId || 'active';
-
-  if (!isOfficer) {
-    // Transfer to Institutional Balance in sao_ledger
-    await addLedgerTransaction({
-      title: `Event Fine Collections — ${eventTitle}`,
-      description: `Collected fines from ${eligibleDocs.length} student violation(s) for event ${eventTitle}`,
-      type: 'credit',
-      source: 'student_collection',
-      amount: totalAmount,
-      reference: eventId,
-      schoolYear: '2025-2026',
-      semester: effectiveSemester,
-      category: 'Student Fine Collections',
-      performedBy: 'SAO Administrator',
-    } as any);
-  } else if (orgId) {
-    // Transfer to Club Balance in organization_ledger
-    await addOrgLedgerTransaction({
-      organizationId: orgId,
-      title: `Club Fine Collections — ${eventTitle}`,
-      description: `Collected fines from ${eligibleDocs.length} member violation(s) for event ${eventTitle}`,
-      type: 'credit',
-      source: 'student_collection',
-      amount: totalAmount,
-      reference: eventId,
-      semesterId: effectiveSemester,
-      category: 'Club Fine Collections',
-      performedBy: 'Student Officer',
-    } as any);
-  }
-
-  // Batch update transferredToBudget on eligible payables
-  const chunks = [];
-  for (let i = 0; i < eligibleDocs.length; i += 500) {
-    chunks.push(eligibleDocs.slice(i, i + 500));
-  }
-
-  for (const chunk of chunks) {
-    const batch = writeBatch(db);
-    for (const d of chunk) {
-      batch.update(d.ref, {
-        transferredToBudget: true,
-        transferredAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
-    }
-    await batch.commit();
-  }
+  const res = await transferCollectionGroupToLedger({
+    collectionGroupId: eventId,
+    eventId,
+    type: targetType,
+    organizationId: orgId,
+    targetLedger,
+    semesterId,
+    recordedByUid: isOfficer ? 'Officer' : 'Admin SAO',
+    collectionName: `Event Fines — ${eventTitle}`,
+  });
 
   return {
-    transferredCount: eligibleDocs.length,
-    totalAmount,
+    transferredCount: res.transferredCount,
+    totalAmount: res.transferredAmount,
   };
 }
 
@@ -1033,7 +977,13 @@ export async function syncStudentPayablesForActiveEvents(
     lastName?: string;
     studentName?: string;
     departmentId?: string;
+    courseId?: string;
+    courseCode?: string;
+    courseName?: string;
+    academicLevel?: string;
+    section?: string;
     yearLevel?: string;
+    schoolYear?: string;
     semester?: string;
   },
   createdBy: string = 'system_sync'
@@ -1047,7 +997,12 @@ export async function syncStudentPayablesForActiveEvents(
     `${student.firstName || ''} ${student.lastName || ''}`.trim() ||
     'Student';
   const studentDeptId = student.departmentId || '';
+  const studentCourseId = student.courseId || '';
+  const studentCourseCode = student.courseCode || '';
+  const studentSection = (student.section || '').trim().toLowerCase();
   const studentYear = student.yearLevel || '';
+  const studentSemester = student.semester || '';
+  const studentAcademicLevel = student.academicLevel || '';
 
   let createdCount = 0;
 
@@ -1068,23 +1023,44 @@ export async function syncStudentPayablesForActiveEvents(
           0;
         if (!event.studentPayablesEnabled && feeAmount <= 0) return false;
 
+        // Semester filter (if event is tied to a specific semester/school year)
+        if (event.schoolYear && student.schoolYear && event.schoolYear !== student.schoolYear) {
+          return false;
+        }
+        if (event.semester && studentSemester && event.semester !== studentSemester) {
+          return false;
+        }
+
         const targetDeptIds = event.targetDepartmentIds || [];
         const targetYearLevels = event.targetYearLevels || [];
+        const targetCourseIds = event.targetCourseIds || event.targetCourses || [];
+        const targetSections = (event.targetSections || event.targetSectionNames || []).map((s: string) => String(s).trim().toLowerCase());
+
         const isAllStudents =
           event.targetAudience === 'all' ||
           !event.targetAudience ||
-          (targetDeptIds.length === 0 && targetYearLevels.length === 0);
+          (targetDeptIds.length === 0 && targetYearLevels.length === 0 && targetCourseIds.length === 0 && targetSections.length === 0);
 
         if (isAllStudents) return true;
 
         const matchesDept =
           targetDeptIds.length === 0 ||
           (studentDeptId && targetDeptIds.includes(studentDeptId));
+        
+        const matchesCourse =
+          targetCourseIds.length === 0 ||
+          (studentCourseId && targetCourseIds.includes(studentCourseId)) ||
+          (studentCourseCode && targetCourseIds.includes(studentCourseCode));
+
         const matchesYear =
           targetYearLevels.length === 0 ||
           (studentYear && targetYearLevels.includes(studentYear));
 
-        return matchesDept && matchesYear;
+        const matchesSection =
+          targetSections.length === 0 ||
+          (studentSection && targetSections.includes(studentSection));
+
+        return matchesDept && matchesCourse && matchesYear && matchesSection;
       });
 
     // 2. Query existing payables for this student to deduplicate
@@ -1281,16 +1257,60 @@ export async function transferCollectionGroupToLedger(params: {
   }
 
   const snap = await getDocs(qDocs);
-  const eligibleDocs = snap.docs.filter((d) => {
+  let eligibleDocs = snap.docs.filter((d) => {
     const data = d.data();
-    return !data.transferredToBudget && (data.paidAmount || 0) > 0;
+    const isPaidStatus = String(data.status || '').toLowerCase() === 'paid';
+    const hasPaid = (Number(data.paidAmount) || 0) > 0;
+    const assignedAmt = Number(data.assignedAmount) || 0;
+    const effectivePaid = hasPaid ? Number(data.paidAmount) : (isPaidStatus ? assignedAmt : 0);
+    const alreadyTransferred = typeof data.transferredAmount === 'number'
+      ? Math.max(0, data.transferredAmount)
+      : (data.transferredToBudget ? effectivePaid : 0);
+    const untransferredDelta = Math.max(0, effectivePaid - alreadyTransferred);
+    return untransferredDelta > 0;
   });
+
+  // Fallback: If no docs matched query, check if collectionGroupId is a direct payable document ID
+  if (eligibleDocs.length === 0 && collectionGroupId && collectionGroupId !== 'unassigned') {
+    try {
+      const singleDocRef = doc(payablesRef, collectionGroupId);
+      const singleSnap = await getDoc(singleDocRef);
+      if (singleSnap.exists()) {
+        const sData = singleSnap.data();
+        const isPaidStatus = String(sData.status || '').toLowerCase() === 'paid';
+        const hasPaid = (Number(sData.paidAmount) || 0) > 0;
+        const assignedAmt = Number(sData.assignedAmount) || 0;
+        const effectivePaid = hasPaid ? Number(sData.paidAmount) : (isPaidStatus ? assignedAmt : 0);
+        const alreadyTransferred = typeof sData.transferredAmount === 'number'
+          ? Math.max(0, sData.transferredAmount)
+          : (sData.transferredToBudget ? effectivePaid : 0);
+        const untransferredDelta = Math.max(0, effectivePaid - alreadyTransferred);
+        if (untransferredDelta > 0) {
+          eligibleDocs = [singleSnap as any];
+        }
+      }
+    } catch (e) {
+      console.warn('[transferCollectionGroupToLedger] singleDoc lookup error:', e);
+    }
+  }
 
   if (eligibleDocs.length === 0) {
     return { transferredCount: 0, transferredAmount: 0 };
   }
 
-  const totalCollected = eligibleDocs.reduce((sum, d) => sum + (d.data().paidAmount || 0), 0);
+  const totalTransferDelta = eligibleDocs.reduce((sum, d) => {
+    const data = d.data();
+    const isPaidStatus = String(data.status || '').toLowerCase() === 'paid';
+    const hasPaid = (Number(data.paidAmount) || 0) > 0;
+    const assignedAmt = Number(data.assignedAmount) || 0;
+    const effectivePaid = hasPaid ? Number(data.paidAmount) : (isPaidStatus ? assignedAmt : 0);
+    const alreadyTransferred = typeof data.transferredAmount === 'number'
+      ? Math.max(0, data.transferredAmount)
+      : (data.transferredToBudget ? effectivePaid : 0);
+    const untransferredDelta = Math.max(0, effectivePaid - alreadyTransferred);
+    return sum + untransferredDelta;
+  }, 0);
+
   const batchId = `TRANS-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
 
   // Batch commit in chunks of 500
@@ -1302,10 +1322,19 @@ export async function transferCollectionGroupToLedger(params: {
   for (const chunk of chunks) {
     const batch = writeBatch(db);
     for (const docSnap of chunk) {
+      const dData = docSnap.data();
+      const isPaidStatus = String(dData.status || '').toLowerCase() === 'paid';
+      const hasPaid = (Number(dData.paidAmount) || 0) > 0;
+      const assignedAmt = Number(dData.assignedAmount) || 0;
+      const effectivePaid = hasPaid ? Number(dData.paidAmount) : (isPaidStatus ? assignedAmt : 0);
+
       batch.update(docSnap.ref, {
+        paidAmount: effectivePaid,
+        transferredAmount: effectivePaid,
         transferredToBudget: true,
         transferredAt: serverTimestamp(),
         transferredBatchId: batchId,
+        status: 'paid',
         updatedAt: serverTimestamp(),
       });
     }
@@ -1323,7 +1352,7 @@ export async function transferCollectionGroupToLedger(params: {
       eventId: eventId && eventId !== 'unassigned' ? eventId : null,
       type: 'income' as const,
       source: 'student_collection' as const,
-      amount: totalCollected,
+      amount: totalTransferDelta,
       addedBy: recordedByUid || 'Officer',
       collectionId: batchId,
       createdAt: serverTimestamp(),
@@ -1336,7 +1365,7 @@ export async function transferCollectionGroupToLedger(params: {
       eventId: eventId && eventId !== 'unassigned' ? eventId : null,
       type: 'income' as const,
       source: 'student_collection' as const,
-      amount: totalCollected,
+      amount: totalTransferDelta,
       addedBy: recordedByUid || 'Admin SAO',
       collectionId: batchId,
       createdAt: serverTimestamp(),
@@ -1345,6 +1374,6 @@ export async function transferCollectionGroupToLedger(params: {
 
   return {
     transferredCount: eligibleDocs.length,
-    transferredAmount: totalCollected,
+    transferredAmount: totalTransferDelta,
   };
 }

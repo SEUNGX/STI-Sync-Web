@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Plus, Trash2, Shield, Search, Building2, UserCheck, CheckCircle2 } from 'lucide-react';
+import { Plus, Trash2, Shield, Search, Building2 } from 'lucide-react';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../../../../../services/firebase';
 import { useOrgOfficers, useOrganizationStream } from '../../../organizations';
@@ -14,7 +14,14 @@ interface Step4Props {
 
 export default function Step4Staff({ data, onUpdate, isOfficer }: Step4Props) {
   const { profile: officerProfile } = useOfficerProfile();
-  const showOfficerMode = isOfficer || !!officerProfile;
+  const showOfficerMode = isOfficer !== undefined ? isOfficer : !!officerProfile;
+
+  // Dynamic Theme Styling based on Officer vs Admin
+  const accentBorder = 'border-[#0E4EBD]';
+  const accentText = 'text-[#0E4EBD]';
+  const accentBg = 'bg-[#0E4EBD]';
+  const accentFocusRing = 'focus:ring-[#0E4EBD]';
+  const accentGradient = 'from-[#001A4D] to-[#0E4EBD]';
 
   // Stream active organizations for Admin org filter
   const { data: orgs, loading: orgsLoading } = useOrganizationStream();
@@ -54,7 +61,7 @@ export default function Step4Staff({ data, onUpdate, isOfficer }: Step4Props) {
           fullAccess: false,
           canCheckIn: true,
           canCheckOut: true,
-          canViewList: true,
+          canViewList: false,
           canEditRecords: false,
           allowManualAttendance: false
         }]
@@ -78,7 +85,7 @@ export default function Step4Staff({ data, onUpdate, isOfficer }: Step4Props) {
       fullAccess: false,
       canCheckIn: true,
       canCheckOut: true,
-      canViewList: true,
+      canViewList: false,
       canEditRecords: false,
       allowManualAttendance: false
     };
@@ -100,8 +107,8 @@ export default function Step4Staff({ data, onUpdate, isOfficer }: Step4Props) {
         fullAccess: !s.fullAccess, 
         canCheckIn: true, 
         canCheckOut: true, 
-        canViewList: true, 
-        canEditRecords: true 
+        canViewList: false, 
+        canEditRecords: false 
       } : s
     ));
   };
@@ -129,13 +136,13 @@ export default function Step4Staff({ data, onUpdate, isOfficer }: Step4Props) {
 
         {/* Section A — Event Core Team & SAS Adviser */}
         <div>
-          <div className="border-l-4 border-[#83358E] pl-3 mb-4">
+          <div className={`border-l-4 ${accentBorder} pl-3 mb-4`}>
             <h3 className="text-[#001A4D] font-bold text-base">Event Core Team</h3>
           </div>
 
           <div className="space-y-3">
             {/* SAS Supervisor banner */}
-            <div className="p-4 bg-gradient-to-br from-[#001A4D] to-[#83358E] rounded-xl border-2 border-[#FFC107] text-white">
+            <div className={`p-4 bg-gradient-to-br ${accentGradient} rounded-xl border-2 border-[#FFC107] text-white shadow-xs`}>
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <Shield className="w-5 h-5 text-[#FFC107]" />
@@ -146,8 +153,8 @@ export default function Step4Staff({ data, onUpdate, isOfficer }: Step4Props) {
                 </span>
               </div>
 
-              <div className="flex items-center gap-3 px-4 py-3 bg-white rounded-lg text-gray-900">
-                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#0E4EBD] to-[#83358E] flex items-center justify-center text-white font-bold text-sm">
+              <div className="flex items-center gap-3 px-4 py-3 bg-white rounded-lg text-gray-900 shadow-xs">
+                <div className={`w-9 h-9 rounded-full bg-gradient-to-br ${accentGradient} flex items-center justify-center text-white font-bold text-sm`}>
                   {activeAdviser?.fullName?.charAt(0) || 'S'}
                 </div>
                 <div>
@@ -167,12 +174,12 @@ export default function Step4Staff({ data, onUpdate, isOfficer }: Step4Props) {
         {data.enableQRTickets === true || (data as any).enableQR === true ? (
           <div>
             <div className="flex items-center justify-between mb-4">
-              <div className="border-l-4 border-[#83358E] pl-3">
+              <div className={`border-l-4 ${accentBorder} pl-3`}>
                 <h3 className="text-[#001A4D] font-bold text-base">Scanner Assignment</h3>
               </div>
               <button
                 onClick={addScanner}
-                className="px-4 py-2 bg-[#1E70E8] text-white rounded-lg text-sm font-medium hover:bg-[#0E4EBD] flex items-center gap-2 shadow-sm"
+                className="px-4 py-2 bg-[#1E70E8] text-white rounded-lg text-sm font-medium hover:bg-[#0E4EBD] flex items-center gap-2 shadow-sm cursor-pointer"
               >
                 <Plus className="w-4 h-4" /> Add Scanner
               </button>
@@ -182,7 +189,7 @@ export default function Step4Staff({ data, onUpdate, isOfficer }: Step4Props) {
             {!showOfficerMode ? (
               <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl mb-4 space-y-3">
                 <div className="flex items-center gap-2 text-xs font-bold text-[#001A4D] uppercase tracking-wider">
-                  <Building2 className="w-4 h-4 text-[#83358E]" />
+                  <Building2 className={`w-4 h-4 ${accentText}`} />
                   <span>Recruit Scanners from Student Organizations</span>
                 </div>
 
@@ -196,7 +203,7 @@ export default function Step4Staff({ data, onUpdate, isOfficer }: Step4Props) {
                       value={selectedOrgFilter}
                       onChange={(e) => setSelectedOrgFilter(e.target.value)}
                       disabled={orgsLoading}
-                      className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs font-medium text-gray-800 focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+                      className={`w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs font-medium text-gray-800 focus:ring-2 ${accentFocusRing} focus:border-transparent`}
                     >
                       <option value="all">🌐 All Student Organizations ({activeOrgs.length})</option>
                       {activeOrgs.map(org => (
@@ -218,7 +225,7 @@ export default function Step4Staff({ data, onUpdate, isOfficer }: Step4Props) {
                         placeholder="Search officer..."
                         value={officerSearchQuery}
                         onChange={(e) => setOfficerSearchQuery(e.target.value)}
-                        className="w-full pl-8 pr-3 py-2 bg-white border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+                        className={`w-full pl-8 pr-3 py-2 bg-white border border-gray-300 rounded-lg text-xs focus:ring-2 ${accentFocusRing} focus:border-transparent`}
                       />
                       <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
                     </div>
@@ -232,7 +239,7 @@ export default function Step4Staff({ data, onUpdate, isOfficer }: Step4Props) {
                   {selectedOrgFilter !== 'all' && (
                     <button
                       onClick={() => setSelectedOrgFilter('all')}
-                      className="text-[#83358E] hover:underline font-semibold"
+                      className={`${accentText} hover:underline font-semibold cursor-pointer`}
                     >
                       Reset to All Organizations
                     </button>
@@ -255,7 +262,7 @@ export default function Step4Staff({ data, onUpdate, isOfficer }: Step4Props) {
                   <div key={scanner.id} className="p-4 border border-gray-200 rounded-xl bg-white shadow-xs">
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2">
-                        <span className="w-6 h-6 rounded-full bg-[#83358E]/10 text-[#83358E] text-xs font-bold flex items-center justify-center">
+                        <span className="w-6 h-6 rounded-full bg-[#0E4EBD]/10 text-[#0E4EBD] text-xs font-bold flex items-center justify-center">
                           {index + 1}
                         </span>
                         <h4 className="font-semibold text-gray-900 text-sm">Scanner Officer {index + 1}</h4>
@@ -268,7 +275,7 @@ export default function Step4Staff({ data, onUpdate, isOfficer }: Step4Props) {
                       {scanners.length > 1 && (
                         <button
                           onClick={() => removeScanner(scanner.id)}
-                          className="text-red-500 hover:text-red-700 p-1 rounded-md hover:bg-red-50 transition-colors"
+                          className="text-red-500 hover:text-red-700 p-1 rounded-md hover:bg-red-50 transition-colors cursor-pointer"
                           title="Remove Scanner"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -295,7 +302,7 @@ export default function Step4Staff({ data, onUpdate, isOfficer }: Step4Props) {
                           });
                         }}
                         disabled={officersLoading}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs font-medium focus:ring-2 focus:ring-[#83358E] focus:border-transparent disabled:opacity-50"
+                        className={`w-full px-3 py-2 border border-gray-300 rounded-lg text-xs font-medium focus:ring-2 ${accentFocusRing} focus:border-transparent disabled:opacity-50`}
                       >
                         <option value="">
                           {officersLoading
@@ -321,17 +328,18 @@ export default function Step4Staff({ data, onUpdate, isOfficer }: Step4Props) {
                     </div>
 
                     {/* Grant Full Admin Scanner Access */}
-                    <div className="mb-3 flex items-center gap-3 p-3 bg-[#83358E]/5 border border-[#83358E]/30 rounded-lg">
+                    <div className="mb-3 flex items-center gap-3 p-3 bg-blue-50/50 border border-blue-200 rounded-lg">
                       <div className="flex-1">
                         <div className="text-xs font-semibold text-gray-900 flex items-center gap-1.5">
-                          <span>Grant Full Admin Scanner Access</span>
-                          <span className="px-1.5 py-0.2 bg-[#83358E] text-white text-[10px] rounded font-bold">Admin</span>
+                          <span>Grant Full Scanner Access</span>
+                          <span className={`px-1.5 py-0.2 ${accentBg} text-white text-[10px] rounded font-bold`}>All Modes</span>
                         </div>
-                        <div className="text-[11px] text-gray-600">Override all permissions to full access</div>
+                        <div className="text-[11px] text-gray-600">Enables full check-in, check-out, and manual attendance entry</div>
                       </div>
                       <button
+                        type="button"
                         onClick={() => toggleScannerFullAccess(scanner.id)}
-                        className={`relative w-11 h-5.5 rounded-full transition-colors flex-shrink-0 ${scanner.fullAccess ? 'bg-[#83358E]' : 'bg-gray-300'}`}
+                        className={`relative w-11 h-5.5 rounded-full transition-colors flex-shrink-0 cursor-pointer ${scanner.fullAccess ? accentBg : 'bg-gray-300'}`}
                       >
                         <div className={`absolute top-0.5 left-0.5 w-4.5 h-4.5 bg-white rounded-full transition-transform ${scanner.fullAccess ? 'translate-x-5.5' : ''}`} />
                       </button>
@@ -345,17 +353,15 @@ export default function Step4Staff({ data, onUpdate, isOfficer }: Step4Props) {
                           {[
                             { key: 'canCheckIn', label: 'Check-in Attendees' },
                             { key: 'canCheckOut', label: 'Check-out Attendees' },
-                            { key: 'canViewList', label: 'View Attendance List' },
-                            { key: 'canEditRecords', label: 'Edit Attendance Records' },
                           ].map((perm) => (
                             <label key={perm.key} className="flex items-center gap-2 px-2.5 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer text-xs">
                               <input
                                 type="checkbox"
                                 checked={scanner[perm.key as keyof EventScanner] as boolean}
                                 onChange={(e) => updateScanner(scanner.id, { [perm.key]: e.target.checked })}
-                                className="text-[#83358E] focus:ring-[#83358E] rounded w-3.5 h-3.5"
+                                className={`${accentText} ${accentFocusRing} rounded w-3.5 h-3.5`}
                               />
-                              <span className="text-gray-700">{perm.label}</span>
+                              <span className="text-gray-700 font-medium">{perm.label}</span>
                             </label>
                           ))}
                         </div>
@@ -391,7 +397,7 @@ export default function Step4Staff({ data, onUpdate, isOfficer }: Step4Props) {
           <h4 className="font-bold text-gray-900 text-sm">Staff & Scanner Hierarchy</h4>
           
           <div className="space-y-3">
-            <div className="p-3 bg-gradient-to-br from-[#001A4D] to-[#83358E] rounded-lg text-white text-center shadow-xs">
+            <div className={`p-3 bg-gradient-to-br ${accentGradient} rounded-lg text-white text-center shadow-xs`}>
               <Shield className="w-5 h-5 mx-auto mb-1 text-[#FFC107]" />
               <div className="font-bold text-xs">
                 {showOfficerMode ? 'Club Event Head' : 'SAS Event Adviser'}
@@ -419,7 +425,7 @@ export default function Step4Staff({ data, onUpdate, isOfficer }: Step4Props) {
                     {scanner.officerName || `Unassigned Scanner ${index + 1}`}
                   </span>
                   {scanner.organizationName && (
-                    <span className="text-[10px] px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded font-semibold flex-shrink-0">
+                    <span className={`text-[10px] px-1.5 py-0.5 ${showOfficerMode ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'} rounded font-semibold flex-shrink-0`}>
                       {scanner.organizationName}
                     </span>
                   )}
@@ -436,4 +442,3 @@ export default function Step4Staff({ data, onUpdate, isOfficer }: Step4Props) {
     </div>
   );
 }
-

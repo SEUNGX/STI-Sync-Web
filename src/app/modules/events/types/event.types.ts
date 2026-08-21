@@ -24,11 +24,15 @@ export interface EventDocument {
   // ─── Schedule ───
   sessions: EventSession[];
   venueId: string;                         // FK → /venues
+  customVenueName?: string | null;         // For one-off custom venues
   eventFormat: 'On-Campus' | 'Online' | 'Hybrid';
 
   // ─── Participants ───
+  targetAudienceScope?: 'all' | 'members' | 'custom';
+  targetCourses?: string[];                // Course codes e.g. ['BSIT', 'BSCS', 'BSHM']
   targetYearLevels: string[];
-  targetDepartmentIds: string[];           // FK[] → /departments
+  targetSections?: string[];               // Section names e.g. ['BSIT-1A', 'BSIT-1B']
+  targetDepartmentIds?: string[];          // FK[] → /departments (optional backwards compat)
   expectedParticipantCount: number;
 
   // ─── Attendance ───

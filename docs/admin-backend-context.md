@@ -707,39 +707,44 @@ SAO/SAS Admin events are decoupled from student club organizations to ensure adm
 
 <!-- AGENT-UPDATED: 2026-08-14 — Added Section 15: Semester Management, Strict Validation, Rollover Execution & Re-enrollment Lifecycle -->
 
-## 15. Semester Management, Strict Validation, Rollover Execution & Student Re-enrollment
+## 15. Dual-Track Semester & Trimester Management, Strict Validation, Track Rollover & Student Re-enrollment
 
-### 15.1 Add Semester Validation & Suggestions (`AcademicSemesterSettings.tsx`)
+<!-- AGENT-UPDATED: 2026-08-21 — Added Dual-Track Academic System (College Semestral vs. SHS Trimestral) -->
+
+### 15.1 Dual-Track Academic Period Architecture
+- **Simultaneous Active Periods**: The system supports simultaneous active periods for College (Semestral: `1st Semester`, `2nd Semester`) and Senior High School (Trimestral: `1st Trimester`, `2nd Trimester`, `3rd Trimester`).
+- **Hook `useActiveAcademicPeriods()`**:
+  - `activeCollegePeriod`: Returns the active College semester document.
+  - `activeShsPeriod`: Returns the active SHS trimester document.
+  - `getActivePeriodFor(level)`: Resolves active period for `'COLLEGE'` vs `'SHS'`.
+  - `isStudentPendingReEnrollment(student)`: Automatically checks student's track to determine whether they need re-enrollment against their track's active period.
+
+### 15.2 Add Semester / Trimester (`AcademicSemesterSettings.tsx`)
+- **Academic Track Selection**: Allows choosing `College (Semestral)` or `Senior High School (Trimestral)`.
 - **Dynamic Academic Year Suggestions (`getAcademicYearSuggestions`)**: Provides one-click pills for upcoming academic years (e.g. `2025-2026`, `2026-2027`, `2027-2028`, `2028-2029`).
 - **Strict Past Year Blocking**: Disallows adding academic years that are in the past (`startYear < currentCalendarYear - 1`).
-- **Dynamic Semester Term Availability (`getSemesterTermAvailability`)**:
-  - Automatically queries registered semesters for the chosen Academic Year.
-  - If `1st Semester` is already created: `1st Semester` is disabled with a `(Already Created)` badge, and `2nd Semester` is selected automatically.
-  - If `2nd Semester` is already created: `2nd Semester` is disabled.
-  - If both terms exist: Form shows an inline warning prompting the user to select the next Academic Year.
-- **Smart Default Dates**: Auto-suggests standard semester start/end and re-enrollment dates upon selecting the term.
+- **Dynamic Term Availability (`getSemesterTermAvailability`)**:
+  - For College: tracks `1st Semester` and `2nd Semester`.
+  - For SHS: tracks `1st Trimester`, `2nd Trimester`, and `3rd Trimester`.
+  - Automatically disables already created terms for that track and academic year.
+- **Smart Default Dates**: Auto-suggests standard start/end and re-enrollment dates upon selecting the term.
 
-### 15.2 Semester Rollover Engine (`academic.service.ts -> executeSemesterRollover`)
-- **Pre-flight Validation**: Admin must select an existing `UPCOMING` semester from Firestore.
+### 15.3 Track-Specific Semester Rollover Engine (`academic.service.ts -> executeSemesterRollover`)
+- **Track Isolation**: Rollover runs track-specifically (`academicLevel: 'COLLEGE' | 'SHS'`). College rollovers only affect College semesters and students; SHS rollovers only affect SHS trimesters and students.
 - **Batch Mutation**:
-  1. Sets active semester `status: 'COMPLETED'`, `updatedAt: Timestamp.now()`.
-  2. Sets target upcoming semester `status: 'ACTIVE'`, `updatedAt: Timestamp.now()`.
+  1. Sets active period for chosen track to `status: 'COMPLETED'`, `updatedAt: Timestamp.now()`.
+  2. Sets target upcoming period for chosen track to `status: 'ACTIVE'`, `updatedAt: Timestamp.now()`.
   3. Writes an immutable audit entry in `/audit_logs`.
-- **Data Preservation**: All event proposals, attendance logs, fine records, payables, liquidations, and certificates remain permanently stamped with their respective historical `semesterId` and `academicYear`. Outstanding balances carry over into the student's ledger.
+- **Data Preservation**: All event proposals, attendance logs, fine records, payables, liquidations, and certificates remain permanently stamped with their respective historical `semesterId` and `academicYear`.
 
-### 15.3 Student Re-enrollment Lifecycle (`ReEnrollmentManagement.tsx`)
-- **Active Registry Re-enrollment State**: In `StudentRegistry.tsx` and `ReEnrollmentManagement.tsx`, students whose `schoolYear` or `semester` does not match the active semester automatically appear as `pending` (or `overdue` if past `reenrollDeadline`).
-- **Academic Hierarchy Cascade Filters**:
-  - Filter by **Course / Program** (e.g. `BSIT`), **Year Level** (e.g. `1st Year`), and **Current Section** (e.g. `BSIT 1101`).
-  - Section dropdown strictly resolves available sections matching the Course and Year Level from `/sections`.
-- **Targeted Batch Promotion & Re-enrollment (`bulkReEnrollStudents`)**:
-  - Admin filters by current section (e.g. `BSIT 1101`), selects the batch, and can deselect irregular/transfer students.
-  - Action toolbar allows selecting **Target Year Level** (e.g. `2nd Year`) and **Target Promoted Section** (e.g. `BSIT 2101`).
-  - Batch writes update `yearLevel`, `section`, active `schoolYear`, `semester`, and `status: 'ACTIVE'` across all selected students in one atomic transaction.
-- **Individual Student Re-enrollment & Shifting (`IndividualReEnrollModal`)**:
-  - Supports program shifting across courses (e.g., from `BSCS` to `BSIT`), updating `courseId`, `courseCode`, `courseName`, `departmentId`, `departmentName`.
-  - Dynamic section dropdown strictly filtered to the chosen course and year level.
-- **Overdue Inactivation**: Filter-aware batch action to mark unconfirmed overdue students as `INACTIVE` (`inactivateOverdueStudents`).
+### 15.4 Student Re-enrollment Lifecycle (`ReEnrollmentManagement.tsx`)
+- **Track-Aware Re-enrollment State**: Evaluates College students against `activeCollegePeriod` and SHS students against `activeShsPeriod`.
+- **Track Filters & Academic Cascade**:
+  - Filter tabs: `All Tracks`, `College (Semesters)`, `Senior High School (Trimesters)`.
+  - Cascade filters: **Course / Program** (e.g. `BSIT` / `ABM`), **Year Level** (e.g. `1st Year` / `Grade 11`), and **Current Section**.
+- **Grade & Year Level Aware Batch Promotion (`bulkReEnrollStudents` / `reEnrollStudent`)**:
+  - Supports SHS promotions (`Grade 11` -> `Grade 12`) and College promotions (`1st Year` -> `2nd Year` -> `3rd Year` -> `4th Year`).
+  - Re-enrolls each student to their matching track's active period atomically.
 
 ---
 

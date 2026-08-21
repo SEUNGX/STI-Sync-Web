@@ -6,6 +6,8 @@ import { useStudents } from '../../modules/students/hooks/useStudentStream';
 import { useRoles } from '../../modules/roles/hooks/useRoles';
 import { updateStudent } from '../../modules/students/services/student.service';
 import { uploadToCloudinary } from '../../../services/cloudinary';
+import { changeOfficerOrAdviserPassword } from '../../auth/services/password.service';
+import { AlertCircle } from 'lucide-react';
 import OrganizationProfile from './OrganizationProfile';
 import { toast } from 'sonner';
 
@@ -74,7 +76,7 @@ export default function OfficerSettings({ defaultTab = 'account' }: OfficerSetti
   }, [tabQuery]);
 
   // Real Officer Data Hooks
-  const { profile, loading: profileLoading } = useOfficerProfile();
+  const { profile, loading: profileLoading, markPasswordChanged } = useOfficerProfile();
   const { data: students, loading: studentsLoading } = useStudents();
   const { data: roles } = useRoles();
 
@@ -101,6 +103,7 @@ export default function OfficerSettings({ defaultTab = 'account' }: OfficerSetti
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
 
   // Populate form with real data
   useEffect(() => {
@@ -168,7 +171,7 @@ export default function OfficerSettings({ defaultTab = 'account' }: OfficerSetti
     }
   };
 
-  const handleUpdatePassword = (e: React.FormEvent) => {
+  const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentPassword) {
       toast.error('Please enter your current password.');
@@ -182,10 +185,32 @@ export default function OfficerSettings({ defaultTab = 'account' }: OfficerSetti
       toast.error('New passwords do not match.');
       return;
     }
-    toast.success('Password updated successfully!');
-    setCurrentPassword('');
-    setNewPassword('');
-    setConfirmPassword('');
+    if (!profile?.email) {
+      toast.error('Account email not found in session.');
+      return;
+    }
+
+    setIsUpdatingPassword(true);
+    try {
+      await changeOfficerOrAdviserPassword(currentPassword, newPassword, profile);
+      markPasswordChanged?.();
+      toast.success('Password updated successfully! Your account is now secured.');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err: any) {
+      console.error('[OfficerSettings] Error updating password:', err);
+      const code = err?.code || '';
+      if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
+        toast.error('Current password is incorrect. Please try again.');
+      } else if (code === 'auth/weak-password') {
+        toast.error('New password is too weak. Please use a stronger password.');
+      } else {
+        toast.error(err.message || 'Failed to update password. Please try again.');
+      }
+    } finally {
+      setIsUpdatingPassword(false);
+    }
   };
 
   const handleTabChange = (key: SettingsSection) => {
@@ -199,7 +224,7 @@ export default function OfficerSettings({ defaultTab = 'account' }: OfficerSetti
   ];
 
   const inputClass =
-    'w-full px-4 py-2.5 border border-gray-300 rounded-lg text-[14px] focus:ring-2 focus:ring-[#83358E] focus:border-transparent outline-none transition';
+    'w-full px-4 py-2.5 border border-gray-300 rounded-lg text-[14px] focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] outline-none transition';
   const readOnlyClass =
     'w-full px-4 py-2.5 border border-gray-200 rounded-lg text-[14px] bg-gray-50 text-gray-500 cursor-not-allowed';
 
@@ -229,8 +254,8 @@ export default function OfficerSettings({ defaultTab = 'account' }: OfficerSetti
                   onClick={() => handleTabChange(key)}
                   className={`w-full text-left px-4 py-2.5 rounded-lg text-[14px] font-medium transition-colors ${
                     activeSection === key
-                      ? 'bg-[#F3E8FF] text-[#83358E]'
-                      : 'text-[#888780] hover:bg-gray-50 hover:text-[#001A4D]'
+                      ? 'bg-[#F0F6FF] text-[#0E4EBD] font-bold'
+                      : 'text-gray-600 hover:bg-gray-50 hover:text-[#001A4D]'
                   }`}
                 >
                   {label}
@@ -251,7 +276,7 @@ export default function OfficerSettings({ defaultTab = 'account' }: OfficerSetti
 
                 {profileLoading || studentsLoading ? (
                   <div className="py-12 text-center text-gray-500 flex flex-col items-center gap-2">
-                    <Loader2 className="w-6 h-6 animate-spin text-[#83358E]" />
+                    <Loader2 className="w-6 h-6 animate-spin text-[#0E4EBD]" />
                     <p className="text-sm">Loading Officer Profile...</p>
                   </div>
                 ) : (
@@ -262,7 +287,7 @@ export default function OfficerSettings({ defaultTab = 'account' }: OfficerSetti
                         {photoUrl ? (
                           <img src={photoUrl} alt="Officer Avatar" className="w-20 h-20 rounded-full object-cover border border-[#E0E0E0]" />
                         ) : (
-                          <div className="w-20 h-20 bg-[#83358E] rounded-full flex items-center justify-center text-white font-bold text-2xl">
+                          <div className="w-20 h-20 bg-gradient-to-br from-[#001A4D] to-[#0E4EBD] rounded-full flex items-center justify-center text-white font-bold text-2xl shadow-xs">
                             {initials}
                           </div>
                         )}
@@ -272,7 +297,7 @@ export default function OfficerSettings({ defaultTab = 'account' }: OfficerSetti
                           className="absolute bottom-0 right-0 p-1.5 bg-white border border-[#E0E0E0] rounded-full shadow hover:bg-gray-50 transition"
                           title="Upload photo"
                         >
-                          {isUploadingPhoto ? <Loader2 className="w-3.5 h-3.5 animate-spin text-[#83358E]" /> : <Upload className="w-3.5 h-3.5 text-[#83358E]" />}
+                          {isUploadingPhoto ? <Loader2 className="w-3.5 h-3.5 animate-spin text-[#0E4EBD]" /> : <Upload className="w-3.5 h-3.5 text-[#0E4EBD]" />}
                         </button>
                         <input
                           type="file"
@@ -355,7 +380,7 @@ export default function OfficerSettings({ defaultTab = 'account' }: OfficerSetti
                       <button
                         onClick={handleSaveAccount}
                         disabled={isSaving}
-                        className="flex items-center gap-2 px-5 py-2 bg-[#83358E] text-white rounded-lg text-[14px] font-medium hover:bg-[#6D2A78] transition-colors disabled:opacity-50"
+                        className="flex items-center gap-2 px-5 py-2.5 bg-[#001A4D] text-white rounded-lg text-[14px] font-bold hover:bg-[#0E4EBD] transition-colors disabled:opacity-50 cursor-pointer shadow-xs"
                       >
                         {isSaving && <Loader2 className="w-4 h-4 animate-spin" />}
                         {isSaving ? 'Saving Changes...' : 'Save Changes'}
@@ -376,6 +401,18 @@ export default function OfficerSettings({ defaultTab = 'account' }: OfficerSetti
               <form onSubmit={handleUpdatePassword} className="space-y-6">
                 <h2 className="text-[#001A4D] text-[18px] font-bold">Security & Password</h2>
 
+                {profile?.requiresPasswordChange && (
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3 text-xs text-amber-900 animate-in fade-in">
+                    <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold text-amber-950 text-sm">Action Recommended: Set Your Personal Password</p>
+                      <p className="mt-0.5 text-amber-800 leading-relaxed">
+                        You are currently signed in with an initial temporary password. Please choose a new, private password below to secure your account.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 {/* Change password */}
                 <div className="space-y-4">
                   <div>
@@ -383,7 +420,7 @@ export default function OfficerSettings({ defaultTab = 'account' }: OfficerSetti
                     <div className="relative">
                       <input
                         type={showCurrent ? 'text' : 'password'}
-                        placeholder="Enter current password"
+                        placeholder="Enter current / temporary password"
                         value={currentPassword}
                         onChange={e => setCurrentPassword(e.target.value)}
                         className={inputClass + ' pr-10'}
@@ -403,7 +440,7 @@ export default function OfficerSettings({ defaultTab = 'account' }: OfficerSetti
                     <div className="relative">
                       <input
                         type={showNew ? 'text' : 'password'}
-                        placeholder="Enter new password"
+                        placeholder="Enter new password (min. 8 characters)"
                         value={newPassword}
                         onChange={(e) => setNewPassword(e.target.value)}
                         className={inputClass + ' pr-10'}
@@ -442,16 +479,21 @@ export default function OfficerSettings({ defaultTab = 'account' }: OfficerSetti
 
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-[#83358E] text-white rounded-lg text-[14px] font-medium hover:bg-[#6D2A78] transition-colors"
+                  disabled={isUpdatingPassword}
+                  className="px-6 py-2.5 bg-[#0E4EBD] text-white rounded-xl text-[14px] font-bold hover:bg-[#001A4D] transition-colors flex items-center gap-2 disabled:opacity-50 shadow-sm cursor-pointer"
                 >
-                  Update Password
+                  {isUpdatingPassword ? (
+                    <><Loader2 className="w-4 h-4 animate-spin" /> Updating Password...</>
+                  ) : (
+                    'Update Password'
+                  )}
                 </button>
 
                 {/* Active sessions */}
                 <div className="pt-6 border-t border-gray-100">
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2">
-                      <ShieldCheck className="w-4 h-4 text-[#83358E]" />
+                      <ShieldCheck className="w-4 h-4 text-[#0E4EBD]" />
                       <h3 className="text-[#001A4D] text-[15px] font-bold">Active Sessions</h3>
                     </div>
                     <button type="button" className="text-[13px] text-red-500 hover:text-red-600 font-medium transition-colors">

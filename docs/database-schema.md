@@ -101,9 +101,47 @@ After creating the user in Firebase Authentication, create the matching document
 
 ---
 
-<!-- AGENT-UPDATED: 2026-06-12 — Added `departments`, `courses`, `sections` collections for academic registry -->
+<!-- AGENT-UPDATED: 2026-08-21 — Added `semesters` collection and dual-track support (`academicLevel`: 'COLLEGE' | 'SHS') -->
 
-### 1.1 `departments`
+### 1.1 `semesters`
+
+**Path:** `/semesters/{semesterId}`
+
+```typescript
+type AcademicLevel = 'COLLEGE' | 'SHS';
+type SemesterTerm = '1st Semester' | '2nd Semester' | 'Summer';
+type TrimesterTerm = '1st Trimester' | '2nd Trimester' | '3rd Trimester';
+type AcademicTerm = SemesterTerm | TrimesterTerm;
+type SemesterStatus = 'ACTIVE' | 'UPCOMING' | 'COMPLETED' | 'ARCHIVED';
+
+interface SemesterDocument {
+  id: string;                              // Auto-generated Firestore document ID
+  academicYear: string;                    // e.g., "2026-2027"
+  semester: AcademicTerm;                  // e.g., "1st Semester" or "2nd Trimester"
+  label: string;                           // e.g., "1st Semester 2026-2027" or "2T 2026-2027"
+  startDate: string;                       // YYYY-MM-DD
+  endDate: string;                         // YYYY-MM-DD
+  reenrollDeadline: string;                // YYYY-MM-DD
+  status: SemesterStatus;                  // 'ACTIVE' | 'UPCOMING' | 'COMPLETED' | 'ARCHIVED'
+  academicLevel?: AcademicLevel;           // 'COLLEGE' (Semestral) or 'SHS' (Trimestral)
+  termType?: 'SEMESTER' | 'TRIMESTER';     // Academic term system
+  events: number;                          // Denormalized count of events in this term
+  students: number;                        // Denormalized count of enrolled students
+  archived: boolean;                       // Soft delete / archive flag
+  
+  // ─── Timestamps ───
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+```
+
+**Indexes Required:**
+- `archived` ASC, `status` ASC
+- `academicLevel` ASC, `status` ASC
+
+---
+
+### 1.2 `departments`
 
 **Path:** `/departments/{departmentId}`
 
@@ -112,6 +150,7 @@ interface DepartmentDocument {
   id: string;                              // Auto-generated Firestore document ID
   name: string;                            // e.g., "School of Computer Studies"
   code: string;                            // e.g., "SCS"
+  academicLevel?: AcademicLevel;           // 'COLLEGE' or 'SHS'
   archived: boolean;                       // Soft delete flag
   
   // ─── Timestamps ───
@@ -125,7 +164,7 @@ interface DepartmentDocument {
 
 ---
 
-### 1.2 `courses`
+### 1.3 `courses`
 
 **Path:** `/courses/{courseId}`
 
@@ -135,7 +174,8 @@ interface CourseDocument {
   name: string;                            // e.g., "Bachelor of Science in Information Technology"
   code: string;                            // e.g., "BSIT"
   departmentId: string;                    // FK → /departments
-  yearLevels: number;                      // e.g., 4
+  academicLevel?: AcademicLevel;           // 'COLLEGE' or 'SHS'
+  yearLevels: number;                      // e.g., 4 for College, 2 for SHS
   archived: boolean;                       // Soft delete flag
   
   // ─── Timestamps ───
@@ -150,7 +190,7 @@ interface CourseDocument {
 
 ---
 
-### 1.3 `sections`
+### 1.4 `sections`
 
 **Path:** `/sections/{sectionId}`
 
@@ -161,6 +201,7 @@ interface SectionDocument {
   courseId: string;                        // FK → /courses
   departmentId: string;                    // Denormalized FK → /departments for easier querying
   yearLevel: number;                       // e.g., 1
+  academicLevel?: AcademicLevel;           // 'COLLEGE' or 'SHS'
   archived: boolean;                       // Soft delete flag
   
   // ─── Timestamps ───

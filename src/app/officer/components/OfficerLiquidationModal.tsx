@@ -284,16 +284,16 @@ export default function OfficerLiquidationModal({
       <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden border border-gray-100">
 
         {/* Modal Header */}
-        <div className="px-6 py-4 bg-gradient-to-r from-[#001A4D] to-[#83358E] text-white flex items-center justify-between">
+        <div className="px-6 py-4 bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] text-white flex items-center justify-between">
           <div>
             <h2 className="text-xl font-bold">
               {editingReport ? 'Edit Financial Liquidation Report' : 'Create Liquidation Report'}
             </h2>
-            <p className="text-xs text-white/70 mt-0.5">
+            <p className="text-xs text-white/80 mt-0.5">
               Submit actual spendings, attach receipt evidence, and verify budget variance.
             </p>
           </div>
-          <button onClick={onClose} className="p-1 hover:bg-white/10 rounded-lg transition-colors text-white">
+          <button onClick={onClose} className="p-1 hover:bg-white/10 rounded-lg transition-colors text-white cursor-pointer">
             <X className="w-6 h-6" />
           </button>
         </div>
@@ -327,7 +327,7 @@ export default function OfficerLiquidationModal({
                 value={selectedEventId}
                 onChange={(e) => handleEventSelect(e.target.value)}
                 disabled={!!editingReport}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] focus:border-transparent disabled:bg-gray-100"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] disabled:bg-gray-100"
               >
                 <option value="">Select an approved event...</option>
                 {eligibleEvents.map((evt) => (
@@ -348,7 +348,7 @@ export default function OfficerLiquidationModal({
                   type="number"
                   value={allocatedBudget}
                   onChange={(e) => setAllocatedBudget(Number(e.target.value))}
-                  className="w-full pl-8 pr-4 py-2 border border-gray-300 rounded-lg text-sm font-bold text-gray-900 focus:ring-2 focus:ring-[#83358E]"
+                  className="w-full pl-8 pr-4 py-2 border border-gray-300 rounded-lg text-sm font-bold text-gray-900 focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
                   placeholder="0.00"
                 />
               </div>
@@ -357,17 +357,17 @@ export default function OfficerLiquidationModal({
 
           {/* Live Financial Variance Summary Card */}
           <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
-            <div className="p-3 bg-white border border-gray-100 rounded-lg shadow-sm">
+            <div className="p-3 bg-white border border-gray-100 rounded-lg shadow-xs">
               <div className="text-xs text-gray-500 font-medium">Approved Budget</div>
               <div className="text-lg font-bold text-[#001A4D] mt-1">{formatCurrency(allocatedBudget)}</div>
             </div>
 
-            <div className="p-3 bg-white border border-gray-100 rounded-lg shadow-sm">
+            <div className="p-3 bg-white border border-gray-100 rounded-lg shadow-xs">
               <div className="text-xs text-gray-500 font-medium">Total Actual Spendings</div>
-              <div className="text-lg font-bold text-[#83358E] mt-1">{formatCurrency(totalActualSpending)}</div>
+              <div className="text-lg font-bold text-[#0E4EBD] mt-1">{formatCurrency(totalActualSpending)}</div>
             </div>
 
-            <div className={`p-3 bg-white border rounded-lg shadow-sm ${isDeficit ? 'border-red-200' : 'border-green-200'}`}>
+            <div className={`p-3 bg-white border rounded-lg shadow-xs ${isDeficit ? 'border-red-200' : 'border-green-200'}`}>
               <div className="text-xs text-gray-500 font-medium">
                 {isDeficit ? 'Net Deficit (Over Budget)' : 'Net Surplus (Remaining)'}
               </div>
@@ -398,7 +398,7 @@ export default function OfficerLiquidationModal({
                         Item #{index + 1}
                       </span>
                       {item.isPreFilled && (
-                        <span className="text-[10px] font-bold px-2 py-0.5 bg-purple-50 text-[#83358E] rounded border border-purple-200 uppercase">
+                        <span className="text-[10px] font-bold px-2 py-0.5 bg-blue-50 text-[#0E4EBD] rounded border border-blue-200 uppercase">
                           Proposal Budget Item
                         </span>
                       )}
@@ -423,7 +423,7 @@ export default function OfficerLiquidationModal({
                       {!item.isPreFilled && lineItems.length > 1 && (
                         <button
                           onClick={() => handleRemoveLineItem(index)}
-                          className="text-red-500 hover:text-red-700 p-1"
+                          className="text-red-500 hover:text-red-700 p-1 cursor-pointer"
                           title="Remove custom item"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -441,7 +441,7 @@ export default function OfficerLiquidationModal({
                         disabled={item.isPreFilled}
                         onChange={(e) => handleLineItemChange(index, 'description', e.target.value)}
                         placeholder="e.g. Lunch Catering for 50 Pax"
-                        className={`w-full px-3 py-1.5 border border-gray-300 rounded text-sm ${item.isPreFilled ? 'bg-gray-100 font-semibold text-gray-700 cursor-not-allowed' : 'focus:ring-1 focus:ring-[#83358E]'
+                        className={`w-full px-3 py-1.5 border border-gray-300 rounded text-sm ${item.isPreFilled ? 'bg-gray-100 font-semibold text-gray-700 cursor-not-allowed' : 'focus:ring-1 focus:ring-[#0E4EBD]'
                           }`}
                       />
                     </div>
@@ -452,7 +452,7 @@ export default function OfficerLiquidationModal({
                         value={item.category}
                         disabled={item.isPreFilled}
                         onChange={(e) => handleLineItemChange(index, 'category', e.target.value)}
-                        className={`w-full px-3 py-1.5 border border-gray-300 rounded text-sm ${item.isPreFilled ? 'bg-gray-100 font-semibold text-gray-700 cursor-not-allowed' : 'focus:ring-1 focus:ring-[#83358E]'
+                        className={`w-full px-3 py-1.5 border border-gray-300 rounded text-sm ${item.isPreFilled ? 'bg-gray-100 font-semibold text-gray-700 cursor-not-allowed' : 'focus:ring-1 focus:ring-[#0E4EBD]'
                           }`}
                       >
                         {EXPENSE_CATEGORIES.map((cat) => (
@@ -466,7 +466,7 @@ export default function OfficerLiquidationModal({
 
                   {/* Side-by-Side Proposed vs Actual Comparison Banner */}
                   {item.allocatedCost !== undefined && item.allocatedCost > 0 && (
-                    <div className="p-2.5 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <div className="p-2.5 bg-blue-50/60 border border-blue-200 rounded-lg flex flex-wrap items-center justify-between gap-2 text-xs">
                       <div className="flex flex-wrap items-center gap-3">
                         <div>
                           <span className="text-gray-500 font-medium">Proposed Baseline:</span>
@@ -477,7 +477,7 @@ export default function OfficerLiquidationModal({
                         <span className="text-blue-300 hidden sm:inline">|</span>
                         <div>
                           <span className="text-gray-500 font-medium">Actual Input:</span>
-                          <span className="ml-1.5 font-bold text-[#83358E]">
+                          <span className="ml-1.5 font-bold text-[#0E4EBD]">
                             {item.quantity} Qty × {formatCurrency(item.unitCost)} = {formatCurrency(item.totalCost)}
                           </span>
                         </div>
@@ -523,7 +523,7 @@ export default function OfficerLiquidationModal({
                         type="number"
                         readOnly
                         value={item.totalCost}
-                        className="w-full px-3 py-1.5 border border-gray-200 bg-gray-50 rounded text-sm font-bold text-[#83358E]"
+                        className="w-full px-3 py-1.5 border border-gray-200 bg-gray-50 rounded text-sm font-bold text-[#0E4EBD]"
                       />
                     </div>
                   </div>
@@ -559,7 +559,7 @@ export default function OfficerLiquidationModal({
                         ) : (
                           <label className="cursor-pointer flex items-center justify-center gap-2 px-3 py-1.5 border border-dashed border-gray-300 rounded-lg hover:bg-gray-50 text-xs font-medium text-gray-600 flex-1 transition-colors">
                             {uploadingIndex === index ? (
-                              <Loader2 className="w-4 h-4 animate-spin text-[#83358E]" />
+                              <Loader2 className="w-4 h-4 animate-spin text-[#0E4EBD]" />
                             ) : (
                               <Upload className="w-4 h-4 text-gray-500" />
                             )}
@@ -610,9 +610,9 @@ export default function OfficerLiquidationModal({
             <button
               onClick={() => handleSave(true)}
               disabled={isSubmitting}
-              className="px-5 py-2 bg-gradient-to-r from-[#001A4D] to-[#83358E] text-white rounded-lg text-sm font-bold hover:opacity-90 transition-opacity shadow-md flex items-center gap-2"
+              className="px-5 py-2 bg-[#001A4D] hover:bg-[#0E4EBD] text-white rounded-lg text-sm font-bold transition-colors shadow-xs flex items-center gap-2 cursor-pointer"
             >
-              {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+              {isSubmitting && <Loader2 className="w-4 h-4 animate-spin text-[#FFD41C]" />}
               Submit Liquidation
             </button>
           </div>

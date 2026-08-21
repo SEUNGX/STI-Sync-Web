@@ -1,8 +1,10 @@
-import { Outlet, useLocation, Navigate } from 'react-router';
-import { ShieldAlert, LogOut, Mail, Lock } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Outlet, useLocation, Navigate, useNavigate } from 'react-router';
+import { ShieldAlert, LogOut, Mail, Lock, KeyRound, ArrowRight } from 'lucide-react';
 import { OfficerSidebar } from './OfficerSidebar';
 import { OfficerTopNav } from './OfficerTopNav';
 import { useOfficerProfile } from '../../auth/hooks/useOfficerProfile';
+import { FirstTimePasswordReminderModal } from './FirstTimePasswordReminderModal';
 
 const pageTitles: Record<string, string> = {
   '/officer/dashboard': 'Dashboard',
@@ -17,8 +19,25 @@ const pageTitles: Record<string, string> = {
 
 export function OfficerLayout() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { profile, activeOrgStatus, activeOrgName, loading, logout } = useOfficerProfile();
   const title = pageTitles[location.pathname] || 'Officer Portal';
+
+  const [showReminderModal, setShowReminderModal] = useState(false);
+
+  useEffect(() => {
+    if (profile?.requiresPasswordChange) {
+      const dismissed = sessionStorage.getItem('sti_dismissed_pwd_reminder');
+      if (!dismissed) {
+        setShowReminderModal(true);
+      }
+    }
+  }, [profile?.requiresPasswordChange]);
+
+  const handleDismissReminder = () => {
+    sessionStorage.setItem('sti_dismissed_pwd_reminder', 'true');
+    setShowReminderModal(false);
+  };
 
   if (loading) {
     return (
@@ -85,9 +104,38 @@ export function OfficerLayout() {
       <div className="ml-[240px]">
         <OfficerTopNav title={title} />
         <main className="p-6">
+          {/* Subtle Security Reminder Banner if temporary password is in use */}
+          {profile.requiresPasswordChange && location.pathname !== '/officer/settings' && (
+            <div className="mb-6 px-4 py-3 bg-white border-l-4 border-[#FFC107] border-y border-r border-gray-200/80 rounded-r-2xl shadow-xs flex items-center justify-between gap-4 animate-in fade-in">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-700 shrink-0">
+                  <KeyRound className="w-4.5 h-4.5" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-[#001A4D]">Temporary Password In Use</p>
+                  <p className="text-[11px] text-gray-500">Protect your account by creating your personal password in Settings.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => navigate('/officer/settings?tab=security')}
+                className="px-3.5 py-1.5 bg-[#001A4D] hover:bg-[#0E4EBD] text-[#FFD41C] text-xs font-bold rounded-xl transition-colors flex items-center gap-1.5 shrink-0 shadow-xs cursor-pointer"
+              >
+                <span>Change Password</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
           <Outlet />
         </main>
       </div>
+
+      {/* Exitable First-Time Login Password Reminder Modal */}
+      <FirstTimePasswordReminderModal
+        isOpen={showReminderModal}
+        onClose={handleDismissReminder}
+        isAdviser={profile.isAdviser}
+      />
     </div>
   );
 }

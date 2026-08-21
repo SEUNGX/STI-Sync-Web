@@ -137,15 +137,15 @@ export default function SaoEventCreationModal({
       case 'Event Details':
         return <Step1EventDetails data={formData} onUpdate={updateFormData} isOfficer={false} />;
       case 'Schedule':
-        return <Step2Schedule data={formData} onUpdate={updateFormData} />;
+        return <Step2Schedule data={formData} onUpdate={updateFormData} isOfficer={false} />;
       case 'Participants':
         return <Step3Participants data={formData} onUpdate={updateFormData} isOfficer={false} />;
       case 'Staff':
         return <Step4Staff data={formData} onUpdate={updateFormData} isOfficer={false} />;
       case 'Budget':
-        return <Step5Budget data={formData} onUpdate={updateFormData} />;
+        return <Step5Budget data={formData} onUpdate={updateFormData} isOfficer={false} />;
       case 'Documents':
-        return <Step6Documents data={formData} onUpdate={updateFormData} />;
+        return <Step6Documents data={formData} onUpdate={updateFormData} isOfficer={false} />;
       case 'Publish':
         return <Step7Publish data={formData} onUpdate={updateFormData} onPublish={handleSubmit} isPublishing={saving || loading} isOfficer={false} />;
       default:

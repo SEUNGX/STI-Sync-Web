@@ -146,7 +146,7 @@ export function AddPayableModal({
               <select
                 value={payableType}
                 onChange={(e) => setPayableType(e.target.value as PayableType)}
-                className="w-full px-3 py-2 border border-[#E0E0E0] rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] outline-none"
+                className="w-full px-3 py-2 border border-[#E0E0E0] rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] outline-none"
               >
                 <option value="custom">Custom Fee (T-Shirt, Merchandise, Project)</option>
                 <option value="org_fine">Organization Fine / Penalty</option>
@@ -159,7 +159,7 @@ export function AddPayableModal({
               <select
                 value={selectedSemId || activeSemester?.id}
                 onChange={(e) => setSelectedSemId(e.target.value)}
-                className="w-full px-3 py-2 border border-[#E0E0E0] rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] outline-none"
+                className="w-full px-3 py-2 border border-[#E0E0E0] rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] outline-none"
               >
                 {semesters.map((s) => (
                   <option key={s.id} value={s.id}>
@@ -178,7 +178,7 @@ export function AddPayableModal({
               placeholder="e.g. Annual T-Shirt Fee, Late Assembly Fine"
               value={label}
               onChange={(e) => setLabel(e.target.value)}
-              className="w-full px-3 py-2 border border-[#E0E0E0] rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] outline-none"
+              className="w-full px-3 py-2 border border-[#E0E0E0] rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] outline-none"
             />
           </div>
 
@@ -193,7 +193,7 @@ export function AddPayableModal({
                 placeholder="0.00"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value === '' ? '' : parseFloat(e.target.value))}
-                className="w-full px-3 py-2 border border-[#E0E0E0] rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] outline-none"
+                className="w-full px-3 py-2 border border-[#E0E0E0] rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] outline-none"
               />
             </div>
 
@@ -203,7 +203,7 @@ export function AddPayableModal({
                 type="date"
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
-                className="w-full px-3 py-2 border border-[#E0E0E0] rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] outline-none"
+                className="w-full px-3 py-2 border border-[#E0E0E0] rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] outline-none"
               />
             </div>
           </div>
@@ -215,7 +215,7 @@ export function AddPayableModal({
               placeholder="Provide context or explanation for this payable..."
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="w-full px-3 py-2 border border-[#E0E0E0] rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] outline-none resize-none"
+              className="w-full px-3 py-2 border border-[#E0E0E0] rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] outline-none resize-none"
             />
           </div>
 
@@ -226,7 +226,7 @@ export function AddPayableModal({
               <button
                 type="button"
                 onClick={handleSelectAll}
-                className="text-xs text-[#83358E] font-semibold hover:underline"
+                className="text-xs text-[#0E4EBD] font-bold hover:underline cursor-pointer"
               >
                 {selectedMemberIds.length === activeMembers.length ? 'Deselect All' : 'Select All Members'}
               </button>
@@ -238,7 +238,7 @@ export function AddPayableModal({
                 placeholder="Search member by name or ID..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-xs outline-none bg-white"
+                className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-xs outline-none bg-white focus:ring-2 focus:ring-[#0E4EBD]/30"
               />
 
               <div className="max-h-40 overflow-y-auto space-y-1 pr-1">
@@ -255,7 +255,7 @@ export function AddPayableModal({
                         key={m.id}
                         onClick={() => toggleMemberSelection(id)}
                         className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors ${
-                          isChecked ? 'bg-[#F3E8FF] border border-[#83358E]/30' : 'bg-white border border-gray-100 hover:bg-gray-50'
+                          isChecked ? 'bg-blue-50 border border-blue-200 text-[#001A4D]' : 'bg-white border border-gray-100 hover:bg-gray-50'
                         }`}
                       >
                         <div>
@@ -266,7 +266,7 @@ export function AddPayableModal({
                           type="checkbox"
                           checked={isChecked}
                           onChange={() => {}}
-                          className="w-4 h-4 text-[#83358E] rounded focus:ring-[#83358E]"
+                          className="w-4 h-4 text-[#0E4EBD] rounded focus:ring-[#0E4EBD] accent-[#0E4EBD]"
                         />
                       </div>
                     );
@@ -283,7 +283,7 @@ export function AddPayableModal({
             type="button"
             onClick={onClose}
             disabled={isSubmitting}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 cursor-pointer"
           >
             Cancel
           </button>
@@ -291,7 +291,7 @@ export function AddPayableModal({
             type="submit"
             form="add-payable-form"
             disabled={isSubmitting}
-            className="px-5 py-2 text-sm font-bold text-white bg-[#83358E] rounded-lg hover:bg-[#6D2A78] transition-colors flex items-center gap-2 disabled:opacity-50"
+            className="px-5 py-2 text-sm font-bold text-white bg-[#001A4D] hover:bg-[#0E4EBD] rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 cursor-pointer shadow-xs"
           >
             {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
             {isSubmitting ? 'Creating...' : `Create Payable (${selectedMemberIds.length})`}

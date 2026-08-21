@@ -243,27 +243,70 @@ export default function AcademicYearSemester({ onUnsavedChange }: AcademicYearSe
                 <button onClick={closeSem} className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10"><X className="w-5 h-5" /></button>
               </div>
               <div className="p-6 space-y-4">
+                {/* Academic Track Selector */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Academic Track <span className="text-red-500">*</span></label>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSemForm({ ...semForm, semester: '1st Semester' })}
+                      className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold border transition-all ${
+                        !semForm.semester.includes('Trimester')
+                          ? 'bg-[#001A4D] text-[#FFD41C] border-[#001A4D]'
+                          : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      College (Semestral)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSemForm({ ...semForm, semester: '1st Trimester' })}
+                      className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold border transition-all ${
+                        semForm.semester.includes('Trimester')
+                          ? 'bg-amber-600 text-white border-amber-600'
+                          : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      Senior High School (Trimestral)
+                    </button>
+                  </div>
+                </div>
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">Academic Year <span className="text-red-500">*</span></label>
                   <input type="text" value={semForm.academicYear} onChange={e => setSemForm({ ...semForm, academicYear: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#001A4D] focus:border-transparent" placeholder="e.g. 2026–2027" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Semester <span className="text-red-500">*</span></label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    {semForm.semester.includes('Trimester') ? 'Trimester' : 'Semester'} <span className="text-red-500">*</span>
+                  </label>
                   <select value={semForm.semester} onChange={e => setSemForm({ ...semForm, semester: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#001A4D] focus:border-transparent">
-                    <option>1st Semester</option><option>2nd Semester</option><option>Summer Term</option>
+                    {semForm.semester.includes('Trimester') ? (
+                      <>
+                        <option>1st Trimester</option>
+                        <option>2nd Trimester</option>
+                        <option>3rd Trimester</option>
+                      </>
+                    ) : (
+                      <>
+                        <option>1st Semester</option>
+                        <option>2nd Semester</option>
+                        <option>Summer Term</option>
+                      </>
+                    )}
                   </select>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1.5">Start Date <span className="text-red-500">*</span></label>
-                    <input type="date" value={semForm.startDate} onChange={e => setSemForm({ ...semForm, startDate: e.target.value })}
+                    <input type="date" min={new Date().toISOString().split("T")[0]} value={semForm.startDate} onChange={e => setSemForm({ ...semForm, startDate: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#001A4D] focus:border-transparent" />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1.5">End Date <span className="text-red-500">*</span></label>
-                    <input type="date" value={semForm.endDate} onChange={e => setSemForm({ ...semForm, endDate: e.target.value })}
+                    <input type="date" min={semForm.startDate || new Date().toISOString().split("T")[0]} value={semForm.endDate} onChange={e => setSemForm({ ...semForm, endDate: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#001A4D] focus:border-transparent" />
                   </div>
                 </div>

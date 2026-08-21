@@ -1,9 +1,11 @@
 import { useState, useMemo, useEffect } from "react";
 import { useOutletContext, useSearchParams } from "react-router";
+import { toast } from "sonner";
 import {
   CheckCircle2, XCircle, Calendar, Plus, Eye,
   Search, ChevronLeft, ChevronRight, FileEdit, Clock,
-  Filter, ChevronDown, RotateCcw
+  Filter, ChevronDown, RotateCcw, Building2, MapPin, Tag, Coins, DollarSign, Layers,
+  Users, FileText
 } from "lucide-react";
 import { Card, CardContent } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
@@ -15,12 +17,13 @@ import EventProposalReview from "../components/EventProposalReview";
 
 import { useAllEvents, useDraftEvents } from "../../modules/events/hooks/useEventStream";
 import { useOrganizationStream } from "../../modules/organizations/hooks/useOrganizationStream";
-import { useEventCategoriesStream } from "../../modules/events/hooks/useEventConfigStream";
+import { useEventCategoriesStream, useVenuesStream } from "../../modules/events/hooks/useEventConfigStream";
 import { approveEvent, rejectEvent } from "../../modules/events/services/event.service";
 import { useAdviserProfile } from "../../modules/auth/hooks/useAdviserProfile";
 import type { EventDocument } from "../../modules/events/types/event.types";
 import { formatCurrency } from "../../utils/currency";
-import { formatAppDateTime } from "../../utils/date";
+import { formatAppDateTime, formatSessionDateTime } from "../../utils/date";
+import stiOrmocLogo from "../../../imports/STI_ORMOC_LOGO.jpg";
 
 const ITEMS_PER_PAGE = 10;
 
@@ -196,6 +199,7 @@ export function EventApprovals() {
   const { drafts, loading: draftsLoading } = useDraftEvents();
   const { data: orgs } = useOrganizationStream();
   const { categories } = useEventCategoriesStream();
+  const { venues } = useVenuesStream();
   const { profile } = useAdviserProfile();
 
   // Reset pagination when filters / tab change
@@ -210,8 +214,23 @@ export function EventApprovals() {
     setPageInput("1");
   }, [searchQuery, filterOrg, filterDateRange, filterCategory, customFrom, customTo]);
 
-  const getOrgName = (orgId: string) => orgs.find(o => o.id === orgId)?.acronym || orgId;
+  const getOrg = (orgId: string) => orgs.find(o => o.id === orgId);
+  const getOrgName = (orgId: string) => {
+    if (['sas', 'sas_admin', 'sao', 'sao_admin'].includes(orgId)) return 'Student Affairs & Services (SAS)';
+    const found = orgs.find(o => o.id === orgId);
+    return found ? (found.name || found.acronym || orgId) : orgId;
+  };
+  const getOrgAcronym = (orgId: string) => {
+    if (['sas', 'sas_admin', 'sao', 'sao_admin'].includes(orgId)) return 'SAS';
+    const found = orgs.find(o => o.id === orgId);
+    return found ? (found.acronym || found.name.slice(0, 4).toUpperCase()) : 'ORG';
+  };
+  const getOrgLogo = (orgId: string) => {
+    if (['sas', 'sas_admin', 'sao', 'sao_admin'].includes(orgId) || !orgId) return stiOrmocLogo;
+    return orgs.find(o => o.id === orgId)?.logoUrl || null;
+  };
   const getCategoryName = (catId: string) => categories.find(c => c.id === catId)?.name || catId;
+  const getVenueName = (venueId: string) => venues.find(v => v.id === venueId)?.name || null;
 
   // ── Set of Non-Draft Event Identifiers for Draft Deduplication ────────────
   const nonDraftRefs = useMemo(() => {
@@ -310,12 +329,17 @@ export function EventApprovals() {
 
   // ── Actions ───────────────────────────────────────────────────────────────
   const handleQuickApprove = async (event: EventDocument) => {
-    if (!profile?.uid) return;
+    if (!profile?.uid) {
+      toast.error("SAO Admin authentication is required to approve proposals. Please re-login as Admin.");
+      return;
+    }
     setSubmittingId(event.id);
     try {
       await approveEvent(event.id, profile.uid, "Quick approved from dashboard.");
-    } catch (error) {
+      toast.success(`Event "${event.title}" approved successfully.`);
+    } catch (error: any) {
       console.error(error);
+      toast.error(error?.message || "Failed to approve proposal. Please check admin permissions.");
     } finally {
       setSubmittingId(null);
     }
@@ -565,107 +589,198 @@ export function EventApprovals() {
               <p className="text-gray-500 py-8 text-center">No events found matching the criteria.</p>
             ) : (
               (paginatedItems as EventDocument[]).map((event) => {
-                const isPending = event.proposalStatus === "pending_review";
+                const isPending = event.proposalStatus === "pending_review" || event.proposalStatus === "pending";
                 const isApproved = event.proposalStatus === "approved";
                 const isRejected = event.proposalStatus === "rejected";
                 const firstSession = getFirstSessionDate(event) ?? "TBD";
+                const orgName = getOrgName(event.hostingOrgId);
+                const orgAcronym = getOrgAcronym(event.hostingOrgId);
+                const orgLogo = getOrgLogo(event.hostingOrgId);
+                const isSasAdmin = ['sas', 'sas_admin', 'sao', 'sao_admin'].includes(event.hostingOrgId);
 
                 return (
-                  <Card key={event.id} className="border-[#E0E0E0] hover:shadow-md transition-shadow">
-                    <CardContent className="p-6">
-                      <div className="flex items-start gap-4">
-                        <div
-                          className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${
-                            isPending ? "bg-[#FFC107]"
-                            : isApproved ? "bg-green-500"
-                            : isRejected ? "bg-red-500"
-                            : "bg-gray-400"
-                          }`}
-                        />
-
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-start justify-between mb-3">
-                            <div>
-                              <h3 className="font-bold text-[#001A4D] text-lg">{event.title}</h3>
-                              <p className="text-gray-500 text-sm">{getOrgName(event.hostingOrgId)}</p>
-                            </div>
-                            <Badge
-                              className={`${
-                                isPending
-                                  ? "bg-[#FFC107] text-[#001A4D] hover:bg-[#FFC107]"
-                                  : isApproved
-                                  ? "bg-gradient-to-r from-[#22C55E] to-[#16A34A] text-white border-0"
-                                  : isRejected
-                                  ? "bg-gradient-to-r from-[#EF4444] to-[#F97316] text-white border-0"
-                                  : "bg-gray-100 text-gray-800"
-                              }`}
-                            >
-                              {isPending ? "Pending" : isApproved ? "Approved" : isRejected ? "Rejected" : event.proposalStatus}
-                            </Badge>
+                  <Card key={event.id} className="border border-[#E5E7EB] hover:border-[#0E4EBD]/40 hover:shadow-lg transition-all duration-200 bg-white overflow-hidden rounded-xl">
+                    {/* Top Organization Header & Status Bar */}
+                    <div className="px-4 py-3 sm:px-5 sm:py-3.5 flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 bg-slate-50/80">
+                      {/* Organization Branding Section with Logo */}
+                      <div className="flex items-center gap-3.5">
+                        {orgLogo ? (
+                          <img
+                            src={orgLogo}
+                            alt={orgAcronym}
+                            className="w-12 h-12 rounded-xl object-contain border border-gray-200 shadow-xs flex-shrink-0 bg-white p-0.5"
+                          />
+                        ) : (
+                          <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-black text-base shadow-xs flex-shrink-0 ${
+                            isSasAdmin
+                              ? 'bg-gradient-to-br from-[#001A4D] via-[#002B7F] to-[#0E4EBD] text-[#FFD41C]'
+                              : 'bg-gradient-to-br from-[#83358E] via-[#0E4EBD] to-[#001A4D] text-white'
+                          }`}>
+                            {isSasAdmin ? 'SAS' : orgAcronym.slice(0, 3)}
                           </div>
-
-                          {isRejected && event.rejectionReason && (
-                            <div className="bg-red-50 border-l-2 border-red-500 p-4 mb-4 rounded">
-                              <p className="text-sm text-gray-700">
-                                <span className="font-medium">Rejection Reason:</span> {event.rejectionReason}
-                              </p>
-                            </div>
-                          )}
-
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                            <div className="flex items-center gap-2 text-sm text-gray-600">
-                              <Calendar className={`w-4 h-4 ${isPending ? "text-[#0E4EBD]" : isApproved ? "text-green-600" : "text-red-600"}`} />
-                              <span>{firstSession}</span>
-                            </div>
-                            <div className="text-sm text-gray-600">
-                              <span className="font-medium">Ref ID:</span> {event.referenceId}
-                            </div>
-                            <div className="text-sm text-gray-600">
-                              <span className="font-medium">Format:</span> {event.eventFormat}
-                            </div>
-                            <div className="text-sm text-gray-600">
-                              <span className="font-medium">Budget:</span> {formatCurrency(event.totalApprovedBudget || 0)}
-                            </div>
+                        )}
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-black text-lg sm:text-xl text-[#001A4D] tracking-tight">
+                              {orgName}
+                            </span>
+                            <span className={`px-2.5 py-0.5 text-xs font-black rounded-md ${
+                              isSasAdmin
+                                ? 'bg-[#001A4D] text-[#FFD41C]'
+                                : 'bg-blue-100/90 text-[#0E4EBD]'
+                            }`}>
+                              {orgAcronym}
+                            </span>
                           </div>
+                          <div className="text-xs sm:text-sm text-gray-600 font-medium mt-0.5">
+                            <span>Ref ID: <strong className="font-mono text-gray-900 font-bold">{event.referenceId || 'N/A'}</strong></span>
+                          </div>
+                        </div>
+                      </div>
 
+                      {/* Proposal Status Badge — NO hourglass emoji */}
+                      <Badge
+                        className={`px-4 py-1.5 text-xs sm:text-sm font-black rounded-full shadow-xs ${
+                          isPending
+                            ? "bg-amber-400 text-[#001A4D] hover:bg-amber-400 border-0"
+                            : isApproved
+                            ? "bg-gradient-to-r from-[#22C55E] to-[#16A34A] text-white border-0"
+                            : isRejected
+                            ? "bg-gradient-to-r from-[#EF4444] to-[#F97316] text-white border-0"
+                            : "bg-gray-100 text-gray-800"
+                        }`}
+                      >
+                        {isPending ? "Pending Review" : isApproved ? "Approved" : isRejected ? "Rejected" : event.proposalStatus}
+                      </Badge>
+                    </div>
+
+                    {/* Main Content Body */}
+                    <CardContent className="p-4 sm:p-5 space-y-4">
+                      {/* Event Title & Category Badges */}
+                      <div className="space-y-1.5">
+                        <h3 className="font-black text-[#001A4D] text-xl sm:text-2xl tracking-tight leading-snug">
+                          {event.title}
+                        </h3>
+                        {event.tagline && (
+                          <p className="text-sm sm:text-base text-gray-700 italic font-medium">
+                            "{event.tagline}"
+                          </p>
+                        )}
+                        <div className="flex flex-wrap items-center gap-2 pt-1">
                           {event.eventCategoryId && (
-                            <div className="mb-3">
-                              <Badge className="bg-[#E0E0E0] text-gray-600 hover:bg-[#E0E0E0] text-xs">
-                                {getCategoryName(event.eventCategoryId)}
-                              </Badge>
+                            <Badge className="bg-slate-100 text-gray-800 hover:bg-slate-200 text-xs sm:text-sm font-bold px-3 py-1 border border-slate-300">
+                              <Tag className="w-3.5 h-3.5 mr-1.5 text-[#0E4EBD]" />
+                              {getCategoryName(event.eventCategoryId)}
+                            </Badge>
+                          )}
+                          {event.sessions && event.sessions.length > 0 && (
+                            <Badge className="bg-purple-50 text-purple-800 hover:bg-purple-100 text-xs sm:text-sm font-bold px-3 py-1 border border-purple-300">
+                              <Clock className="w-3.5 h-3.5 mr-1.5 text-purple-600" />
+                              {event.sessions.length} Session{event.sessions.length > 1 ? 's' : ''}
+                            </Badge>
+                          )}
+                          {event.enableQRTickets && (
+                            <Badge className="bg-blue-50 text-blue-800 hover:bg-blue-100 text-xs sm:text-sm font-bold px-3 py-1 border border-blue-300">
+                              QR Tickets Enabled
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Rejection Reason Box */}
+                      {isRejected && event.rejectionReason && (
+                        <div className="bg-red-50 border-l-4 border-red-500 p-3.5 rounded-r-lg text-sm text-red-800 font-medium">
+                          <span className="font-bold">Rejection Reason:</span> {event.rejectionReason}
+                        </div>
+                      )}
+
+                      {/* Middle Info Grid — Key Event Information */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-sm text-gray-800 bg-slate-50/80 p-3.5 rounded-xl border border-slate-200/80">
+                        {/* Session Schedule List */}
+                        <div className="col-span-full space-y-2">
+                          <span className="text-[11px] uppercase text-gray-500 font-black tracking-wider flex items-center gap-1.5">
+                            <Calendar className={`w-3.5 h-3.5 ${isPending ? "text-[#0E4EBD]" : isApproved ? "text-green-600" : "text-red-600"}`} />
+                            Event Schedule & Sessions ({event.sessions?.length || 0})
+                          </span>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {(event.sessions && event.sessions.length > 0 ? event.sessions : []).map((sess, idx) => (
+                              <div key={sess.id || idx} className="bg-white p-2.5 rounded-lg border border-slate-200 shadow-xs flex items-center justify-between gap-3 text-xs">
+                                <div>
+                                  <span className="font-extrabold text-[#001A4D] block text-xs sm:text-sm">
+                                    {sess.title || `Session ${idx + 1}`}
+                                  </span>
+                                  <span className="text-gray-700 font-bold font-mono text-[11px] sm:text-xs">
+                                    {formatSessionDateTime(sess.date, sess.startTime, sess.endTime)}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                            {(!event.sessions || event.sessions.length === 0) && (
+                              <div className="bg-white p-2.5 rounded-lg border border-slate-200 text-xs text-gray-500 italic">
+                                No session schedule set
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {event.venueId && getVenueName(event.venueId) && (
+                          <div className="flex items-center gap-2.5">
+                            <MapPin className="w-4 h-4 text-rose-500 flex-shrink-0" />
+                            <div>
+                              <span className="text-[11px] uppercase text-gray-500 font-extrabold block tracking-wider">Venue</span>
+                              <strong className="text-gray-900 font-bold text-sm">{getVenueName(event.venueId)}</strong>
+                            </div>
+                          </div>
+                        )}
+
+                        {event.expectedParticipantCount > 0 && (
+                          <div className="flex items-center gap-2.5">
+                            <Users className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                            <div>
+                              <span className="text-[11px] uppercase text-gray-500 font-extrabold block tracking-wider">Expected Reach</span>
+                              <strong className="text-gray-900 font-bold text-sm">{event.expectedParticipantCount} Participants</strong>
+                            </div>
+                          </div>
+                        )}
+
+                        {event.documents && event.documents.length > 0 && (
+                          <div className="flex items-center gap-2.5">
+                            <FileText className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                            <div>
+                              <span className="text-[11px] uppercase text-gray-500 font-extrabold block tracking-wider">Submitted Files</span>
+                              <strong className="text-gray-900 font-bold text-sm">{event.documents.length} File(s) Attached</strong>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Bottom Layout: Left View Details Button, Right Prominent Large Budget */}
+                      <div className="pt-3 flex flex-col md:flex-row md:items-center justify-between gap-4 border-t border-gray-100">
+                        {/* Left Side: View Details Button */}
+                        <div>
+                          <Button
+                            className="bg-[#001A4D] hover:bg-[#001A4D]/90 text-white font-bold px-6 py-2.5 rounded-lg shadow-xs cursor-pointer text-sm"
+                            onClick={() => setSelectedEvent(event)}
+                          >
+                            <Eye className="w-4 h-4 mr-2 text-[#FFD41C]" />
+                            View Full Proposal
+                          </Button>
+                        </div>
+
+                        {/* Right Side: Prominent & BIG Budget Box in Lower Right */}
+                        <div className="bg-gradient-to-br from-blue-50 via-indigo-50/70 to-purple-50 border-2 border-[#0E4EBD]/30 p-3.5 sm:p-4 rounded-xl text-right flex-shrink-0 min-w-[230px] shadow-xs">
+                          <div className="text-xs font-extrabold text-gray-600 uppercase tracking-wider mb-0.5 flex items-center justify-end gap-1">
+                            <Coins className="w-4 h-4 text-[#0E4EBD]" />
+                            <span>Requested Budget</span>
+                          </div>
+                          <div className="text-3xl sm:text-4xl font-black text-[#001A4D] tracking-tight">
+                            {formatCurrency(event.totalRequestedBudget || event.totalApprovedBudget || 0)}
+                          </div>
+                          {event.totalApprovedBudget !== undefined && event.totalApprovedBudget !== (event.totalRequestedBudget || 0) && (
+                            <div className="text-xs sm:text-sm text-green-700 font-extrabold mt-1">
+                              Approved: {formatCurrency(event.totalApprovedBudget)}
                             </div>
                           )}
-
-                          <div className="flex items-center gap-2">
-                            {isPending && (
-                              <>
-                                <Button
-                                  disabled={submittingId === event.id}
-                                  onClick={() => handleQuickApprove(event)}
-                                  className="bg-gradient-to-r from-[#22C55E] to-[#16A34A] hover:from-[#16A34A] hover:to-[#22C55E] text-white"
-                                >
-                                  <CheckCircle2 className="w-4 h-4 mr-2" />
-                                  Approve
-                                </Button>
-                                <Button
-                                  disabled={submittingId === event.id}
-                                  onClick={() => handleQuickReject(event)}
-                                  className="bg-gradient-to-r from-[#EF4444] to-[#F97316] hover:from-[#F97316] hover:to-[#EF4444] text-white"
-                                >
-                                  <XCircle className="w-4 h-4 mr-2" />
-                                  Reject
-                                </Button>
-                              </>
-                            )}
-                            <Button
-                              variant="outline"
-                              className="border-[#0E4EBD] text-[#0E4EBD] hover:bg-[#E0E0E0]/50"
-                              onClick={() => setSelectedEvent(event)}
-                            >
-                              <Eye className="w-4 h-4 mr-2" />
-                              View Details
-                            </Button>
-                          </div>
                         </div>
                       </div>
                     </CardContent>

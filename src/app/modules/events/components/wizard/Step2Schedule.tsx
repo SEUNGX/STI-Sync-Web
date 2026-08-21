@@ -1,12 +1,15 @@
 import { useState, useEffect } from 'react';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, Sparkles, Building2, Clock, X, Check, AlertCircle } from 'lucide-react';
 import { useSemesters } from '../../../academic';
 import { useVenuesStream } from '../../hooks/useEventConfigStream';
+import { createVenue } from '../../services/event-config.service';
 import type { EventFormData, EventSession } from '../../types/event.types';
+import { toast } from 'sonner';
 
 interface Step2Props {
   data: EventFormData;
   onUpdate: (data: Partial<EventFormData>) => void;
+  isOfficer?: boolean;
 }
 
 function formatTime12Hour(timeStr?: string): string {
@@ -37,15 +40,37 @@ function addMinutesToTime(timeStr: string, minutesToAdd: number): string {
   return `${newH.toString().padStart(2, '0')}:${newM.toString().padStart(2, '0')}`;
 }
 
-export default function Step2Schedule({ data, onUpdate }: Step2Props) {
+const COMMON_FACILITIES = ['Projector', 'Air Conditioning', 'Sound System', 'Stage / Podium', 'WiFi / LAN', 'Whiteboard', 'Tiered Seating'];
+
+export default function Step2Schedule({ data, onUpdate, isOfficer }: Step2Props) {
   const { data: semesters, loading: semestersLoading } = useSemesters();
   const { venues, loading: venuesLoading } = useVenuesStream();
 
+  const todayStr = new Date().toISOString().split('T')[0];
+  const defaultDateStr = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
   const activeSemesters = semesters.filter(s => !s.archived);
-  const activeVenues = venues.filter(v => !v.archived && v.status === 'available');
+  // Fetch only active, available venues
+  const availableVenues = venues.filter(v => !v.archived && v.status === 'available');
 
   const graceMins = data.gracePeriodMinutes ?? 15;
   const lateMins = data.lateThresholdMinutes ?? 60;
+
+  // Custom Venue Modal State
+  const [showCustomVenueModal, setShowCustomVenueModal] = useState(false);
+  const [customVenueName, setCustomVenueName] = useState('');
+  const [customVenueCapacity, setCustomVenueCapacity] = useState(50);
+  const [customVenueFacilities, setCustomVenueFacilities] = useState<string[]>(['Air Conditioning', 'Sound System']);
+  const [saveVenuePermanently, setSaveVenuePermanently] = useState(true);
+  const [isSavingVenue, setIsSavingVenue] = useState(false);
+
+  // Dynamic Theme Styling based on Officer vs Admin
+  const accentBorder = 'border-[#0E4EBD]';
+  const accentText = 'text-[#0E4EBD]';
+  const accentBg = 'bg-[#0E4EBD]';
+  const accentBgHover = 'hover:bg-[#002B7F]';
+  const accentFocusRing = 'focus:ring-[#0E4EBD]';
+  const accentGradient = 'from-[#001A4D] to-[#0E4EBD]';
 
   // Auto-set school year when semester is selected or loaded
   useEffect(() => {
@@ -55,15 +80,59 @@ export default function Step2Schedule({ data, onUpdate }: Step2Props) {
         onUpdate({ schoolYear: sem.academicYear });
       }
     } else if (!data.semesterId && activeSemesters.length > 0) {
-      const activeSem = activeSemesters.find(s => s.status === 'ACTIVE');
-      if (activeSem) {
-        onUpdate({ semesterId: activeSem.id, schoolYear: activeSem.academicYear });
+      const isShsOnly =
+        Array.isArray((data as any).targetAcademicLevels) &&
+        (data as any).targetAcademicLevels.length === 1 &&
+        (data as any).targetAcademicLevels[0] === 'SHS';
+
+      const targetActive =
+        activeSemesters.find(
+          (s) =>
+            s.status === 'ACTIVE' &&
+            (isShsOnly
+              ? s.academicLevel === 'SHS' || String(s.semester).includes('Trimester')
+              : s.academicLevel === 'COLLEGE' || (!s.academicLevel && !String(s.semester).includes('Trimester')))
+        ) || activeSemesters.find((s) => s.status === 'ACTIVE');
+
+      if (targetActive) {
+        onUpdate({ semesterId: targetActive.id, schoolYear: targetActive.academicYear });
       }
     }
-  }, [semesters, data.semesterId, data.schoolYear]);
+  }, [semesters, data.semesterId, data.schoolYear, (data as any).targetAcademicLevels]);
+
+  // Ensure default session has recommended time & date if not yet initialized
+  useEffect(() => {
+    if (!data.sessions || data.sessions.length === 0) {
+      onUpdate({
+        sessions: [{
+          id: Date.now().toString(),
+          title: 'Main Session',
+          date: defaultDateStr,
+          startTime: '09:00',
+          endTime: '17:00',
+          timeInOpen: '08:30',
+          timeInClose: '10:00',
+          hasTimeOut: true,
+          timeOutOpen: '16:30',
+          timeOutClose: '17:30'
+        }]
+      });
+    }
+  }, []);
 
   const sessions = data.sessions || [
-    { id: Date.now().toString(), title: '', date: '', startTime: '', endTime: '', timeInOpen: '', timeInClose: '', hasTimeOut: false, timeOutOpen: '', timeOutClose: '' }
+    {
+      id: Date.now().toString(),
+      title: 'Main Session',
+      date: defaultDateStr,
+      startTime: '09:00',
+      endTime: '17:00',
+      timeInOpen: '08:30',
+      timeInClose: '10:00',
+      hasTimeOut: true,
+      timeOutOpen: '16:30',
+      timeOutClose: '17:30'
+    }
   ];
 
   const updateField = (field: keyof EventFormData, value: any) => {
@@ -71,7 +140,18 @@ export default function Step2Schedule({ data, onUpdate }: Step2Props) {
   };
 
   const addSession = () => {
-    const newSession: EventSession = { id: Date.now().toString(), title: '', date: '', startTime: '', endTime: '', timeInOpen: '', timeInClose: '', hasTimeOut: false, timeOutOpen: '', timeOutClose: '' };
+    const newSession: EventSession = {
+      id: Date.now().toString(),
+      title: `Session ${sessions.length + 1}`,
+      date: defaultDateStr,
+      startTime: '09:00',
+      endTime: '17:00',
+      timeInOpen: '08:30',
+      timeInClose: '10:00',
+      hasTimeOut: true,
+      timeOutOpen: '16:30',
+      timeOutClose: '17:30'
+    };
     updateField('sessions', [...sessions, newSession]);
   };
 
@@ -98,8 +178,69 @@ export default function Step2Schedule({ data, onUpdate }: Step2Props) {
     updateField('sessions', nextSessions);
   };
 
+  const applyRecommendedSchedule = (sessionId: string) => {
+    const nextSessions = sessions.map(s => {
+      if (s.id !== sessionId) return s;
+      return {
+        ...s,
+        date: defaultDateStr,
+        startTime: '09:00',
+        endTime: '17:00',
+        timeInOpen: '08:30',
+        timeInClose: '10:00',
+        hasTimeOut: true,
+        timeOutOpen: '16:30',
+        timeOutClose: '17:30'
+      };
+    });
+    updateField('sessions', nextSessions);
+    toast.success('Applied recommended schedule (5 days ahead, 9:00 AM – 5:00 PM with optimal scanning windows)');
+  };
+
+  const handleVenueChange = (val: string) => {
+    if (val === '__other__') {
+      setShowCustomVenueModal(true);
+    } else {
+      updateField('venueId', val);
+      updateField('customVenueName', null);
+    }
+  };
+
+  const handleCreateCustomVenue = async () => {
+    if (!customVenueName.trim()) {
+      toast.error('Please enter a venue name.');
+      return;
+    }
+    setIsSavingVenue(true);
+    try {
+      if (saveVenuePermanently) {
+        const docRef = await createVenue({
+          name: customVenueName.trim(),
+          capacity: Number(customVenueCapacity) || 50,
+          facilities: customVenueFacilities,
+          status: 'available',
+          archived: false,
+        });
+        updateField('venueId', docRef.id);
+        updateField('customVenueName', null);
+        toast.success(`Venue "${customVenueName.trim()}" saved and selected!`);
+      } else {
+        updateField('venueId', '__other__');
+        updateField('customVenueName', customVenueName.trim());
+        toast.success(`Custom venue "${customVenueName.trim()}" set for this event.`);
+      }
+      setShowCustomVenueModal(false);
+      setCustomVenueName('');
+    } catch (err: any) {
+      console.error('Failed to create venue:', err);
+      toast.error('Failed to create venue. Please try again.');
+    } finally {
+      setIsSavingVenue(false);
+    }
+  };
+
   const selectedSemester = activeSemesters.find(s => s.id === data.semesterId);
-  const selectedVenue = activeVenues.find(v => v.id === data.venueId);
+  const selectedVenue = availableVenues.find(v => v.id === data.venueId);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-6">
@@ -107,7 +248,7 @@ export default function Step2Schedule({ data, onUpdate }: Step2Props) {
       <div className="space-y-6">
         {/* Section A — Academic Context */}
         <div>
-          <div className="border-l-4 border-[#83358E] pl-3 mb-4">
+          <div className={`border-l-4 ${accentBorder} pl-3 mb-4`}>
             <h3 className="text-[#001A4D] font-bold text-base">Academic Context</h3>
           </div>
           <div className="grid grid-cols-2 gap-4">
@@ -123,7 +264,7 @@ export default function Step2Schedule({ data, onUpdate }: Step2Props) {
                   if (sem) updateField('schoolYear', sem.academicYear);
                 }}
                 disabled={semestersLoading}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent disabled:opacity-50"
+                className={`w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 ${accentFocusRing} focus:border-transparent disabled:opacity-50`}
               >
                 <option value="">{semestersLoading ? 'Loading...' : 'Select Semester...'}</option>
                 {activeSemesters.map(sem => (
@@ -146,53 +287,125 @@ export default function Step2Schedule({ data, onUpdate }: Step2Props) {
           </div>
         </div>
 
-        {/* Section B — Event Schedule */}
+        {/* Section B — Event Schedule & Sessions */}
         <div>
           <div className="flex items-center justify-between mb-4">
-            <div className="border-l-4 border-[#83358E] pl-3">
-              <h3 className="text-[#001A4D] font-bold text-base">Event Schedule</h3>
+            <div className={`border-l-4 ${accentBorder} pl-3`}>
+              <h3 className="text-[#001A4D] font-bold text-base">Event Schedule & Sessions</h3>
+              <p className="text-xs text-gray-500 mt-0.5">Recommended: Set event date at least 5 days ahead (9:00 AM – 5:00 PM)</p>
             </div>
             <button
               onClick={addSession}
-              className="px-4 py-2 bg-[#1E70E8] text-white rounded-lg text-sm font-medium hover:bg-[#0E4EBD] flex items-center gap-2"
+              className="px-4 py-2 bg-[#1E70E8] text-white rounded-lg text-sm font-medium hover:bg-[#0E4EBD] flex items-center gap-2 cursor-pointer shadow-xs"
             >
               <Plus className="w-4 h-4" /> Add Session
             </button>
           </div>
 
-          <div className="space-y-3">
-            {sessions.map((session, index) => (
-              <div key={session.id} className="p-4 border border-gray-200 rounded-lg">
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="font-medium text-gray-900">Session {index + 1}</h4>
-                  {sessions.length > 1 && (
-                    <button onClick={() => removeSession(session.id)} className="text-red-600 hover:text-red-700 p-1">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-                <div className="space-y-3">
-                  <input
-                    type="text"
-                    placeholder="Session Title"
-                    value={session.title}
-                    onChange={(e) => updateSession(session.id, 'title', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                  />
-                  <div className="grid grid-cols-3 gap-3">
-                    <input type="date" value={session.date} onChange={(e) => updateSession(session.id, 'date', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
-                    <input type="time" step="600" value={session.startTime} onChange={(e) => updateSession(session.id, 'startTime', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
-                    <input type="time" step="600" value={session.endTime} onChange={(e) => updateSession(session.id, 'endTime', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+          <div className="space-y-4">
+            {sessions.map((session, index) => {
+              const isPastDate = session.date && session.date < todayStr;
+
+              return (
+                <div key={session.id} className="p-4 border border-gray-200 rounded-xl bg-white shadow-xs space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className={`w-6 h-6 rounded-full ${isOfficer ? 'bg-[#83358E]/10 text-[#83358E]' : 'bg-[#0E4EBD]/10 text-[#0E4EBD]'} text-xs font-bold flex items-center justify-center`}>
+                        {index + 1}
+                      </span>
+                      <h4 className="font-bold text-gray-900 text-sm">Session {index + 1}</h4>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => applyRecommendedSchedule(session.id)}
+                        className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                        title="Auto-fill 5 days ahead, 9:00 AM – 5:00 PM"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                        <span>Recommended Defaults</span>
+                      </button>
+                      {sessions.length > 1 && (
+                        <button
+                          onClick={() => removeSession(session.id)}
+                          className="text-red-600 hover:text-red-700 p-1.5 rounded-lg hover:bg-red-50 transition-colors"
+                          title="Remove session"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Session Title</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Morning Keynote / Main Session"
+                        value={session.title}
+                        onChange={(e) => updateSession(session.id, 'title', e.target.value)}
+                        className={`w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 ${accentFocusRing} focus:border-transparent`}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Date <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="date"
+                          min={todayStr}
+                          value={session.date || ''}
+                          onChange={(e) => updateSession(session.id, 'date', e.target.value)}
+                          className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 ${accentFocusRing} focus:border-transparent ${
+                            isPastDate ? 'border-red-400 bg-red-50/50' : 'border-gray-300'
+                          }`}
+                        />
+                        {isPastDate && (
+                          <p className="text-[11px] text-red-500 mt-1 flex items-center gap-1">
+                            <AlertCircle className="w-3 h-3" /> Past dates cannot be selected.
+                          </p>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Start Time <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="time"
+                          step="600"
+                          value={session.startTime || ''}
+                          onChange={(e) => updateSession(session.id, 'startTime', e.target.value)}
+                          className={`w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 ${accentFocusRing} focus:border-transparent`}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          End Time <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="time"
+                          step="600"
+                          value={session.endTime || ''}
+                          onChange={(e) => updateSession(session.id, 'endTime', e.target.value)}
+                          className={`w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 ${accentFocusRing} focus:border-transparent`}
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
         {/* Section C — Venue Assignment & Attendance Thresholds */}
         <div>
-          <div className="border-l-4 border-[#83358E] pl-3 mb-4">
+          <div className={`border-l-4 ${accentBorder} pl-3 mb-4`}>
             <h3 className="text-[#001A4D] font-bold text-base">Venue & Attendance Thresholds</h3>
           </div>
           <div className="space-y-4">
@@ -201,16 +414,33 @@ export default function Step2Schedule({ data, onUpdate }: Step2Props) {
                 Venue <span className="text-red-500">*</span>
               </label>
               <select
-                value={data.venueId || ''}
-                onChange={(e) => updateField('venueId', e.target.value)}
+                value={data.customVenueName ? '__other__' : (data.venueId || '')}
+                onChange={(e) => handleVenueChange(e.target.value)}
                 disabled={venuesLoading}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent disabled:opacity-50"
+                className={`w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 ${accentFocusRing} focus:border-transparent disabled:opacity-50`}
               >
-                <option value="">{venuesLoading ? 'Loading venues...' : 'Select venue...'}</option>
-                {activeVenues.map(v => (
-                  <option key={v.id} value={v.id}>{v.name} (Cap: {v.capacity})</option>
+                <option value="">{venuesLoading ? 'Loading available venues...' : 'Select available venue...'}</option>
+                {availableVenues.map(v => (
+                  <option key={v.id} value={v.id}>{v.name} (Capacity: {v.capacity})</option>
                 ))}
+                <option value="__other__">Other / Custom Venue...</option>
               </select>
+
+              {data.customVenueName && (
+                <div className="mt-2 p-2.5 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Building2 className="w-4 h-4 text-[#0E4EBD]" />
+                    <span>Custom Event Venue: <strong>{data.customVenueName}</strong></span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowCustomVenueModal(true)}
+                    className="text-[#0E4EBD] hover:underline font-bold text-xs cursor-pointer"
+                  >
+                    Edit
+                  </button>
+                </div>
+              )}
             </div>
 
             {data.enableQRTickets === true || (data as any).enableQR === true ? (
@@ -227,10 +457,10 @@ export default function Step2Schedule({ data, onUpdate }: Step2Props) {
                   </label>
                   <input
                     type="number"
-                    placeholder="5"
+                    placeholder="15"
                     value={data.gracePeriodMinutes || ''}
                     onChange={(e) => updateField('gracePeriodMinutes', e.target.value ? Number(e.target.value) : null)}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+                    className={`w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 ${accentFocusRing} focus:border-transparent`}
                   />
                 </div>
 
@@ -246,10 +476,10 @@ export default function Step2Schedule({ data, onUpdate }: Step2Props) {
                   </label>
                   <input
                     type="number"
-                    placeholder="15"
+                    placeholder="60"
                     value={data.lateThresholdMinutes || ''}
                     onChange={(e) => updateField('lateThresholdMinutes', e.target.value ? Number(e.target.value) : null)}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+                    className={`w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 ${accentFocusRing} focus:border-transparent`}
                   />
                 </div>
 
@@ -269,36 +499,150 @@ export default function Step2Schedule({ data, onUpdate }: Step2Props) {
         </div>
       </div>
 
-      {/* Right Column */}
+      {/* Right Column — Preview */}
       <div className="sticky top-0 h-fit">
-        <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
-          <h4 className="font-bold text-gray-900 mb-3">Schedule Preview</h4>
-          <div className="space-y-3">
-            <div className="p-3 bg-gradient-to-br from-[#0E4EBD] to-[#83358E] rounded-lg text-white">
-              <div className="text-xs opacity-80 mb-1">Academic Period</div>
-              <div className="font-bold">{selectedSemester ? selectedSemester.label : 'Select Semester'}</div>
-            </div>
-            
-            <div className="border border-gray-200 rounded-lg p-3">
-              <div className="text-xs text-gray-500 mb-2">Event Sessions</div>
-              {sessions.map((session, index) => (
-                <div key={session.id} className="py-2 border-b border-gray-100 last:border-0">
-                  <div className="text-sm font-medium">{session.title || `Session ${index + 1}`}</div>
-                  <div className="text-xs text-gray-500">
-                    {session.date || 'Date not set'} {session.startTime ? `• ${formatTime12Hour(session.startTime)} – ${formatTime12Hour(session.endTime)}` : ''}
-                  </div>
+        <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm space-y-3">
+          <h4 className="font-bold text-gray-900 mb-1">Schedule Preview</h4>
+          
+          <div className={`p-3 bg-gradient-to-br ${accentGradient} rounded-lg text-white`}>
+            <div className="text-xs opacity-80 mb-1">Academic Period</div>
+            <div className="font-bold text-sm">{selectedSemester ? selectedSemester.label : 'Select Semester'}</div>
+          </div>
+          
+          <div className="border border-gray-200 rounded-lg p-3">
+            <div className="text-xs text-gray-500 mb-2">Event Sessions</div>
+            {sessions.map((session, index) => (
+              <div key={session.id} className="py-2 border-b border-gray-100 last:border-0">
+                <div className="text-sm font-medium">{session.title || `Session ${index + 1}`}</div>
+                <div className="text-xs text-gray-500 mt-0.5">
+                  {session.date || 'Date not set'} {session.startTime ? `• ${formatTime12Hour(session.startTime)} – ${formatTime12Hour(session.endTime)}` : ''}
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
+          </div>
 
-            <div className="border border-gray-200 rounded-lg p-3">
-              <div className="text-xs text-gray-500 mb-2">Venue</div>
-              <div className="text-sm font-medium">{selectedVenue ? selectedVenue.name : 'Venue not selected'}</div>
-              <div className="text-xs text-gray-500">{data.eventFormat || 'On-Campus'}</div>
+          <div className="border border-gray-200 rounded-lg p-3">
+            <div className="text-xs text-gray-500 mb-2">Venue</div>
+            <div className="text-sm font-medium">
+              {data.customVenueName || (selectedVenue ? selectedVenue.name : 'Venue not selected')}
             </div>
+            <div className="text-xs text-gray-500 mt-0.5">{data.eventFormat || 'On-Campus'}</div>
           </div>
         </div>
       </div>
+
+      {/* Custom Venue Modal */}
+      {showCustomVenueModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-gray-200 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <Building2 className={`w-5 h-5 ${accentText}`} />
+                <h3 className="font-bold text-[#001A4D] text-base">Add Venue</h3>
+              </div>
+              <button
+                onClick={() => setShowCustomVenueModal(false)}
+                className="text-gray-400 hover:text-gray-600 p-1.5 rounded-lg hover:bg-gray-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  Venue Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. 5th Floor Gymnasium / Room 302"
+                  value={customVenueName}
+                  onChange={(e) => setCustomVenueName(e.target.value)}
+                  className={`w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 ${accentFocusRing} focus:border-transparent`}
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  Capacity (approx. attendees)
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  value={customVenueCapacity}
+                  onChange={(e) => setCustomVenueCapacity(Number(e.target.value))}
+                  className={`w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 ${accentFocusRing} focus:border-transparent`}
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                  Available Facilities
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {COMMON_FACILITIES.map(fac => {
+                    const selected = customVenueFacilities.includes(fac);
+                    return (
+                      <button
+                        type="button"
+                        key={fac}
+                        onClick={() => {
+                          setCustomVenueFacilities(prev =>
+                            selected ? prev.filter(f => f !== fac) : [...prev, fac]
+                          );
+                        }}
+                        className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                          selected
+                            ? `${accentBg} text-white ${accentBorder}`
+                            : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'
+                        }`}
+                      >
+                        {fac}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Save Permanently Checkbox */}
+              <div className={`p-3 ${isOfficer ? 'bg-purple-50/60 border-purple-200/80' : 'bg-blue-50/60 border-blue-200/80'} border rounded-xl`}>
+                <label className="flex items-start gap-2.5 cursor-pointer text-xs">
+                  <input
+                    type="checkbox"
+                    checked={saveVenuePermanently}
+                    onChange={(e) => setSaveVenuePermanently(e.target.checked)}
+                    className={`mt-0.5 ${accentText} ${accentFocusRing} rounded w-4 h-4`}
+                  />
+                  <div>
+                    <p className="font-bold text-[#001A4D]">Save this venue for future use?</p>
+                    <p className="text-gray-600 text-[11px] mt-0.5 leading-normal">
+                      If checked, this venue will be permanently saved to the Venue Registry so it can be re-used in other events.
+                    </p>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowCustomVenueModal(false)}
+                className="flex-1 py-2.5 border border-gray-300 text-gray-700 rounded-xl text-xs font-semibold hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleCreateCustomVenue}
+                disabled={isSavingVenue || !customVenueName.trim()}
+                className={`flex-1 py-2.5 ${accentBg} text-white rounded-xl text-xs font-bold ${accentBgHover} disabled:opacity-50 transition-colors cursor-pointer`}
+              >
+                {isSavingVenue ? 'Saving...' : 'Apply Venue'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -63,9 +63,9 @@ export default function OfficerCertificates() {
         {screen !== "template-editor" && (
           <button
             onClick={() => { setEditTemplateId(""); setScreen("template-editor"); }}
-            className="flex items-center gap-2 px-4 py-2.5 bg-[#83358E] text-white font-semibold text-sm rounded-xl hover:bg-[#5B1F6B] transition-colors"
+            className="flex items-center gap-2 px-5 py-2.5 bg-[#001A4D] hover:bg-[#0E4EBD] text-white font-bold text-sm rounded-xl transition-colors shadow-xs cursor-pointer"
           >
-            <Award className="w-4 h-4" />
+            <Award className="w-4 h-4 text-[#FFD41C]" />
             <Plus className="w-3.5 h-3.5" />
             Create Certificate
           </button>

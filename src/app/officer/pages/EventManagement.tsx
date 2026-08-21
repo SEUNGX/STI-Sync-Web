@@ -51,7 +51,7 @@ export default function EventManagement() {
     approved: 'bg-[#639922]',
     completed: 'bg-[#0E4EBD]',
     rejected: 'bg-[#E24B4A]',
-    returned: 'bg-purple-600',
+    returned: 'bg-[#D97706]',
   };
 
   const statusCounts = {
@@ -84,8 +84,8 @@ export default function EventManagement() {
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <div className="text-[#888780] text-[13px] mb-1">
-            Dashboard &gt; Event Management {activeOrgName && <span className="font-semibold text-[#83358E]">({activeOrgName})</span>}
+          <div className="text-gray-500 text-[13px] mb-1">
+            Dashboard &gt; Event Management {activeOrgName && <span className="font-semibold text-[#0E4EBD]">({activeOrgName})</span>}
           </div>
           <h1 className="text-[#001A4D] text-[24px] font-bold">Event Management</h1>
         </div>
@@ -94,24 +94,24 @@ export default function EventManagement() {
             setEditingEvent(null);
             setShowCreateModal(true);
           }}
-          className="flex items-center gap-2 px-4 py-2.5 bg-[#83358E] text-white rounded-lg text-[14px] font-medium hover:bg-[#6D2A78] transition-colors shadow-sm"
+          className="flex items-center gap-2 px-5 py-2.5 bg-[#001A4D] hover:bg-[#0E4EBD] text-white rounded-xl text-[14px] font-bold transition-colors shadow-xs cursor-pointer"
         >
-          <Plus className="w-5 h-5" />
+          <Plus className="w-5 h-5 text-[#FFD41C]" />
           Create Event Proposal
         </button>
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="bg-white border border-[#E0E0E0] rounded-xl p-4">
+      <div className="bg-white border border-[#E0E0E0] rounded-2xl p-4 shadow-xs">
         <div className="flex items-center gap-4 mb-4">
           <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#888780]" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
               placeholder="Search events by title or reference ID..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 border border-[#E0E0E0] rounded-lg text-[14px] focus:border-[#83358E] focus:ring-2 focus:ring-[#83358E]/20 outline-none"
+              className="w-full pl-9 pr-4 py-2 border border-[#E0E0E0] rounded-lg text-[14px] focus:border-[#0E4EBD] focus:ring-2 focus:ring-[#0E4EBD]/20 outline-none"
             />
           </div>
         </div>
@@ -130,10 +130,10 @@ export default function EventManagement() {
             <button
               key={tab.key}
               onClick={() => setActiveStatus(tab.key as EventStatusTab)}
-              className={`px-4 py-2 rounded-lg text-[13px] font-medium whitespace-nowrap transition-colors ${
+              className={`px-4 py-2 rounded-xl text-[13px] font-bold whitespace-nowrap transition-all cursor-pointer ${
                 activeStatus === tab.key
-                  ? 'bg-[#83358E] text-white font-bold'
-                  : 'bg-[#F8F8F8] text-[#888780] hover:bg-[#EEEDFE] hover:text-[#83358E]'
+                  ? 'bg-[#001A4D] text-white shadow-xs'
+                  : 'bg-[#F8F8F8] text-gray-600 hover:bg-blue-50 hover:text-[#0E4EBD]'
               }`}
             >
               {tab.label} ({statusCounts[tab.key as EventStatusTab]})
@@ -144,13 +144,13 @@ export default function EventManagement() {
 
       {/* Event Cards Grid */}
       {loading ? (
-        <div className="bg-white border border-[#E0E0E0] rounded-xl p-12 text-center text-gray-500">
+        <div className="bg-white border border-[#E0E0E0] rounded-2xl p-12 text-center text-gray-500 shadow-xs">
           Loading events from database...
         </div>
       ) : filteredEvents.length === 0 ? (
-        <div className="bg-white border border-[#E0E0E0] rounded-xl p-12 text-center">
-          <Calendar className="w-16 h-16 text-[#888780] mx-auto mb-4" />
-          <p className="text-[#888780] text-[14px]">No events found. Click "+ Create Event Proposal" to create one.</p>
+        <div className="bg-white border border-[#E0E0E0] rounded-2xl p-12 text-center shadow-xs">
+          <Calendar className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+          <p className="text-gray-500 text-[14px]">No events found. Click "+ Create Event Proposal" to create one.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -161,9 +161,9 @@ export default function EventManagement() {
             const statusKey = (event.proposalStatus || 'draft').toLowerCase();
 
             return (
-              <div key={event.id} className="bg-white border border-[#E0E0E0] rounded-xl overflow-hidden hover:shadow-lg transition-shadow flex flex-col justify-between">
+              <div key={event.id} className="bg-white border border-[#E0E0E0] rounded-2xl overflow-hidden hover:shadow-lg transition-shadow flex flex-col justify-between shadow-xs">
                 {/* Category Color Strip */}
-                <div className={`h-2 ${statusColors[statusKey] || 'bg-[#83358E]'}`} />
+                <div className={`h-2 ${statusColors[statusKey] || 'bg-[#0E4EBD]'}`} />
 
                 <div className="p-5 space-y-3 flex-1 flex flex-col justify-between">
                   <div>
@@ -181,17 +181,17 @@ export default function EventManagement() {
                     {event.tagline && <p className="text-gray-500 text-xs italic mb-2 line-clamp-1">{event.tagline}</p>}
 
                     {/* Date, Time, Venue */}
-                    <div className="space-y-1.5 mb-3 text-xs text-[#888780]">
+                    <div className="space-y-1.5 mb-3 text-xs text-gray-500">
                       <div className="flex items-center gap-2">
-                        <Calendar className="w-3.5 h-3.5 text-[#83358E]" />
+                        <Calendar className="w-3.5 h-3.5 text-[#0E4EBD]" />
                         <span>{dateStr} {timeStr ? `· ${timeStr}` : ''}</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <MapPin className="w-3.5 h-3.5 text-[#83358E]" />
+                        <MapPin className="w-3.5 h-3.5 text-[#0E4EBD]" />
                         <span>{event.eventFormat || 'On-Campus'}</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Users className="w-3.5 h-3.5 text-[#83358E]" />
+                        <Users className="w-3.5 h-3.5 text-[#0E4EBD]" />
                         <span>{event.expectedParticipantCount || 0} expected attendees</span>
                       </div>
                     </div>
@@ -200,16 +200,16 @@ export default function EventManagement() {
                   <div>
                     {/* Organization Badge */}
                     <div className="mb-3">
-                      <span className="inline-block px-2 py-0.5 bg-[#F3E8FF] text-[#83358E] rounded text-[11px] font-bold">
+                      <span className="inline-block px-2.5 py-0.5 bg-blue-50 text-[#0E4EBD] border border-blue-200 rounded text-[11px] font-bold">
                         {activeOrgName}
                       </span>
                     </div>
 
                     {/* Actions */}
-                    <div className="flex items-center justify-between pt-3 border-t border-[#E0E0E0]">
+                    <div className="flex items-center justify-between pt-3 border-t border-gray-100">
                       <button
                         onClick={() => setSelectedEventId(event.id)}
-                        className="text-[#83358E] text-[13px] font-bold hover:underline"
+                        className="text-[#0E4EBD] text-[13px] font-bold hover:underline cursor-pointer"
                       >
                         View Details
                       </button>
@@ -221,7 +221,7 @@ export default function EventManagement() {
                               setEditingEvent(event);
                               setShowCreateModal(true);
                             }}
-                            className="p-1.5 rounded hover:bg-gray-100 text-[#83358E]"
+                            className="p-1.5 rounded-lg hover:bg-blue-50 text-[#0E4EBD] cursor-pointer"
                             title={event.proposalStatus === 'rejected' ? "Revise & Resubmit Proposal" : "Edit Proposal"}
                           >
                             <Edit className="w-4 h-4" />

@@ -29,7 +29,6 @@ import {
   AlertTriangle,
   Eye,
   EyeOff,
-  Info,
   Upload,
   Phone,
   Mail,
@@ -38,13 +37,15 @@ import {
   Shield,
   RefreshCw,
 } from 'lucide-react';
-import { createStudentManually } from '../../../modules/students/services/student.service';
+import { createStudentManually, isEmailTaken } from '../../../modules/students/services/student.service';
+import { useStudents } from '../../../modules/students/hooks/useStudentStream';
 import { uploadToCloudinary } from '../../../../services/cloudinary';
-import { useDepartments, useCourses, useSections, useSemesters } from '../../../modules/academic/hooks/useAcademicStream';
+import { useDepartments, useCourses, useSections, useActiveAcademicPeriods } from '../../../modules/academic/hooks/useAcademicStream';
 import type {
   StudentSex,
   StudentYearLevel,
   StudentSemester,
+  AcademicLevel,
 } from '../../../modules/students/types/student.types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -63,6 +64,7 @@ interface FormData {
   sex: StudentSex | '';
   contactNumber: string;
   // Step 2
+  academicLevel?: AcademicLevel;
   courseId: string;
   courseName: string;
   courseCode: string;
@@ -76,6 +78,7 @@ interface FormData {
   email: string;
   password: string;
   confirmPassword: string;
+  sendWelcomeEmail: boolean;
   // Step 4
   profilePhotoUrl: string;
   // Step 5
@@ -84,16 +87,18 @@ interface FormData {
 
 const INITIAL_FORM: FormData = {
   lastName: '', firstName: '', middleName: '', studentId: '',
-  dateOfBirth: '', sex: '', contactNumber: '',
+  dateOfBirth: '2005-01-01', sex: '', contactNumber: '',
+  academicLevel: 'COLLEGE',
   courseId: '', courseName: '', courseCode: '', departmentId: '', departmentName: '',
   yearLevel: '', section: '', schoolYear: '', semester: '',
   email: '', password: '', confirmPassword: '',
+  sendWelcomeEmail: true,
   profilePhotoUrl: '',
   schoolIdPhotoUrl: '',
 };
 
-const YEAR_LEVELS: StudentYearLevel[] = ['1st Year', '2nd Year', '3rd Year', '4th Year'];
-const SEMESTERS: StudentSemester[] = ['1st Semester', '2nd Semester'];
+const COLLEGE_YEAR_LEVELS: StudentYearLevel[] = ['1st Year', '2nd Year', '3rd Year', '4th Year'];
+const SHS_YEAR_LEVELS: StudentYearLevel[] = ['Grade 11', 'Grade 12'];
 
 // ─── Password strength ────────────────────────────────────────────────────────
 function getPasswordStrength(pw: string) {
@@ -114,7 +119,7 @@ const STEPS = [
   { icon: User, label: 'Personal Info' },
   { icon: BookOpen, label: 'Academic' },
   { icon: Lock, label: 'Credentials' },
-  { icon: Camera, label: 'Profile Photo' },
+  { icon: Camera, label: 'Photo' },
   { icon: CreditCard, label: 'School ID' },
 ];
 
@@ -126,24 +131,26 @@ const inputCls = (hasError: boolean) =>
 // ─── Label helper ─────────────────────────────────────────────────────────────
 function FieldLabel({ children, optional }: { children: React.ReactNode; optional?: boolean }) {
   return (
-    <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-1.5">
-      {children}
+    <div className="flex items-center justify-between mb-1.5 text-left w-full">
+      <label className="text-xs font-bold text-[#001A4D] uppercase tracking-wider flex items-center gap-1.5 text-left">
+        {children}
+      </label>
       {optional && (
-        <span className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">Optional</span>
+        <span className="text-[11px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded font-normal normal-case">Optional</span>
       )}
-    </label>
+    </div>
   );
 }
 
 // ─── Icon prefix wrapper ──────────────────────────────────────────────────────
 function InputIcon({ icon: Icon, children, error }: { icon: React.FC<React.SVGProps<SVGSVGElement>>; children: React.ReactNode; error?: string }) {
   return (
-    <div className="space-y-1">
+    <div className="space-y-1 text-left">
       <div className="relative">
         <Icon className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
         <div className="[&>input]:pl-9 [&>select]:pl-9">{children}</div>
       </div>
-      {error && <p className="text-red-500 text-xs">{error}</p>}
+      {error && <p className="text-red-500 text-xs text-left">{error}</p>}
     </div>
   );
 }
@@ -161,42 +168,100 @@ export default function AddStudentManuallyModal({ onClose, onSuccess }: Props) {
   const [showCpw, setShowCpw] = useState(false);
   const [photoUploading, setPhotoUploading] = useState(false);
 
-  // Firestore streams for courses / departments / sections / semesters
+  // Firestore streams for students / courses / departments / sections / active periods
+  const { data: existingStudents = [] } = useStudents();
   const { data: courses } = useCourses();
   const { data: departments } = useDepartments();
   const { data: sections } = useSections();
-  const { data: semesters } = useSemesters();
+  const { activeCollegePeriod, activeShsPeriod } = useActiveAcademicPeriods();
 
-  const activeCourses = courses.filter((c) => !c.archived);
-  const activeSections = sections.filter((s) => !s.archived && s.courseId === form.courseId);
-  const schoolYears = Array.from(new Set(semesters.map(s => s.academicYear))).sort().reverse();
+  const activeCourses = useMemo(() => courses.filter((c) => !c.archived), [courses]);
+  const currentAcademicLevel = form.academicLevel || 'COLLEGE';
 
-  // Auto-select active semester
+  // Filter courses strictly by chosen Academic Track
+  const levelCourses = useMemo(() => {
+    return activeCourses.filter((c) => {
+      const dept = departments.find((d) => d.id === c.departmentId);
+      const isShs =
+        c.academicLevel === 'SHS' ||
+        dept?.academicLevel === 'SHS' ||
+        c.code.toUpperCase().includes('SHS') ||
+        c.code.toUpperCase().includes('STEM') ||
+        c.code.toUpperCase().includes('ABM') ||
+        c.code.toUpperCase().includes('HUMSS') ||
+        c.code.toUpperCase().includes('TVL') ||
+        c.code.toUpperCase().includes('GAS') ||
+        dept?.name.toLowerCase().includes('senior high');
+
+      return currentAcademicLevel === 'SHS' ? isShs : !isShs;
+    });
+  }, [activeCourses, departments, currentAcademicLevel]);
+
+  const availableYearLevels = currentAcademicLevel === 'SHS' ? SHS_YEAR_LEVELS : COLLEGE_YEAR_LEVELS;
+
+  // Matching sections strictly filtered by selected course and year level
+  const matchingSections = useMemo(() => {
+    if (!form.courseId) return [];
+    return sections.filter((s) => {
+      if (s.archived || s.courseId !== form.courseId) return false;
+      if (!form.yearLevel) return false;
+      const rawYl = String(form.yearLevel);
+      const yNum = rawYl.includes('11') ? 11 : rawYl.includes('12') ? 12 : rawYl.includes('1st') ? 1 : rawYl.includes('2nd') ? 2 : rawYl.includes('3rd') ? 3 : rawYl.includes('4th') ? 4 : 1;
+      return s.yearLevel === form.yearLevel || Number(s.yearLevel) === yNum;
+    });
+  }, [sections, form.courseId, form.yearLevel]);
+
+  // Auto-select active semester when academicLevel changes or loads
   useEffect(() => {
-    if (semesters.length > 0 && !form.schoolYear && !form.semester) {
-      const activeSem = semesters.find(s => s.status === 'ACTIVE');
-      if (activeSem) {
-        setForm(f => ({
-          ...f,
-          schoolYear: activeSem.academicYear,
-          semester: activeSem.semester as StudentSemester,
-        }));
-      }
+    const targetPeriod = currentAcademicLevel === 'SHS' ? activeShsPeriod : activeCollegePeriod;
+    if (targetPeriod) {
+      setForm((f) => ({
+        ...f,
+        schoolYear: targetPeriod.academicYear,
+        semester: targetPeriod.semester as StudentSemester,
+      }));
     }
-  }, [semesters, form.schoolYear, form.semester]);
+  }, [activeCollegePeriod, activeShsPeriod, currentAcademicLevel]);
+
+  const handleTrackChange = (level: AcademicLevel) => {
+    const targetPeriod = level === 'SHS' ? activeShsPeriod : activeCollegePeriod;
+    setForm((f) => ({
+      ...f,
+      academicLevel: level,
+      courseId: '',
+      courseName: '',
+      courseCode: '',
+      departmentId: '',
+      departmentName: '',
+      yearLevel: '',
+      section: '',
+      schoolYear: targetPeriod?.academicYear || f.schoolYear,
+      semester: (targetPeriod?.semester as StudentSemester) || (level === 'SHS' ? '1st Trimester' : '1st Semester'),
+    }));
+    setErrors((e) => ({ ...e, courseId: '', yearLevel: '', section: '' }));
+  };
 
   // Password strength
   const pwStrength = useMemo(() => getPasswordStrength(form.password), [form.password]);
 
-  // ── field setters ───────────────────────────────────────────────────────────
+  // ── field setters (clears relevant duplicate errors immediately on change) ──
   const set = <K extends keyof FormData>(key: K, value: FormData[K]) => {
     setForm((f) => ({ ...f, [key]: value }));
-    setErrors((e) => ({ ...e, [key]: '' }));
+    setErrors((e) => {
+      const updated = { ...e, [key]: '' };
+      // Clear duplicate validation error if any name or birthday field is edited
+      if (key === 'firstName' || key === 'lastName' || key === 'dateOfBirth') {
+        delete updated.firstName;
+        delete updated.lastName;
+        delete updated.dateOfBirth;
+      }
+      return updated;
+    });
   };
 
-  // ── course selection → auto-fill department ─────────────────────────────────
+  // ── course selection → auto-fill department and reset year/section ───────────
   function selectCourse(courseId: string) {
-    const course = activeCourses.find((c) => c.id === courseId);
+    const course = levelCourses.find((c) => c.id === courseId);
     if (!course) return;
     const dept = departments.find((d) => d.id === course.departmentId);
     setForm((f) => ({
@@ -206,8 +271,10 @@ export default function AddStudentManuallyModal({ onClose, onSuccess }: Props) {
       courseCode: course.code,
       departmentId: course.departmentId,
       departmentName: dept?.name ?? '',
+      yearLevel: '',
+      section: '',
     }));
-    setErrors((e) => ({ ...e, courseId: '', departmentId: '' }));
+    setErrors((e) => ({ ...e, courseId: '', departmentId: '', yearLevel: '', section: '' }));
   }
 
   // ─── Validation per step ──────────────────────────────────────────────────
@@ -217,28 +284,90 @@ export default function AddStudentManuallyModal({ onClose, onSuccess }: Props) {
     if (s === 0) {
       if (!form.lastName.trim()) errs.lastName = 'Last name is required.';
       if (!form.firstName.trim()) errs.firstName = 'First name is required.';
-      if (!form.studentId.trim()) errs.studentId = 'Student ID is required.';
-      if (!/^\d{11}$/.test(form.studentId.trim()))
-        errs.studentId = 'Student ID must be exactly 11 digits (e.g. 02000258377).';
-      if (!form.dateOfBirth) errs.dateOfBirth = 'Date of birth is required.';
+
+      if (!form.studentId.trim()) {
+        errs.studentId = 'Student ID is required.';
+      } else if (!/^\d{11}$/.test(form.studentId.trim())) {
+        errs.studentId = 'Student ID must be exactly 11 digits (e.g. 02000123456).';
+      } else {
+        const cleanId = form.studentId.trim();
+        const idExists = existingStudents.some((st) => (st.studentId || '').trim() === cleanId);
+        if (idExists) {
+          errs.studentId = 'This Student ID number is already registered in the system.';
+        }
+      }
+
+      const todayStr = new Date().toISOString().split('T')[0];
+      if (!form.dateOfBirth) {
+        errs.dateOfBirth = 'Date of birth is required.';
+      } else if (form.dateOfBirth > todayStr) {
+        errs.dateOfBirth = 'Date of birth cannot be a future date.';
+      }
+
       if (!form.sex) errs.sex = 'Please select a sex.';
-      if (!form.contactNumber.trim()) errs.contactNumber = 'Contact number is required.';
-      if (!/^9\d{9}$/.test(form.contactNumber.replace(/\s/g, '')))
+
+      const cleanPhone = form.contactNumber.replace(/\s/g, '');
+      if (!form.contactNumber.trim()) {
+        errs.contactNumber = 'Contact number is required.';
+      } else if (!/^9\d{9}$/.test(cleanPhone)) {
         errs.contactNumber = 'Enter a valid 10-digit PH mobile number starting with 9.';
+      } else {
+        const phoneExists = existingStudents.some((st) => {
+          const stPhone = (st.contactNumber || '').replace(/\s/g, '');
+          return (
+            stPhone === cleanPhone ||
+            stPhone === `+63${cleanPhone}` ||
+            stPhone === `0${cleanPhone}` ||
+            (stPhone.startsWith('+63') && stPhone.slice(3) === cleanPhone) ||
+            (stPhone.startsWith('0') && stPhone.slice(1) === cleanPhone)
+          );
+        });
+        if (phoneExists) {
+          errs.contactNumber = 'This contact number is already registered to another student.';
+        }
+      }
+
+      // Check duplicate Name + Birthday combination (Single clear error on firstName)
+      if (form.firstName.trim() && form.lastName.trim() && form.dateOfBirth) {
+        const cleanFirst = form.firstName.trim().toLowerCase();
+        const cleanLast = form.lastName.trim().toLowerCase();
+        const cleanDob = form.dateOfBirth;
+
+        const nameDobExists = existingStudents.some((st) => {
+          const stFirst = (st.firstName || '').trim().toLowerCase();
+          const stLast = (st.lastName || '').trim().toLowerCase();
+          const stDob = st.dateOfBirth || '';
+          return stFirst === cleanFirst && stLast === cleanLast && stDob === cleanDob;
+        });
+
+        if (nameDobExists) {
+          errs.firstName = 'A student with this name and date of birth is already registered.';
+        }
+      }
     }
 
     if (s === 1) {
-      if (!form.courseId) errs.courseId = 'Please select a course.';
+      if (!form.courseId) errs.courseId = 'Please select a course / program.';
       if (!form.yearLevel) errs.yearLevel = 'Please select a year level.';
       if (!form.section.trim()) errs.section = 'Section is required.';
-      if (!form.schoolYear) errs.schoolYear = 'Please select a school year.';
-      if (!form.semester) errs.semester = 'Please select a semester.';
+      if (!form.schoolYear) errs.schoolYear = 'Active school year is required.';
+      if (!form.semester) errs.semester = 'Active semester / trimester is required.';
     }
 
     if (s === 2) {
-      if (!form.email.trim()) errs.email = 'Email is required.';
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email))
+      if (!form.email.trim()) {
+        errs.email = 'Email is required.';
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
         errs.email = 'Enter a valid email address.';
+      } else {
+        const cleanEmail = form.email.trim().toLowerCase();
+        const emailExists = existingStudents.some(
+          (st) => (st.email || '').trim().toLowerCase() === cleanEmail
+        );
+        if (emailExists) {
+          errs.email = 'This email address is already registered to another student.';
+        }
+      }
       if (!form.password) errs.password = 'Password is required.';
       if (pwStrength.met < 2) errs.password = 'Password is too weak (at least Fair required).';
       if (!form.confirmPassword) errs.confirmPassword = 'Please confirm the password.';
@@ -246,13 +375,33 @@ export default function AddStudentManuallyModal({ onClose, onSuccess }: Props) {
         errs.confirmPassword = 'Passwords do not match.';
     }
 
-    // Steps 3 & 4 (photo) are optional — photos can be uploaded later
     return errs;
   }
 
-  function goNext() {
+  async function goNext() {
     const errs = validateStep(step);
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
+
+    // When advancing from Step 3 (Credentials), verify email across ALL user roles (admin, adviser, officer, student)
+    if (step === 2) {
+      setPhotoUploading(true);
+      try {
+        const taken = await isEmailTaken(form.email);
+        if (taken) {
+          setErrors((e) => ({
+            ...e,
+            email: 'This email address is already registered to an existing account (Admin, Adviser, or Student).',
+          }));
+          setPhotoUploading(false);
+          return;
+        }
+      } catch {
+        // Non-fatal, backend will catch if duplicate
+      } finally {
+        setPhotoUploading(false);
+      }
+    }
+
     setStep((s) => s + 1);
   }
 
@@ -260,7 +409,7 @@ export default function AddStudentManuallyModal({ onClose, onSuccess }: Props) {
 
   // ─── Final submit ─────────────────────────────────────────────────────────
   async function handleSubmit() {
-    const errs = validateStep(2); // re-validate credentials just in case
+    const errs = validateStep(2);
     if (Object.keys(errs).length > 0) { setErrors(errs); setStep(2); return; }
 
     setSaving(true);
@@ -274,6 +423,7 @@ export default function AddStudentManuallyModal({ onClose, onSuccess }: Props) {
           dateOfBirth: form.dateOfBirth,
           sex: form.sex as StudentSex,
           contactNumber: form.contactNumber.replace(/\s/g, ''),
+          academicLevel: currentAcademicLevel,
           courseId: form.courseId,
           courseName: form.courseName,
           courseCode: form.courseCode,
@@ -285,10 +435,11 @@ export default function AddStudentManuallyModal({ onClose, onSuccess }: Props) {
           semester: form.semester as StudentSemester,
           email: form.email,
           password: form.password,
+          sendWelcomeEmail: form.sendWelcomeEmail,
           profilePhotoUrl: form.profilePhotoUrl,
           schoolIdPhotoUrl: form.schoolIdPhotoUrl,
         },
-        'admin' // TODO: replace with actual admin UID from auth context
+        'admin'
       );
       setDone(true);
     } catch (err: unknown) {
@@ -303,18 +454,57 @@ export default function AddStudentManuallyModal({ onClose, onSuccess }: Props) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
         <div className="absolute inset-0 bg-black/60" />
-        <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-[480px] p-10 text-center">
-          <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-5">
-            <CheckCircle className="w-10 h-10 text-green-600" />
+        <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-[500px] p-8 text-center overflow-hidden">
+          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <CheckCircle className="w-9 h-9 text-green-600" />
           </div>
-          <h2 className="text-2xl font-bold text-[#001A4D] mb-2">Student Added!</h2>
-          <p className="text-gray-500 text-sm mb-1">
-            <strong>{form.firstName} {form.lastName}</strong> has been successfully registered.
+          <h2 className="text-2xl font-bold text-[#001A4D] mb-1">Student Registered!</h2>
+          <p className="text-gray-600 text-sm mb-4">
+            <strong>{form.firstName} {form.lastName}</strong> has been enrolled and credentials created.
           </p>
-          <p className="text-gray-400 text-xs mb-2">Student ID: {form.studentId}</p>
-          <p className="text-gray-400 text-xs mb-6">
-            A welcome email has been sent to <span className="font-medium">{form.email}</span> with a link to set their password.
+
+          {/* Credentials Display Card */}
+          <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-left mb-5 space-y-2 text-xs">
+            <div className="flex items-center justify-between pb-2 border-b border-gray-200">
+              <span className="font-bold text-[#001A4D] uppercase tracking-wider">Account Credentials</span>
+              <span className="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-[10px]">
+                Requires Password Change
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-gray-700">
+              <div>
+                <span className="text-gray-400 block text-[11px]">Student ID</span>
+                <strong className="text-[#001A4D]">{form.studentId}</strong>
+              </div>
+              <div>
+                <span className="text-gray-400 block text-[11px]">Track & Program</span>
+                <strong>{form.courseCode} · {form.yearLevel}</strong>
+              </div>
+              <div className="col-span-2">
+                <span className="text-gray-400 block text-[11px]">Login Email</span>
+                <code className="text-[#0E4EBD] font-mono font-bold">{form.email}</code>
+              </div>
+              <div className="col-span-2">
+                <span className="text-gray-400 block text-[11px]">Temporary Password</span>
+                <code className="text-amber-700 bg-amber-50 px-2 py-1 rounded font-mono font-bold inline-block border border-amber-200">
+                  {form.password}
+                </code>
+              </div>
+            </div>
+          </div>
+
+          <p className="text-gray-500 text-xs mb-6 leading-relaxed">
+            {form.sendWelcomeEmail ? (
+              <>
+                An automated email has been sent to <span className="font-medium text-gray-700">{form.email}</span>. The student will be required to change their password upon their first login in the mobile app.
+              </>
+            ) : (
+              <>
+                Credentials created without email dispatch. Please provide the temporary password to the student manually. They will change it upon first login in the mobile app.
+              </>
+            )}
           </p>
+
           <div className="flex gap-3">
             <button
               onClick={() => { setForm(INITIAL_FORM); setStep(0); setDone(false); }}
@@ -338,71 +528,88 @@ export default function AddStudentManuallyModal({ onClose, onSuccess }: Props) {
   // ─── Main modal ───────────────────────────────────────────────────────────
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-[620px] flex flex-col max-h-[92vh] overflow-hidden">
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-xs" onClick={onClose} />
 
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-[620px] max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
         {/* ── Header ── */}
-        <div className="bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] px-6 py-5 flex items-center justify-between flex-shrink-0">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
           <div>
-            <h2 className="text-white font-bold text-lg">Add Student Manually</h2>
-            <p className="text-white/70 text-xs mt-0.5">
-              For students without a mobile device · Step {step + 1} of {STEPS.length}
-            </p>
+            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Manual Student Registration</span>
+            <h2 className="text-lg font-bold text-[#001A4D] mt-0.5">{STEPS[step]?.label}</h2>
           </div>
-          <button onClick={onClose} className="text-white/70 hover:text-white p-2 rounded-lg hover:bg-white/10 transition-colors">
-            <X className="w-5 h-5" />
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 transition-colors"
+          >
+            <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* ── Step indicator ── */}
-        <div className="flex items-center px-6 py-4 border-b border-gray-100 bg-gray-50 gap-1 flex-shrink-0 overflow-x-auto">
-          {STEPS.map((s, i) => {
-            const Icon = s.icon;
-            const isActive = i === step;
-            const isDone = i < step;
-            return (
-              <div key={i} className="flex items-center gap-1 flex-shrink-0">
-                <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${isActive ? 'bg-[#001A4D] text-[#FFD41C]'
-                  : isDone ? 'bg-green-500 text-white'
-                    : 'bg-gray-200 text-gray-500'
-                  }`}>
-                  {isDone ? <Check className="w-3 h-3" /> : <Icon className="w-3 h-3" />}
-                  <span className="hidden sm:inline">{s.label}</span>
+        {/* ── Step Progress Indicator ── */}
+        <div className="px-6 py-3 bg-gray-50 border-b border-gray-100 flex-shrink-0">
+          <div className="flex items-center justify-between">
+            {STEPS.map((s, i) => {
+              const Icon = s.icon;
+              const isDone = i < step;
+              const isCurr = i === step;
+              return (
+                <div key={i} className="flex items-center flex-1 last:flex-none">
+                  <div className="flex flex-col items-center">
+                    <div
+                      className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${isCurr
+                        ? 'bg-[#001A4D] text-[#FFD41C] ring-2 ring-[#001A4D]/30 shadow-sm'
+                        : isDone
+                          ? 'bg-green-500 text-white'
+                          : 'bg-gray-200 text-gray-400'
+                        }`}
+                    >
+                      {isDone ? <Check className="w-4 h-4" /> : <Icon className="w-3.5 h-3.5" />}
+                    </div>
+                    <span
+                      className={`text-[10px] mt-1 font-medium hidden sm:block ${isCurr ? 'text-[#001A4D] font-bold' : isDone ? 'text-green-600' : 'text-gray-400'
+                        }`}
+                    >
+                      {s.label}
+                    </span>
+                  </div>
+                  {i < STEPS.length - 1 && (
+                    <div
+                      className={`h-0.5 flex-1 mx-2 transition-all ${i < step ? 'bg-green-400' : 'bg-gray-200'
+                        }`}
+                    />
+                  )}
                 </div>
-                {i < STEPS.length - 1 && (
-                  <ChevronRight className={`w-3.5 h-3.5 flex-shrink-0 ${isDone ? 'text-green-400' : 'text-gray-300'}`} />
-                )}
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
 
-        {/* ── Global submit error ── */}
-        {errors.submit && (
-          <div className="mx-6 mt-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2 flex-shrink-0">
-            <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
-            <p className="text-red-700 text-sm">{errors.submit}</p>
-          </div>
-        )}
-
-        {/* ── Step content ── */}
-        <div className="flex-1 overflow-y-auto px-6 py-5">
+        {/* ── Step Content (scrollable) ── */}
+        <div className="p-6 overflow-y-auto flex-1 space-y-4">
+          {/* Server-level error */}
+          {errors.submit && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-start gap-2.5">
+              <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+              <p className="text-red-700 text-xs">{errors.submit}</p>
+            </div>
+          )}
 
           {/* ════ STEP 1 — Personal Information ════ */}
           {step === 0 && (
-            <div className="space-y-4">
+            <div className="space-y-4 text-left">
               <div>
                 <p className="font-bold text-[#001A4D] text-base">Personal Information</p>
-                <p className="text-gray-500 text-xs mt-0.5">Enter the student's personal and contact details.</p>
+                <p className="text-gray-500 text-xs mt-0.5">Enter the student's legal name, official student ID, and contact info.</p>
               </div>
 
-              {/* Name row */}
-              <div className="grid grid-cols-2 gap-4">
+              {/* Name row: Last, First, Middle */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <FieldLabel><User className="w-3.5 h-3.5 text-gray-400" /> Last Name <span className="text-red-500">*</span></FieldLabel>
+                  <FieldLabel>Last Name <span className="text-red-500">*</span></FieldLabel>
                   <input
                     type="text"
-                    placeholder="Last name"
+                    placeholder="e.g. Dela Cruz"
                     className={inputCls(!!errors.lastName)}
                     value={form.lastName}
                     onChange={(e) => set('lastName', e.target.value)}
@@ -410,43 +617,42 @@ export default function AddStudentManuallyModal({ onClose, onSuccess }: Props) {
                   {errors.lastName && <p className="text-red-500 text-xs mt-1">{errors.lastName}</p>}
                 </div>
                 <div>
-                  <FieldLabel><User className="w-3.5 h-3.5 text-gray-400" /> First Name <span className="text-red-500">*</span></FieldLabel>
+                  <FieldLabel>First Name <span className="text-red-500">*</span></FieldLabel>
                   <input
                     type="text"
-                    placeholder="First name"
+                    placeholder="e.g. Juan"
                     className={inputCls(!!errors.firstName)}
                     value={form.firstName}
                     onChange={(e) => set('firstName', e.target.value)}
                   />
                   {errors.firstName && <p className="text-red-500 text-xs mt-1">{errors.firstName}</p>}
                 </div>
-              </div>
-
-              {/* Middle name */}
-              <div>
-                <FieldLabel optional><User className="w-3.5 h-3.5 text-gray-400" /> Middle Name</FieldLabel>
-                <input
-                  type="text"
-                  placeholder="Middle name"
-                  className={inputCls()}
-                  value={form.middleName}
-                  onChange={(e) => set('middleName', e.target.value)}
-                />
+                <div>
+                  <FieldLabel optional>Middle Name</FieldLabel>
+                  <input
+                    type="text"
+                    placeholder="e.g. Santos"
+                    className={inputCls(false)}
+                    value={form.middleName}
+                    onChange={(e) => set('middleName', e.target.value)}
+                  />
+                </div>
               </div>
 
               {/* Student ID */}
               <div>
-                <FieldLabel><CreditCard className="w-3.5 h-3.5 text-gray-400" /> Student ID Number <span className="text-red-500">*</span></FieldLabel>
+                <FieldLabel>Student ID Number <span className="text-red-500">*</span></FieldLabel>
                 <input
                   type="text"
-                  placeholder="e.g. 02000123456"
+                  placeholder="02000123456"
+                  maxLength={11}
                   className={inputCls(!!errors.studentId)}
                   value={form.studentId}
-                  onChange={(e) => set('studentId', e.target.value)}
+                  onChange={(e) => set('studentId', e.target.value.replace(/\D/g, ''))}
                 />
                 {errors.studentId
                   ? <p className="text-red-500 text-xs mt-1">{errors.studentId}</p>
-                  : <p className="text-gray-400 text-xs mt-1">Enter your official STI student ID exactly as shown on your ID card.</p>
+                  : <p className="text-gray-400 text-xs mt-1">Enter the official 11-digit STI student ID exactly as shown on the physical ID card.</p>
                 }
               </div>
 
@@ -456,6 +662,7 @@ export default function AddStudentManuallyModal({ onClose, onSuccess }: Props) {
                   <FieldLabel>Date of Birth <span className="text-red-500">*</span></FieldLabel>
                   <input
                     type="date"
+                    max={new Date().toISOString().split('T')[0]}
                     className={inputCls(!!errors.dateOfBirth)}
                     value={form.dateOfBirth}
                     onChange={(e) => set('dateOfBirth', e.target.value)}
@@ -506,15 +713,46 @@ export default function AddStudentManuallyModal({ onClose, onSuccess }: Props) {
 
           {/* ════ STEP 2 — Academic Details ════ */}
           {step === 1 && (
-            <div className="space-y-4">
+            <div className="space-y-4 text-left">
               <div>
                 <p className="font-bold text-[#001A4D] text-base">Academic Details</p>
-                <p className="text-gray-500 text-xs mt-0.5">Select the student's current enrollment information for this semester.</p>
+                <p className="text-gray-500 text-xs mt-0.5">Select the academic track, program, year level, and section for this student.</p>
               </div>
 
-              {/* Course */}
+              {/* Academic Track Toggle */}
               <div>
-                <FieldLabel><BookOpen className="w-3.5 h-3.5 text-gray-400" /> Course <span className="text-red-500">*</span></FieldLabel>
+                <FieldLabel><Building className="w-3.5 h-3.5 text-gray-400" /> Academic Track <span className="text-red-500">*</span></FieldLabel>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => handleTrackChange('COLLEGE')}
+                    className={`py-3 px-4 rounded-xl text-xs font-bold border transition-all flex items-center justify-center gap-2 ${
+                      currentAcademicLevel === 'COLLEGE'
+                        ? 'bg-[#001A4D] text-[#FFD41C] border-[#001A4D] shadow-sm'
+                        : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    College (Semestral)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleTrackChange('SHS')}
+                    className={`py-3 px-4 rounded-xl text-xs font-bold border transition-all flex items-center justify-center gap-2 ${
+                      currentAcademicLevel === 'SHS'
+                        ? 'bg-amber-600 text-white border-amber-600 shadow-sm'
+                        : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    Senior High School (Trimestral)
+                  </button>
+                </div>
+              </div>
+
+              {/* Course / Program */}
+              <div>
+                <FieldLabel>
+                  <BookOpen className="w-3.5 h-3.5 text-gray-400" /> {currentAcademicLevel === 'SHS' ? 'Senior High Strand / Track' : 'College Course / Program'} <span className="text-red-500">*</span>
+                </FieldLabel>
                 <div className="relative">
                   <BookOpen className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                   <select
@@ -522,16 +760,16 @@ export default function AddStudentManuallyModal({ onClose, onSuccess }: Props) {
                     value={form.courseId}
                     onChange={(e) => selectCourse(e.target.value)}
                   >
-                    <option value="">Select course…</option>
-                    {activeCourses.map((c) => (
+                    <option value="">Select {currentAcademicLevel === 'SHS' ? 'SHS strand…' : 'course…'}</option>
+                    {levelCourses.map((c) => (
                       <option key={c.id} value={c.id}>{c.code} — {c.name}</option>
                     ))}
                   </select>
                 </div>
                 {errors.courseId && <p className="text-red-500 text-xs mt-1">{errors.courseId}</p>}
                 {form.courseId && (
-                  <div className="mt-1.5 inline-flex items-center gap-1.5 px-2 py-1 bg-blue-50 text-[#0E4EBD] rounded-full text-xs font-medium border border-blue-100">
-                    <Check className="w-3 h-3" /> {form.courseCode}
+                  <div className="mt-1.5 inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 text-[#0E4EBD] rounded-full text-xs font-bold border border-blue-100">
+                    <Check className="w-3.5 h-3.5" /> {form.courseCode} — {form.courseName}
                   </div>
                 )}
               </div>
@@ -539,42 +777,65 @@ export default function AddStudentManuallyModal({ onClose, onSuccess }: Props) {
               {/* Year Level */}
               <div>
                 <FieldLabel>Year Level <span className="text-red-500">*</span></FieldLabel>
-                <div className="grid grid-cols-2 gap-2">
-                  {YEAR_LEVELS.map((yl) => (
+                <div className={`grid ${currentAcademicLevel === 'SHS' ? 'grid-cols-2' : 'grid-cols-4'} gap-2`}>
+                  {availableYearLevels.map((yl) => (
                     <button
                       key={yl}
                       type="button"
-                      onClick={() => set('yearLevel', yl)}
-                      className={`h-[52px] rounded-lg text-sm font-medium border transition-all ${form.yearLevel === yl
-                        ? 'bg-[#001A4D] text-[#FFD41C] border-[#001A4D]'
-                        : 'bg-white text-gray-500 border-gray-300 hover:border-gray-400'
-                        }`}
+                      disabled={!form.courseId}
+                      onClick={() => {
+                        set('yearLevel', yl);
+                        set('section', '');
+                      }}
+                      className={`h-[46px] rounded-xl text-xs font-bold border transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
+                        form.yearLevel === yl
+                          ? currentAcademicLevel === 'SHS'
+                            ? 'bg-amber-600 text-white border-amber-600 shadow-sm'
+                            : 'bg-[#001A4D] text-[#FFD41C] border-[#001A4D] shadow-sm'
+                          : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+                      }`}
                     >
                       {yl}
                     </button>
                   ))}
                 </div>
                 {errors.yearLevel && <p className="text-red-500 text-xs mt-1">{errors.yearLevel}</p>}
+                {!form.courseId && (
+                  <p className="text-gray-400 text-xs mt-1">Select a course above first to enable year levels.</p>
+                )}
               </div>
 
               {/* Section */}
               <div>
-                <FieldLabel><Users className="w-3.5 h-3.5 text-gray-400" /> Section <span className="text-red-500">*</span></FieldLabel>
+                <FieldLabel>
+                  <Users className="w-3.5 h-3.5 text-gray-400" /> Section <span className="text-red-500">*</span>
+                </FieldLabel>
                 <div className="relative">
                   <Users className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                   <select
-                    className={`${inputCls(!!errors.section)} pl-9 appearance-none`}
+                    className={`${inputCls(!!errors.section)} pl-9 appearance-none disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed`}
                     value={form.section}
                     onChange={(e) => set('section', e.target.value)}
-                    disabled={!form.courseId}
+                    disabled={!form.courseId || !form.yearLevel}
                   >
-                    <option value="">{form.courseId ? 'Select section…' : 'Select a course first'}</option>
-                    {activeSections.map((s) => (
+                    <option value="">
+                      {!form.courseId
+                        ? 'Select a course first'
+                        : !form.yearLevel
+                        ? 'Select a year level first'
+                        : matchingSections.length === 0
+                        ? 'No registered sections found for this year level'
+                        : 'Select section…'}
+                    </option>
+                    {matchingSections.map((s) => (
                       <option key={s.id} value={s.name}>{s.name}</option>
                     ))}
                   </select>
                 </div>
                 {errors.section && <p className="text-red-500 text-xs mt-1">{errors.section}</p>}
+                {!form.yearLevel && form.courseId && (
+                  <p className="text-amber-600 text-xs mt-1 font-medium">Please choose a Year Level above to load sections.</p>
+                )}
               </div>
 
               {/* Department — read-only, auto-filled */}
@@ -586,11 +847,10 @@ export default function AddStudentManuallyModal({ onClose, onSuccess }: Props) {
                   <input
                     readOnly
                     type="text"
-                    value={form.departmentName || 'Auto-filled from selected course'}
-                    className="w-full pl-9 pr-9 py-2.5 border border-gray-200 rounded-lg bg-gray-50 text-sm text-gray-500 italic"
+                    value={form.departmentName || 'Auto-filled from selected program'}
+                    className="w-full pl-9 pr-9 py-2.5 border border-gray-200 rounded-lg bg-gray-50 text-sm text-gray-600 font-medium"
                   />
                 </div>
-                <p className="text-gray-400 text-xs mt-1">Auto-filled from your selected course.</p>
               </div>
 
               {/* Academic Term (School Year & Semester) — read-only, auto-filled */}
@@ -602,41 +862,33 @@ export default function AddStudentManuallyModal({ onClose, onSuccess }: Props) {
                     <input
                       readOnly
                       type="text"
-                      value={form.schoolYear || 'Loading...'}
-                      className="w-full px-4 pr-9 py-2.5 border border-gray-200 rounded-lg bg-gray-50 text-sm text-gray-500 italic"
+                      value={form.schoolYear || 'Auto-resolving...'}
+                      className="w-full px-4 pr-9 py-2.5 border border-gray-200 rounded-lg bg-gray-50 text-sm text-gray-700 font-bold"
                     />
                   </div>
                 </div>
                 <div>
-                  <FieldLabel>Semester</FieldLabel>
+                  <FieldLabel>{currentAcademicLevel === 'SHS' ? 'Active Trimester' : 'Active Semester'}</FieldLabel>
                   <div className="relative">
                     <Lock className="w-3.5 h-3.5 text-gray-300 absolute right-3 top-1/2 -translate-y-1/2" />
                     <input
                       readOnly
                       type="text"
-                      value={form.semester || 'Loading...'}
-                      className="w-full px-4 pr-9 py-2.5 border border-gray-200 rounded-lg bg-gray-50 text-sm text-gray-500 italic"
+                      value={form.semester || 'Auto-resolving...'}
+                      className="w-full px-4 pr-9 py-2.5 border border-gray-200 rounded-lg bg-gray-50 text-sm text-gray-700 font-bold"
                     />
                   </div>
                 </div>
               </div>
-              <p className="text-gray-400 text-xs mt-0">Auto-filled based on the currently active semester.</p>
+              <p className="text-gray-400 text-xs mt-0">Auto-filled based on the currently active {currentAcademicLevel === 'SHS' ? 'SHS Trimester' : 'College Semester'}.</p>
               {errors.schoolYear && <p className="text-red-500 text-xs mt-1">{errors.schoolYear}</p>}
               {errors.semester && <p className="text-red-500 text-xs mt-1">{errors.semester}</p>}
-
-              {/* Info card */}
-              <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl flex items-start gap-2">
-                <Info className="w-4 h-4 text-[#0E4EBD] flex-shrink-0 mt-0.5" />
-                <p className="text-[#001A4D] text-xs italic leading-relaxed">
-                  Your year level and section will need to be re-confirmed at the start of each new semester.
-                </p>
-              </div>
             </div>
           )}
 
           {/* ════ STEP 3 — Account Credentials ════ */}
           {step === 2 && (
-            <div className="space-y-4">
+            <div className="space-y-4 text-left">
               <div>
                 <p className="font-bold text-[#001A4D] text-base">Create Account Credentials</p>
                 <p className="text-gray-500 text-xs mt-0.5">Set up the student's login email and password.</p>
@@ -739,6 +991,23 @@ export default function AddStudentManuallyModal({ onClose, onSuccess }: Props) {
                 {errors.confirmPassword && <p className="text-red-500 text-xs mt-1">{errors.confirmPassword}</p>}
               </div>
 
+              {/* Send email toggle */}
+              <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-xl flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <Mail className="w-4 h-4 text-[#0E4EBD] flex-shrink-0" />
+                  <div>
+                    <p className="text-xs font-bold text-[#001A4D]">Send Credentials via Email</p>
+                    <p className="text-[11px] text-gray-500">Dispatch temporary password and login guide to student's email.</p>
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={form.sendWelcomeEmail}
+                  onChange={(e) => set('sendWelcomeEmail', e.target.checked)}
+                  className="w-4 h-4 text-[#0E4EBD] rounded focus:ring-[#0E4EBD] cursor-pointer"
+                />
+              </div>
+
               {/* Security info card */}
               <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl flex items-start gap-2">
                 <Shield className="w-4 h-4 text-[#0E4EBD] flex-shrink-0 mt-0.5" />
@@ -780,7 +1049,7 @@ export default function AddStudentManuallyModal({ onClose, onSuccess }: Props) {
               onUploadingChange={setPhotoUploading}
               requirements={[
                 'Full card visible, no cropping',
-                'All text readable',
+                'All text readable in portrait mode',
                 'Flat surface, no glare',
                 'Show the front side of the ID',
               ]}
@@ -837,7 +1106,7 @@ export default function AddStudentManuallyModal({ onClose, onSuccess }: Props) {
   );
 }
 
-// ─── Photo Step sub-component ─────────────────────────────────────────────────
+// ─── Photo Step sub-component with Live Camera & Gallery Upload ────────────────
 interface PhotoStepProps {
   title: string;
   subtitle: string;
@@ -850,10 +1119,90 @@ interface PhotoStepProps {
 }
 
 function PhotoStep({ title, subtitle, circle, value, onChange, folder, onUploadingChange, requirements }: PhotoStepProps) {
-  const fileRef = useRef<HTMLInputElement>(null);
+  const galleryFileRef = useRef<HTMLInputElement>(null);
+  const cameraFileRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [cameraLoading, setCameraLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [uploadError, setUploadError] = useState('');
+
+  // Start live webcam stream
+  const startCamera = async () => {
+    setUploadError('');
+    setCameraLoading(true);
+    setIsCameraOpen(true);
+
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('Webcam API not supported in this browser environment.');
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: circle ? 'user' : 'environment',
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        audio: false,
+      });
+
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play().catch(() => {});
+      }
+      setCameraLoading(false);
+    } catch (err: unknown) {
+      console.warn('Webcam stream unavailable, falling back to camera file picker:', err);
+      stopCamera();
+      cameraFileRef.current?.click();
+    }
+  };
+
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+    setIsCameraOpen(false);
+    setCameraLoading(false);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
+      }
+    };
+  }, []);
+
+  const captureFrame = async () => {
+    if (!videoRef.current) return;
+    const video = videoRef.current;
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    if (circle) {
+      ctx.translate(canvas.width, 0);
+      ctx.scale(-1, 1);
+    }
+
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    stopCamera();
+
+    canvas.toBlob(async (blob) => {
+      if (!blob) return;
+      const file = new File([blob], `${circle ? 'selfie' : 'school-id'}_${Date.now()}.jpg`, { type: 'image/jpeg' });
+      await handleFile(file);
+    }, 'image/jpeg', 0.92);
+  };
 
   async function handleFile(file: File) {
     setUploadError('');
@@ -876,7 +1225,7 @@ function PhotoStep({ title, subtitle, circle, value, onChange, folder, onUploadi
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 text-left">
       <div>
         <p className="font-bold text-[#001A4D] text-base">{title}</p>
         <p className="text-gray-500 text-xs mt-0.5">{subtitle}</p>
@@ -886,8 +1235,11 @@ function PhotoStep({ title, subtitle, circle, value, onChange, folder, onUploadi
       <div className="flex flex-col items-center gap-4">
         {circle ? (
           /* Profile photo — circle */
-          <div className="relative">
-            <div className="w-52 h-52 rounded-full border-2 border-dashed border-[#0E4EBD] bg-blue-50/50 flex items-center justify-center overflow-hidden ring-4 ring-[#0E4EBD]/20">
+          <div
+            className="relative cursor-pointer group"
+            onClick={() => !uploading && startCamera()}
+          >
+            <div className="w-52 h-52 rounded-full border-2 border-dashed border-[#0E4EBD] bg-blue-50/50 flex items-center justify-center overflow-hidden ring-4 ring-[#0E4EBD]/20 group-hover:border-[#001A4D] transition-colors">
               {uploading ? (
                 <div className="text-center">
                   <Loader className="w-10 h-10 text-[#0E4EBD] mx-auto mb-2 animate-spin" />
@@ -896,9 +1248,10 @@ function PhotoStep({ title, subtitle, circle, value, onChange, folder, onUploadi
               ) : value ? (
                 <img src={value} alt="Profile" className="w-full h-full object-cover" />
               ) : (
-                <div className="text-center">
-                  <Camera className="w-12 h-12 text-[#0E4EBD] mx-auto mb-2" />
-                  <p className="text-[#001A4D] font-bold text-sm">Tap to capture</p>
+                <div className="text-center p-4">
+                  <Camera className="w-12 h-12 text-[#0E4EBD] mx-auto mb-2 group-hover:scale-110 transition-transform" />
+                  <p className="text-[#001A4D] font-bold text-sm">Tap to take selfie</p>
+                  <p className="text-gray-400 text-xs mt-0.5">Opens camera</p>
                 </div>
               )}
             </div>
@@ -909,11 +1262,10 @@ function PhotoStep({ title, subtitle, circle, value, onChange, folder, onUploadi
             )}
           </div>
         ) : (
-          /* School ID — landscape rectangle */
+          /* School ID — portrait container */
           <div
-            className="relative w-full border-2 border-dashed border-[#0E4EBD] bg-blue-50/50 rounded-xl overflow-hidden cursor-pointer"
-            style={{ height: 180 }}
-            onClick={() => !uploading && fileRef.current?.click()}
+            className="relative w-60 h-84 aspect-[3/4] mx-auto border-2 border-dashed border-[#0E4EBD] bg-blue-50/50 rounded-2xl overflow-hidden cursor-pointer shadow-sm hover:border-[#001A4D] transition-colors flex items-center justify-center group"
+            onClick={() => !uploading && startCamera()}
           >
             {uploading ? (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
@@ -922,17 +1274,17 @@ function PhotoStep({ title, subtitle, circle, value, onChange, folder, onUploadi
               </div>
             ) : value ? (
               <>
-                <img src={value} alt="School ID" className="w-full h-full object-cover" />
-                <div className="absolute top-2 right-2 px-2 py-1 bg-gradient-to-r from-green-500 to-green-600 rounded-full flex items-center gap-1">
-                  <Check className="w-3 h-3 text-white" />
-                  <span className="text-white text-xs font-medium">ID Uploaded</span>
+                <img src={value} alt="School ID" className="w-full h-full object-contain bg-white" />
+                <div className="absolute top-2 right-2 px-2.5 py-1 bg-green-600 text-white rounded-full flex items-center gap-1 shadow-md text-xs font-bold">
+                  <Check className="w-3.5 h-3.5 text-white" />
+                  <span>ID Uploaded</span>
                 </div>
               </>
             ) : (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-1">
-                <CreditCard className="w-12 h-12 text-[#0E4EBD]" />
-                <p className="text-[#001A4D] font-bold text-sm">Tap to photograph your ID</p>
-                <p className="text-gray-400 text-xs">or upload from gallery</p>
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-6 text-center">
+                <CreditCard className="w-12 h-12 text-[#0E4EBD] group-hover:scale-110 transition-transform" />
+                <p className="text-[#001A4D] font-bold text-sm">Tap to photograph ID</p>
+                <p className="text-gray-400 text-xs">Align physical ID card in portrait mode</p>
               </div>
             )}
           </div>
@@ -949,9 +1301,9 @@ function PhotoStep({ title, subtitle, circle, value, onChange, folder, onUploadi
           <button
             type="button"
             onClick={() => onChange('')}
-            className="text-[#0E4EBD] text-sm hover:underline"
+            className="text-[#0E4EBD] text-xs font-bold hover:underline"
           >
-            {circle ? 'Retake' : 'Re-upload'}
+            {circle ? 'Retake Photo' : 'Re-upload School ID'}
           </button>
         )}
 
@@ -960,7 +1312,7 @@ function PhotoStep({ title, subtitle, circle, value, onChange, folder, onUploadi
           <button
             type="button"
             disabled={uploading}
-            onClick={() => fileRef.current?.click()}
+            onClick={startCamera}
             className="flex-1 h-11 bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] text-white rounded-lg text-sm font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-opacity disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer shadow-sm"
           >
             <Camera className="w-4 h-4" />
@@ -969,7 +1321,7 @@ function PhotoStep({ title, subtitle, circle, value, onChange, folder, onUploadi
           <button
             type="button"
             disabled={uploading}
-            onClick={() => fileRef.current?.click()}
+            onClick={() => galleryFileRef.current?.click()}
             className="flex-1 h-11 border border-[#0E4EBD] text-[#0E4EBD] rounded-lg text-sm font-bold flex items-center justify-center gap-2 hover:bg-blue-50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
           >
             <Upload className="w-4 h-4" />
@@ -977,8 +1329,9 @@ function PhotoStep({ title, subtitle, circle, value, onChange, folder, onUploadi
           </button>
         </div>
 
+        {/* Hidden camera file input for mobile fallback */}
         <input
-          ref={fileRef}
+          ref={cameraFileRef}
           type="file"
           accept="image/*"
           capture={circle ? 'user' : 'environment'}
@@ -986,10 +1339,79 @@ function PhotoStep({ title, subtitle, circle, value, onChange, folder, onUploadi
           onChange={(e) => {
             const file = e.target.files?.[0];
             if (file) handleFile(file);
-            e.target.value = ''; // allow re-selecting the same file
+            e.target.value = '';
+          }}
+        />
+
+        {/* Hidden gallery file input */}
+        <input
+          ref={galleryFileRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) handleFile(file);
+            e.target.value = '';
           }}
         />
       </div>
+
+      {/* Live Camera Stream Modal */}
+      {isCameraOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl overflow-hidden shadow-2xl w-full max-w-lg animate-in fade-in zoom-in-95">
+            <div className="bg-[#001A4D] px-6 py-4 flex items-center justify-between text-white">
+              <div className="flex items-center gap-2">
+                <Camera className="w-5 h-5 text-[#FFD41C]" />
+                <h3 className="font-bold text-base">{circle ? 'Take Profile Selfie' : 'Photograph School ID Card'}</h3>
+              </div>
+              <button
+                type="button"
+                onClick={stopCamera}
+                className="text-white/70 hover:text-white p-1 rounded-lg hover:bg-white/10"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 bg-gray-950 flex flex-col items-center justify-center relative min-h-[320px]">
+              {cameraLoading && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-white bg-black/60 z-10">
+                  <Loader className="w-8 h-8 animate-spin text-[#FFD41C]" />
+                  <p className="text-xs font-semibold">Starting camera feed...</p>
+                </div>
+              )}
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className={`w-full max-h-[380px] object-cover rounded-xl ${circle ? '-scale-x-100' : ''}`}
+              />
+            </div>
+
+            <div className="p-4 bg-white flex items-center justify-between gap-3 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={stopCamera}
+                className="px-5 py-2.5 border border-gray-300 text-gray-700 rounded-xl text-xs font-bold hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={captureFrame}
+                disabled={cameraLoading}
+                className="flex-1 py-2.5 bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-sm hover:opacity-95 disabled:opacity-50"
+              >
+                <Camera className="w-4 h-4 text-[#FFD41C]" />
+                Capture & Use Photo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Requirements */}
       <div className="p-3 bg-amber-50/60 border border-amber-200 rounded-xl">
@@ -1006,11 +1428,6 @@ function PhotoStep({ title, subtitle, circle, value, onChange, folder, onUploadi
           ))}
         </ul>
       </div>
-
-      {/* Skip note */}
-      <p className="text-center text-gray-400 text-xs">
-        Photos are optional at this stage and can be uploaded later from the student's profile.
-      </p>
     </div>
   );
 }

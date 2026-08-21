@@ -6,10 +6,19 @@ import { formatCurrency, formatVariance } from '../../../../utils/currency';
 interface Step5Props {
   data: EventFormData;
   onUpdate: (data: Partial<EventFormData>) => void;
+  isOfficer?: boolean;
 }
 
-export default function Step5Budget({ data, onUpdate }: Step5Props) {
+export default function Step5Budget({ data, onUpdate, isOfficer }: Step5Props) {
   const [showPayables, setShowPayables] = useState(false);
+
+  // Dynamic Theme Styling based on Officer vs Admin
+  const accentBorder = 'border-[#0E4EBD]';
+  const accentText = 'text-[#0E4EBD]';
+  const accentBg = 'bg-[#0E4EBD]';
+  const accentFocusRing = 'focus:ring-[#0E4EBD]';
+  const accentGradient = 'from-[#001A4D] to-[#0E4EBD]';
+  const pieStroke = '#0E4EBD';
 
   useEffect(() => {
     if (!data.budgetItems || data.budgetItems.length === 0) {
@@ -77,7 +86,7 @@ export default function Step5Budget({ data, onUpdate }: Step5Props) {
       <div className="space-y-6">
 
         {/* Proposed Budget Banner */}
-        <div className="p-4 bg-gradient-to-r from-[#001A4D] to-[#83358E] rounded-xl text-white">
+        <div className={`p-4 bg-gradient-to-r ${accentGradient} rounded-xl text-white shadow-xs`}>
           <div className="flex items-center justify-between">
             <div>
               <h3 className="font-bold text-base text-white mb-1">Proposed Event Budget</h3>
@@ -95,21 +104,23 @@ export default function Step5Budget({ data, onUpdate }: Step5Props) {
         {/* Budget Table */}
         <div>
           <div className="flex items-center justify-between mb-4">
-            <div className="border-l-4 border-[#83358E] pl-3">
+            <div className={`border-l-4 ${accentBorder} pl-3`}>
               <h3 className="text-[#001A4D] font-bold text-base">Proposed Line Items Breakdown</h3>
             </div>
             <div className="flex items-center gap-2">
               <div className="flex items-center bg-gray-100 rounded-lg p-1 mr-2">
                 <span className="text-sm text-gray-700 mr-2 ml-1">Payables:</span>
                 <button
+                  type="button"
                   onClick={() => updateField('studentPayablesEnabled', false)}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${!data.studentPayablesEnabled ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors cursor-pointer ${!data.studentPayablesEnabled ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
                 >
                   None
                 </button>
                 <button
+                  type="button"
                   onClick={() => updateField('studentPayablesEnabled', true)}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${data.studentPayablesEnabled ? 'bg-white shadow text-[#83358E]' : 'text-gray-500 hover:text-gray-700'}`}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors cursor-pointer ${data.studentPayablesEnabled ? `bg-white shadow ${accentText}` : 'text-gray-500 hover:text-gray-700'}`}
                 >
                   Required
                 </button>
@@ -117,16 +128,18 @@ export default function Step5Budget({ data, onUpdate }: Step5Props) {
 
               {data.studentPayablesEnabled && (
                 <button
+                  type="button"
                   onClick={() => setShowPayables(true)}
-                  className="px-4 py-2 bg-[#FFC107] text-[#001A4D] rounded-lg text-sm font-bold hover:bg-[#FFD41C] flex items-center gap-2 transition-colors"
+                  className="px-4 py-2 bg-[#FFC107] text-[#001A4D] rounded-lg text-sm font-bold hover:bg-[#FFD41C] flex items-center gap-2 transition-colors cursor-pointer"
                 >
                   <Users className="w-4 h-4" /> Config Payables
                 </button>
               )}
               
               <button
+                type="button"
                 onClick={addBudgetItem}
-                className="px-4 py-2 bg-[#1E70E8] text-white rounded-lg text-sm font-medium hover:bg-[#0E4EBD] flex items-center gap-2"
+                className="px-4 py-2 bg-[#1E70E8] text-white rounded-lg text-sm font-medium hover:bg-[#0E4EBD] flex items-center gap-2 cursor-pointer shadow-xs"
               >
                 <Plus className="w-4 h-4" /> Add Item
               </button>
@@ -158,7 +171,7 @@ export default function Step5Budget({ data, onUpdate }: Step5Props) {
                             placeholder="e.g. Catering / Food"
                             value={item.item || ''}
                             onChange={(e) => updateItem(item.id, { item: e.target.value })}
-                            className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+                            className={`w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-2 ${accentFocusRing} focus:border-transparent`}
                           />
                           <datalist id={`item-suggestions-${item.id}`}>
                             <option>Venue & Facilities</option>
@@ -176,7 +189,7 @@ export default function Step5Budget({ data, onUpdate }: Step5Props) {
                             placeholder="Detailed description..."
                             value={item.description || ''}
                             onChange={(e) => updateItem(item.id, { description: e.target.value })}
-                            className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+                            className={`w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-2 ${accentFocusRing} focus:border-transparent`}
                           />
                         </td>
                         <td className="px-3 py-2">
@@ -186,7 +199,7 @@ export default function Step5Budget({ data, onUpdate }: Step5Props) {
                             min="1"
                             value={item.quantity || ''}
                             onChange={(e) => updateItem(item.id, { quantity: Number(e.target.value) })}
-                            className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+                            className={`w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-2 ${accentFocusRing} focus:border-transparent`}
                           />
                         </td>
                         <td className="px-3 py-2">
@@ -196,15 +209,15 @@ export default function Step5Budget({ data, onUpdate }: Step5Props) {
                             min="0"
                             value={item.unitCost || ''}
                             onChange={(e) => updateItem(item.id, { unitCost: Number(e.target.value) })}
-                            className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+                            className={`w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-2 ${accentFocusRing} focus:border-transparent`}
                           />
                         </td>
                         <td className="px-3 py-2">
-                          <div className="text-xs font-bold text-[#83358E]">{formatCurrency(total)}</div>
+                          <div className={`text-xs font-bold ${accentText}`}>{formatCurrency(total)}</div>
                         </td>
                         <td className="px-3 py-2">
                           {budgetItems.length > 1 && (
-                            <button onClick={() => removeBudgetItem(item.id)} className="text-red-600 hover:text-red-700 p-1">
+                            <button onClick={() => removeBudgetItem(item.id)} className="text-red-600 hover:text-red-700 p-1 cursor-pointer">
                               <Trash2 className="w-4 h-4" />
                             </button>
                           )}
@@ -222,7 +235,7 @@ export default function Step5Budget({ data, onUpdate }: Step5Props) {
               <span className="font-bold text-[#001A4D]">Total Overall Proposed Budget</span>
               <p className="text-xs text-gray-500">Sum of all proposed line items for this event</p>
             </div>
-            <span className="text-2xl font-black text-[#83358E]">{formatCurrency(totalProposed)}</span>
+            <span className={`text-2xl font-black ${accentText}`}>{formatCurrency(totalProposed)}</span>
           </div>
         </div>
       </div>
@@ -231,14 +244,14 @@ export default function Step5Budget({ data, onUpdate }: Step5Props) {
       <div className="sticky top-0 h-fit">
         <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
           <h4 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
-            <PieChart className="w-5 h-5 text-[#83358E]" />
+            <PieChart className={`w-5 h-5 ${accentText}`} />
             Proposed Budget Summary
           </h4>
           <div className="space-y-4">
             <div className="relative aspect-square max-w-[180px] mx-auto">
               <svg viewBox="0 0 100 100" className="transform -rotate-90">
                 <circle cx="50" cy="50" r="40" fill="none" stroke="#E5E7EB" strokeWidth="20" />
-                <circle cx="50" cy="50" r="40" fill="none" stroke="#83358E" strokeWidth="20"
+                <circle cx="50" cy="50" r="40" fill="none" stroke={pieStroke} strokeWidth="20"
                   strokeDasharray={`${totalProposed > 0 ? 251.2 : 0} 251.2`} />
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
@@ -250,7 +263,7 @@ export default function Step5Budget({ data, onUpdate }: Step5Props) {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-[#83358E]" />
+                  <div className={`w-3 h-3 rounded-full ${accentBg}`} />
                   <span className="text-sm text-gray-700 font-medium">Proposed Budget</span>
                 </div>
                 <div className="text-right">
@@ -260,7 +273,7 @@ export default function Step5Budget({ data, onUpdate }: Step5Props) {
               </div>
             </div>
 
-            <div className="p-3 bg-gradient-to-br from-[#001A4D] to-[#83358E] rounded-lg text-center">
+            <div className={`p-3 bg-gradient-to-br ${accentGradient} rounded-lg text-center shadow-xs`}>
               <Shield className="w-6 h-6 text-[#FFC107] mx-auto mb-1" />
               <div className="text-white text-xs font-bold mb-1">Budget Authority Seal</div>
               <div className="text-white/80 text-xs">Auto-applied to all exported financial documents</div>
@@ -276,7 +289,7 @@ export default function Step5Budget({ data, onUpdate }: Step5Props) {
           <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden">
 
             {/* Modal Header */}
-            <div className="bg-gradient-to-r from-[#001A4D] to-[#83358E] px-6 py-5">
+            <div className={`bg-gradient-to-r ${accentGradient} px-6 py-5`}>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-[#FFC107] rounded-xl flex items-center justify-center">
@@ -301,14 +314,14 @@ export default function Step5Budget({ data, onUpdate }: Step5Props) {
                   <div className="text-2xl font-bold text-[#001A4D]">{formatCurrency(totalProposed)}</div>
                   <div className="text-xs text-gray-500 mt-1">Sum of all proposed line items</div>
                 </div>
-                <div className="p-4 bg-[#83358E]/5 border border-[#83358E]/20 rounded-xl">
+                <div className="p-4 bg-blue-50/50 border border-blue-200 rounded-xl">
                   <div className="text-xs text-gray-500 mb-1">Target Audience (Step 3)</div>
                   <div className="flex items-baseline gap-1">
                     <input
                       type="number"
                       value={participantCount}
                       onChange={(e) => updateField('expectedParticipantCount', Math.max(1, Number(e.target.value)))}
-                      className="w-24 text-2xl font-bold text-[#83358E] bg-transparent border-b-2 border-[#83358E] focus:outline-none"
+                      className={`w-24 text-2xl font-bold ${accentText} bg-transparent border-b-2 ${accentBorder} focus:outline-none`}
                     />
                     <span className="text-xs text-gray-500 font-medium">students</span>
                   </div>
@@ -331,7 +344,7 @@ export default function Step5Budget({ data, onUpdate }: Step5Props) {
                   <div className="text-2xl text-gray-400 font-light">÷</div>
                   <div className="text-center">
                     <div className="text-xs text-gray-500 mb-1">Students</div>
-                    <div className="text-xl font-bold text-[#83358E]">{participantCount.toLocaleString()}</div>
+                    <div className={`text-xl font-bold ${accentText}`}>{participantCount.toLocaleString()}</div>
                   </div>
                   <div className="text-2xl text-gray-400 font-light">=</div>
                   <div className="text-center">
@@ -348,7 +361,7 @@ export default function Step5Budget({ data, onUpdate }: Step5Props) {
                     Set Amount Per Student <span className="text-red-500">*</span>
                   </label>
                   <div className="flex items-center gap-3">
-                    <div className="flex items-center border-2 border-[#001A4D] rounded-xl px-4 py-3 bg-white flex-1 focus-within:border-[#83358E] transition-colors">
+                    <div className={`flex items-center border-2 border-[#001A4D] rounded-xl px-4 py-3 bg-white flex-1 focus-within:${accentBorder} transition-colors`}>
                       <span className="text-xl font-bold text-gray-500 mr-2">₱</span>
                       <input
                         type="number"
@@ -407,8 +420,9 @@ export default function Step5Budget({ data, onUpdate }: Step5Props) {
               {/* Footer Actions */}
               <div className="flex items-center justify-end gap-3 pt-2 border-t border-gray-200">
                 <button
+                  type="button"
                   onClick={() => setShowPayables(false)}
-                  className="px-5 py-2.5 bg-[#001A4D] text-white rounded-lg text-sm font-bold hover:bg-[#001A4D]/90"
+                  className="px-5 py-2.5 bg-[#001A4D] text-white rounded-lg text-sm font-bold hover:bg-[#001A4D]/90 cursor-pointer"
                 >
                   Done
                 </button>

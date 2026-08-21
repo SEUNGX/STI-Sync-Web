@@ -123,7 +123,7 @@ export function GenerateDuesModal({
             <select
               value={selectedSemId || activeSemester?.id}
               onChange={(e) => setSelectedSemId(e.target.value)}
-              className="w-full px-3 py-2 border border-[#E0E0E0] rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] outline-none"
+              className="w-full px-3 py-2 border border-[#E0E0E0] rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] outline-none"
             >
               {semesters.map((s) => (
                 <option key={s.id} value={s.id}>
@@ -143,7 +143,7 @@ export function GenerateDuesModal({
                 required
                 value={membershipFee}
                 onChange={(e) => setMembershipFee(parseFloat(e.target.value) || 0)}
-                className="w-full px-3 py-2 border border-[#E0E0E0] rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] outline-none"
+                className="w-full px-3 py-2 border border-[#E0E0E0] rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] outline-none"
               />
             </div>
 
@@ -153,7 +153,7 @@ export function GenerateDuesModal({
                 type="date"
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
-                className="w-full px-3 py-2 border border-[#E0E0E0] rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] outline-none"
+                className="w-full px-3 py-2 border border-[#E0E0E0] rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] outline-none"
               />
             </div>
           </div>
@@ -165,9 +165,9 @@ export function GenerateDuesModal({
               <button
                 type="button"
                 onClick={() => setTargetMode('all')}
-                className={`p-3 rounded-xl border text-left flex items-start justify-between transition-colors ${
+                className={`p-3 rounded-xl border text-left flex items-start justify-between transition-colors cursor-pointer ${
                   targetMode === 'all'
-                    ? 'border-[#83358E] bg-[#F3E8FF] text-[#83358E]'
+                    ? 'border-[#0E4EBD] bg-blue-50 text-[#0E4EBD] font-bold'
                     : 'border-gray-200 text-gray-700 hover:bg-gray-50'
                 }`}
               >
@@ -175,15 +175,15 @@ export function GenerateDuesModal({
                   <p className="font-bold text-sm">All Active Members</p>
                   <p className="text-xs text-gray-500 mt-0.5">{activeMembers.length} active member(s)</p>
                 </div>
-                {targetMode === 'all' && <Check className="w-4 h-4 text-[#83358E]" />}
+                {targetMode === 'all' && <Check className="w-4 h-4 text-[#0E4EBD]" />}
               </button>
 
               <button
                 type="button"
                 onClick={() => setTargetMode('select')}
-                className={`p-3 rounded-xl border text-left flex items-start justify-between transition-colors ${
+                className={`p-3 rounded-xl border text-left flex items-start justify-between transition-colors cursor-pointer ${
                   targetMode === 'select'
-                    ? 'border-[#83358E] bg-[#F3E8FF] text-[#83358E]'
+                    ? 'border-[#0E4EBD] bg-blue-50 text-[#0E4EBD] font-bold'
                     : 'border-gray-200 text-gray-700 hover:bg-gray-50'
                 }`}
               >
@@ -191,7 +191,7 @@ export function GenerateDuesModal({
                   <p className="font-bold text-sm">Select Specific Members</p>
                   <p className="text-xs text-gray-500 mt-0.5">{selectedMemberIds.length} selected</p>
                 </div>
-                {targetMode === 'select' && <Check className="w-4 h-4 text-[#83358E]" />}
+                {targetMode === 'select' && <Check className="w-4 h-4 text-[#0E4EBD]" />}
               </button>
             </div>
           </div>
@@ -205,12 +205,12 @@ export function GenerateDuesModal({
                   placeholder="Search members..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-xs outline-none bg-white"
+                  className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-xs outline-none bg-white focus:ring-2 focus:ring-[#0E4EBD]/30"
                 />
                 <button
                   type="button"
                   onClick={handleSelectAllFiltered}
-                  className="px-2.5 py-1 text-xs text-[#83358E] font-medium hover:underline flex-shrink-0"
+                  className="px-2.5 py-1 text-xs text-[#0E4EBD] font-bold hover:underline flex-shrink-0 cursor-pointer"
                 >
                   Select All Filtered
                 </button>
@@ -230,7 +230,7 @@ export function GenerateDuesModal({
                         key={m.id}
                         onClick={() => toggleMemberSelection(id)}
                         className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors ${
-                          isChecked ? 'bg-[#F3E8FF] border border-[#83358E]/30' : 'bg-white border border-gray-100 hover:bg-gray-50'
+                          isChecked ? 'bg-blue-50 border border-blue-200 text-[#001A4D]' : 'bg-white border border-gray-100 hover:bg-gray-50'
                         }`}
                       >
                         <div>
@@ -241,7 +241,7 @@ export function GenerateDuesModal({
                           type="checkbox"
                           checked={isChecked}
                           onChange={() => {}} // handled by div onClick
-                          className="w-4 h-4 text-[#83358E] rounded focus:ring-[#83358E]"
+                          className="w-4 h-4 text-[#0E4EBD] rounded focus:ring-[#0E4EBD] accent-[#0E4EBD]"
                         />
                       </div>
                     );
@@ -268,7 +268,7 @@ export function GenerateDuesModal({
             type="button"
             onClick={onClose}
             disabled={isSubmitting}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 cursor-pointer"
           >
             Cancel
           </button>
@@ -276,7 +276,7 @@ export function GenerateDuesModal({
             type="submit"
             form="generate-dues-form"
             disabled={isSubmitting}
-            className="px-5 py-2 text-sm font-bold text-white bg-[#83358E] rounded-lg hover:bg-[#6D2A78] transition-colors flex items-center gap-2 disabled:opacity-50"
+            className="px-5 py-2 text-sm font-bold text-white bg-[#001A4D] hover:bg-[#0E4EBD] rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 cursor-pointer shadow-xs"
           >
             {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
             {isSubmitting ? 'Generating...' : 'Generate Dues'}

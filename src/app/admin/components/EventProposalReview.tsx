@@ -14,7 +14,7 @@ import { useOrganizationStream } from '../../modules/organizations/hooks/useOrga
 import { useEventTypesStream, useVenuesStream } from '../../modules/events/hooks/useEventConfigStream';
 import { EventPayablesQRControl } from '../../modules/finance/components/EventPayablesQRControl';
 import { formatCurrency } from '../../utils/currency';
-import { formatAppDate, formatAppDateTime } from '../../utils/date';
+import { formatAppDate, formatAppDateTime, formatSessionDateTime } from '../../utils/date';
 
 interface EventProposalReviewProps {
   event: EventDocument;
@@ -166,7 +166,10 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
   };
 
   const confirmApprove = async () => {
-    if (!profile?.uid) return;
+    if (!profile?.uid) {
+      toast.error('SAO Admin authentication is required to approve proposals. Please re-login as Admin.');
+      return;
+    }
     setSubmitting(true);
     try {
       await approveEvent(event.id, profile.uid, remarks || '');
@@ -185,7 +188,10 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
   };
 
   const confirmReject = async () => {
-    if (!profile?.uid) return;
+    if (!profile?.uid) {
+      toast.error('SAO Admin authentication is required to reject proposals. Please re-login as Admin.');
+      return;
+    }
     if (!rejectionReason) {
       toast.error('Please select a rejection reason category.');
       return;
@@ -213,7 +219,10 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
   };
 
   const confirmReturn = async () => {
-    if (!profile?.uid) return;
+    if (!profile?.uid) {
+      toast.error('SAO Admin authentication is required to return proposals. Please re-login as Admin.');
+      return;
+    }
     if (returnFlags.length === 0) {
       toast.error('Please select at least one flagged item to correct.');
       return;
@@ -380,12 +389,28 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
               <SectionHeader title="Event Overview" status="complete" subtitle="Event identity, classification, and media assets submitted by the officer" />
               
               <div className="bg-white border border-[#E0E0E0] rounded-xl overflow-hidden mb-4">
-                <div className="h-44 bg-gradient-to-br from-[#001A4D] via-[#002B7F] to-[#0E4EBD] flex items-center justify-center">
-                  <div className="text-center">
-                    <FileImage className="w-12 h-12 text-white/40 mx-auto mb-2" />
-                    <p className="text-white/50 text-sm">No banner uploaded</p>
+                {event.bannerImageUrl ? (
+                  <div className="h-56 sm:h-72 w-full overflow-hidden bg-slate-900 relative">
+                    <img
+                      src={event.bannerImageUrl}
+                      alt={event.title || 'Event Banner'}
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/10" />
+                    <div className="absolute bottom-3 left-3 text-white">
+                      <span className="px-3 py-1 bg-black/60 backdrop-blur-md rounded-full text-xs font-bold border border-white/20">
+                        Event Banner
+                      </span>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="h-44 bg-gradient-to-br from-[#001A4D] via-[#002B7F] to-[#0E4EBD] flex items-center justify-center">
+                    <div className="text-center">
+                      <FileImage className="w-12 h-12 text-white/40 mx-auto mb-2" />
+                      <p className="text-white/50 text-sm">No banner uploaded</p>
+                    </div>
+                  </div>
+                )}
                 <div className="p-5">
                   <div className="grid grid-cols-2 gap-6">
                     <div className="space-y-4">
@@ -465,14 +490,14 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
                   </div>
                   <div className="space-y-3">
                     {(event.sessions || []).map((s, i) => (
-                      <div key={s.id || i} className="border-l-[3px] border-[#0E4EBD] bg-white border border-[#E0E0E0] rounded-xl p-4">
-                        <div className="flex items-center justify-between mb-3">
-                          <span className="text-[#0E4EBD] font-bold text-xs">Session {i + 1}</span>
-                          <span className="text-[#001A4D] font-bold text-sm">{s.title}</span>
+                      <div key={s.id || i} className="border-l-4 border-[#0E4EBD] bg-white border border-[#E0E0E0] rounded-xl p-4 shadow-xs">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-[#0E4EBD] font-black text-xs uppercase tracking-wider">Session {i + 1}</span>
+                          <span className="text-[#001A4D] font-extrabold text-base">{s.title || `Session ${i + 1}`}</span>
                         </div>
-                        <div className="flex items-center gap-6 text-sm text-gray-600">
-                          <div className="flex items-center gap-1.5"><Calendar className="w-4 h-4 text-gray-400" />{s.date}</div>
-                          <div className="flex items-center gap-1.5"><Clock className="w-4 h-4 text-gray-400" />{s.startTime} - {s.endTime}</div>
+                        <div className="flex items-center gap-2 text-sm text-gray-800 font-bold">
+                          <Calendar className="w-4 h-4 text-[#0E4EBD]" />
+                          <span>{formatSessionDateTime(s.date, s.startTime, s.endTime)}</span>
                         </div>
                       </div>
                     ))}
@@ -762,93 +787,145 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
               </div>
             </div>
 
-            {/* Current Status Banner */}
-            {decision !== 'none' && (
-              <div className={`rounded-xl p-4 text-center ${
-                decision === 'approved' ? 'bg-gradient-to-br from-[#22C55E] to-[#16A34A]' :
-                decision === 'returned' ? 'bg-gradient-to-br from-[#FFC107] to-[#F59E0B]' :
-                'bg-gradient-to-br from-[#EF4444] to-[#F97316]'
-              }`}>
-                {decision === 'approved' ? <CheckCircle className="w-8 h-8 text-white mx-auto mb-1" /> :
-                 decision === 'returned' ? <RotateCcw className="w-8 h-8 text-[#001A4D] mx-auto mb-1" /> :
-                 <XCircle className="w-8 h-8 text-white mx-auto mb-1" />}
-                <p className={`font-bold text-base ${decision === 'returned' ? 'text-[#001A4D]' : 'text-white'}`}>
-                  {decision === 'approved' ? 'Proposal Approved' : decision === 'returned' ? 'Returned for Revision' : 'Proposal Rejected'}
-                </p>
-                <p className="text-xs text-white/80 mt-1">Status set by SAO Adviser</p>
-              </div>
-            )}
+            {/* If approved, show clean Approved Status Card and DO NOT show decision action buttons */}
+            {decision === 'approved' || event.proposalStatus === 'approved' ? (
+              <div className="space-y-4">
+                <div className="bg-gradient-to-br from-[#22C55E] to-[#16A34A] rounded-xl p-5 text-center text-white space-y-2 shadow-xs">
+                  <CheckCircle className="w-10 h-10 text-white mx-auto" />
+                  <h4 className="font-extrabold text-lg text-white">Event Approved</h4>
+                  <p className="text-xs text-white/90">
+                    This proposal has been officially approved by SAO Administration.
+                  </p>
+                  {event.approvedAt && (
+                    <p className="text-[11px] text-white/80 font-medium">
+                      Date: {formatAppDate(event.approvedAt, '')}
+                    </p>
+                  )}
+                </div>
 
-            {/* Adviser Remarks Field — Always Editable */}
-            <div className={`bg-white border rounded-xl p-4 ${remarksError ? 'border-red-400' : 'border-[#E0E0E0]'}`}>
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-1 h-4 bg-[#0E4EBD] rounded-full" />
-                  <p className="text-[#001A4D] font-bold text-sm">Adviser Remarks</p>
+                {/* Adviser Remarks Field */}
+                <div className="bg-white border border-[#E0E0E0] rounded-xl p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-1 h-4 bg-[#0E4EBD] rounded-full" />
+                      <p className="text-[#001A4D] font-bold text-sm">Adviser Remarks</p>
+                    </div>
+                  </div>
+                  <textarea
+                    value={remarks}
+                    onChange={e => { setRemarks(e.target.value); if (e.target.value) setRemarksError(false); }}
+                    rows={4}
+                    placeholder="Write your remarks or feedback here..."
+                    className="w-full text-sm resize-none border border-[#E0E0E0] rounded-lg p-3 focus:ring-2 focus:ring-[#0E4EBD]/30 outline-none leading-relaxed text-[#001A4D]"
+                  />
+                  {event?.id && (
+                    <button
+                      onClick={handleSaveRemarks}
+                      disabled={savingRemarks}
+                      className="w-full mt-3 py-2 bg-gray-100 border border-gray-300 text-[#001A4D] rounded-lg text-xs font-semibold hover:bg-gray-200 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      {savingRemarks ? 'Saving...' : 'Save Updated Remarks'}
+                    </button>
+                  )}
                 </div>
-              </div>
-              <textarea
-                value={remarks}
-                onChange={e => { setRemarks(e.target.value); if (e.target.value) setRemarksError(false); }}
-                rows={5}
-                placeholder="Write your remarks, feedback, or instructions for the officer here..."
-                className="w-full text-sm resize-none border border-[#E0E0E0] rounded-lg p-3 focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] outline-none leading-relaxed text-[#001A4D]"
-              />
-              <div className="flex justify-between items-center mt-2">
-                <div className="flex items-center gap-1.5">
-                  <Eye className="w-3 h-3 text-[#0E4EBD]" />
-                  <span className="text-[#0E4EBD] text-xs italic font-medium">Visible to submitting officer</span>
-                </div>
-                <span className="text-gray-400 text-xs">{remarks.length} / 1000</span>
-              </div>
-              {remarksError && (
-                <p className="text-red-500 text-xs mt-1.5 flex items-center gap-1">
-                  <AlertCircle className="w-3 h-3" />Remarks required when returning or rejecting.
-                </p>
-              )}
-              {event?.id && (
+
                 <button
-                  onClick={handleSaveRemarks}
-                  disabled={savingRemarks}
-                  className="w-full mt-3 py-2 bg-gray-100 border border-gray-300 text-[#001A4D] rounded-lg text-xs font-semibold hover:bg-gray-200 transition-colors flex items-center justify-center gap-1.5"
+                  onClick={onClose}
+                  className="w-full py-2.5 bg-[#001A4D] text-white rounded-xl font-bold text-xs hover:bg-[#001A4D]/90 transition-colors cursor-pointer"
                 >
-                  <Send className="w-3.5 h-3.5" />
-                  {savingRemarks ? 'Saving...' : 'Save Updated Remarks'}
+                  Close & Back to Event Approvals
                 </button>
-              )}
-            </div>
+              </div>
+            ) : (
+              /* If pending, returned, or rejected, show decision controls */
+              <>
+                {decision !== 'none' && (
+                  <div className={`rounded-xl p-4 text-center ${
+                    decision === 'returned' ? 'bg-gradient-to-br from-[#FFC107] to-[#F59E0B]' :
+                    'bg-gradient-to-br from-[#EF4444] to-[#F97316]'
+                  }`}>
+                    {decision === 'returned' ? <RotateCcw className="w-8 h-8 text-[#001A4D] mx-auto mb-1" /> :
+                     <XCircle className="w-8 h-8 text-white mx-auto mb-1" />}
+                    <p className={`font-bold text-base ${decision === 'returned' ? 'text-[#001A4D]' : 'text-white'}`}>
+                      {decision === 'returned' ? 'Returned for Revision' : 'Proposal Rejected'}
+                    </p>
+                    <p className="text-xs text-white/80 mt-1">Status set by SAO Adviser</p>
+                  </div>
+                )}
 
-            {/* Decision Action Buttons — Always Clickable */}
-            <div className="space-y-2.5 pt-1">
-              <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                {decision !== 'none' ? 'Change Decision' : 'Select Decision'}
-              </p>
-              <div>
-                <button onClick={() => handleDecision('approve')}
-                  className="w-full h-12 flex items-center justify-center gap-2 bg-gradient-to-r from-[#22C55E] to-[#16A34A] text-white font-bold text-sm rounded-xl hover:from-[#16A34A] hover:to-[#22C55E] transition-all shadow-sm">
-                  <CheckCircle className="w-4 h-4" />
-                  {decision === 'approved' ? 'Update Approval / Remarks' : 'Approve Proposal'}
-                </button>
-              </div>
-              <div>
-                <button onClick={() => handleDecision('return')}
-                  className="w-full h-12 flex items-center justify-center gap-2 bg-[#FFC107] text-[#001A4D] font-bold text-sm rounded-xl hover:bg-[#F59E0B] transition-colors shadow-sm">
-                  <RotateCcw className="w-4 h-4" />
-                  {decision === 'returned' ? 'Update Return Flags' : 'Return for Revision'}
-                </button>
-              </div>
-              <div>
-                <button onClick={() => handleDecision('reject')}
-                  className="w-full h-12 flex items-center justify-center gap-2 bg-white border-[1.5px] border-[#EF4444] text-[#EF4444] font-bold text-sm rounded-xl hover:bg-red-50 transition-colors">
-                  <X className="w-4 h-4" />
-                  {decision === 'rejected' ? 'Update Rejection / Remarks' : 'Reject Proposal'}
-                </button>
-              </div>
-            </div>
+                {/* Adviser Remarks Field */}
+                <div className={`bg-white border rounded-xl p-4 ${remarksError ? 'border-red-400' : 'border-[#E0E0E0]'}`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-1 h-4 bg-[#0E4EBD] rounded-full" />
+                      <p className="text-[#001A4D] font-bold text-sm">Adviser Remarks</p>
+                    </div>
+                  </div>
+                  <textarea
+                    value={remarks}
+                    onChange={e => { setRemarks(e.target.value); if (e.target.value) setRemarksError(false); }}
+                    rows={5}
+                    placeholder="Write your remarks, feedback, or instructions for the officer here..."
+                    className="w-full text-sm resize-none border border-[#E0E0E0] rounded-lg p-3 focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] outline-none leading-relaxed text-[#001A4D]"
+                  />
+                  <div className="flex justify-between items-center mt-2">
+                    <div className="flex items-center gap-1.5">
+                      <Eye className="w-3 h-3 text-[#0E4EBD]" />
+                      <span className="text-[#0E4EBD] text-xs italic font-medium">Visible to submitting officer</span>
+                    </div>
+                    <span className="text-gray-400 text-xs">{remarks.length} / 1000</span>
+                  </div>
+                  {remarksError && (
+                    <p className="text-red-500 text-xs mt-1.5 flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3" />Remarks required when returning or rejecting.
+                    </p>
+                  )}
+                  {event?.id && (
+                    <button
+                      onClick={handleSaveRemarks}
+                      disabled={savingRemarks}
+                      className="w-full mt-3 py-2 bg-gray-100 border border-gray-300 text-[#001A4D] rounded-lg text-xs font-semibold hover:bg-gray-200 transition-colors flex items-center justify-center gap-1.5"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      {savingRemarks ? 'Saving...' : 'Save Updated Remarks'}
+                    </button>
+                  )}
+                </div>
 
-            <button onClick={onClose} className="w-full text-center text-gray-500 text-xs hover:underline pt-2">
-              Close & Back to Event Approvals
-            </button>
+                {/* Decision Action Buttons */}
+                <div className="space-y-2.5 pt-1">
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                    {decision !== 'none' ? 'Change Decision' : 'Select Decision'}
+                  </p>
+                  <div>
+                    <button onClick={() => handleDecision('approve')}
+                      className="w-full h-12 flex items-center justify-center gap-2 bg-gradient-to-r from-[#22C55E] to-[#16A34A] text-white font-bold text-sm rounded-xl hover:from-[#16A34A] hover:to-[#22C55E] transition-all shadow-sm cursor-pointer">
+                      <CheckCircle className="w-4 h-4" />
+                      Approve Proposal
+                    </button>
+                  </div>
+                  <div>
+                    <button onClick={() => handleDecision('return')}
+                      className="w-full h-12 flex items-center justify-center gap-2 bg-[#FFC107] text-[#001A4D] font-bold text-sm rounded-xl hover:bg-[#F59E0B] transition-colors shadow-sm cursor-pointer">
+                      <RotateCcw className="w-4 h-4" />
+                      {decision === 'returned' ? 'Update Return Flags' : 'Return for Revision'}
+                    </button>
+                  </div>
+                  <div>
+                    <button onClick={() => handleDecision('reject')}
+                      className="w-full h-12 flex items-center justify-center gap-2 bg-white border-[1.5px] border-[#EF4444] text-[#EF4444] font-bold text-sm rounded-xl hover:bg-red-50 transition-colors cursor-pointer">
+                      <X className="w-4 h-4" />
+                      {decision === 'rejected' ? 'Update Rejection / Remarks' : 'Reject Proposal'}
+                    </button>
+                  </div>
+                </div>
+
+                <button onClick={onClose} className="w-full text-center text-gray-500 text-xs hover:underline pt-2">
+                  Close & Back to Event Approvals
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>

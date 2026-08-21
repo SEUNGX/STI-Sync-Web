@@ -9,14 +9,14 @@
  * DO NOT import directly from "firebase/app" in component files.
  */
 
-import { initializeApp, getApps, getApp } from "firebase/app";
+import { initializeApp, getApps, getApp, deleteApp } from "firebase/app";
 import { getFirestore }                    from "firebase/firestore";
-import { getAuth }                         from "firebase/auth";
+import { getAuth, createUserWithEmailAndPassword, signOut } from "firebase/auth";
 import { getStorage }                      from "firebase/storage";
 import { getAnalytics, isSupported }       from "firebase/analytics";
 
 // ─── Firebase Project Configuration ───────────────────────────────────────────
-const firebaseConfig = {
+export const firebaseConfig = {
   apiKey:            "AIzaSyCW-g385o-RT7GE_z-Q0FpMz9P5HR4LUuo",
   authDomain:        "sti-sync.firebaseapp.com",
   projectId:         "sti-sync",
@@ -40,6 +40,29 @@ export const auth = getAuth(app);
 
 /** Firebase Storage — for event cover images, documents, certificate templates */
 export const storage = getStorage(app);
+
+/**
+ * Creates a new Firebase Auth user account without disrupting the currently signed-in admin session.
+ */
+export const createSecondaryAuthUser = async (email: string, pass: string): Promise<string> => {
+  const secondaryAppName = `SecondaryAuth-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+  const secondaryApp = initializeApp(firebaseConfig, secondaryAppName);
+  const secondaryAuth = getAuth(secondaryApp);
+  try {
+    const cred = await createUserWithEmailAndPassword(secondaryAuth, email.trim().toLowerCase(), pass);
+    const uid = cred.user.uid;
+    await signOut(secondaryAuth);
+    await deleteApp(secondaryApp);
+    return uid;
+  } catch (err: any) {
+    await deleteApp(secondaryApp).catch(() => {});
+    if (err?.code === 'auth/email-already-in-use') {
+      console.info('[createSecondaryAuthUser] Email already registered in Firebase Auth.');
+      return '';
+    }
+    throw err;
+  }
+};
 
 /**
  * Firebase Analytics — conditionally initialized.

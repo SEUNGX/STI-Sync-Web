@@ -7,6 +7,7 @@ import { formatAppDate } from '../../../../utils/date';
 interface Step6Props {
   data: EventFormData;
   onUpdate: (data: Partial<EventFormData>) => void;
+  isOfficer?: boolean;
 }
 
 const REQUIRED_DOCUMENTS = [
@@ -26,7 +27,14 @@ const complianceItems = [
 
 const complianceScore = 83;
 
-export default function Step6Documents({ data, onUpdate }: Step6Props) {
+export default function Step6Documents({ data, onUpdate, isOfficer }: Step6Props) {
+  // Dynamic Theme Styling based on Officer vs Admin
+  const accentBorder = 'border-[#0E4EBD]';
+  const accentText = 'text-[#0E4EBD]';
+  const accentBg = 'bg-[#0E4EBD]';
+  const accentFocusRing = 'focus:ring-[#0E4EBD]';
+  const accentGradient = 'from-[#001A4D] to-[#0E4EBD]';
+
   useEffect(() => {
     if (!data.documents) {
       onUpdate({
@@ -85,13 +93,16 @@ export default function Step6Documents({ data, onUpdate }: Step6Props) {
         {/* Section A - Official Event Documents */}
         <div>
           <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2 border-l-4 border-[#83358E] pl-3">
+            <div className={`flex items-center gap-2 border-l-4 ${accentBorder} pl-3`}>
               <h3 className="text-[#001A4D] font-bold text-base">Official Event Documents</h3>
-              <span className="px-2 py-0.5 bg-[#83358E] text-white text-xs rounded">Admin Uploads</span>
+              <span className={`px-2 py-0.5 ${accentBg} text-white text-xs rounded`}>
+                {isOfficer ? 'Proposal Attachments' : 'Admin Uploads'}
+              </span>
             </div>
             <button
+              type="button"
               onClick={addDocument}
-              className="px-4 py-2 bg-[#1E70E8] text-white rounded-lg text-sm font-medium hover:bg-[#0E4EBD] flex items-center gap-2"
+              className="px-4 py-2 bg-[#1E70E8] text-white rounded-lg text-sm font-medium hover:bg-[#0E4EBD] flex items-center gap-2 cursor-pointer shadow-xs"
             >
               <Plus className="w-4 h-4" /> Add Document
             </button>
@@ -102,9 +113,9 @@ export default function Step6Documents({ data, onUpdate }: Step6Props) {
             {REQUIRED_DOCUMENTS.map((docDef) => {
               const docItem = documents.find(d => d.id === docDef.id);
               return (
-                <div key={docDef.id} className="border border-gray-200 rounded-lg p-4 hover:border-[#83358E] transition-colors">
+                <div key={docDef.id} className={`border border-gray-200 rounded-lg p-4 hover:${accentBorder} transition-colors bg-white`}>
                   <div className="flex items-start gap-3 mb-3">
-                    <FileText className="w-5 h-5 text-[#83358E] flex-shrink-0 mt-0.5" />
+                    <FileText className={`w-5 h-5 ${accentText} flex-shrink-0 mt-0.5`} />
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
                         <h4 className="font-medium text-gray-900 text-sm">{docDef.name}</h4>
@@ -113,7 +124,7 @@ export default function Step6Documents({ data, onUpdate }: Step6Props) {
                       <p className="text-xs text-gray-600">{docDef.desc}</p>
                     </div>
                   </div>
-                  <div className={`relative border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-[#83358E] cursor-pointer transition-colors overflow-hidden ${docItem?.fileUrl ? 'bg-green-50 border-green-300' : ''}`}>
+                  <div className={`relative border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:${accentBorder} cursor-pointer transition-colors overflow-hidden ${docItem?.fileUrl ? 'bg-green-50 border-green-300' : ''}`}>
                     <input 
                       type="file" 
                       accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
@@ -127,7 +138,7 @@ export default function Step6Documents({ data, onUpdate }: Step6Props) {
                     />
                     {uploadingDocId === docDef.id ? (
                       <>
-                        <Upload className="w-6 h-6 text-[#83358E] animate-bounce mx-auto mb-1" />
+                        <Upload className={`w-6 h-6 ${accentText} animate-bounce mx-auto mb-1`} />
                         <p className="text-xs text-gray-600">Uploading...</p>
                       </>
                     ) : docItem?.fileUrl ? (
@@ -149,7 +160,7 @@ export default function Step6Documents({ data, onUpdate }: Step6Props) {
 
             {/* Dynamic additional document fields */}
             {extraDocuments.map((doc) => (
-              <div key={doc.id} className="border border-[#1E70E8]/40 rounded-lg p-4">
+              <div key={doc.id} className="border border-[#1E70E8]/40 rounded-lg p-4 bg-white">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <FileText className="w-5 h-5 text-[#1E70E8]" />
@@ -158,10 +169,10 @@ export default function Step6Documents({ data, onUpdate }: Step6Props) {
                       placeholder={`Document name (e.g., Risk Management Plan)`}
                       value={doc.name}
                       onChange={(e) => updateDocumentName(doc.id, e.target.value)}
-                      className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#83358E] focus:border-transparent w-72"
+                      className={`px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 ${accentFocusRing} focus:border-transparent w-72`}
                     />
                   </div>
-                  <button onClick={() => removeDocument(doc.id)} className="text-red-500 hover:text-red-700 p-1">
+                  <button type="button" onClick={() => removeDocument(doc.id)} className="text-red-500 hover:text-red-700 p-1 cursor-pointer">
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
@@ -202,9 +213,11 @@ export default function Step6Documents({ data, onUpdate }: Step6Props) {
 
         {/* Section B - Compliance Checklist */}
         <div>
-          <div className="flex items-center gap-2 mb-4 border-l-4 border-[#83358E] pl-3">
+          <div className={`flex items-center gap-2 mb-4 border-l-4 ${accentBorder} pl-3`}>
             <h3 className="text-[#001A4D] font-bold text-base">Institutional Compliance Verification</h3>
-            <span className="px-2 py-0.5 bg-[#83358E] text-white text-xs rounded">Admin Only</span>
+            <span className={`px-2 py-0.5 ${accentBg} text-white text-xs rounded`}>
+              {isOfficer ? 'Proposal Review' : 'Admin Only'}
+            </span>
           </div>
 
           <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
@@ -240,7 +253,7 @@ export default function Step6Documents({ data, onUpdate }: Step6Props) {
                     {item.status === 'warning' && (
                       <div className="mt-2">
                         <p className="text-xs text-amber-700 mb-2">Required documents are missing</p>
-                        <button className="px-3 py-1.5 bg-amber-100 text-amber-700 rounded text-xs font-medium hover:bg-amber-200">
+                        <button type="button" className="px-3 py-1.5 bg-amber-100 text-amber-700 rounded text-xs font-medium hover:bg-amber-200 cursor-pointer">
                           Override & Proceed
                         </button>
                       </div>
@@ -254,20 +267,26 @@ export default function Step6Documents({ data, onUpdate }: Step6Props) {
 
         {/* Section C - Adviser Authorization */}
         <div>
-          <div className="flex items-center gap-2 mb-4 border-l-4 border-[#83358E] pl-3">
-            <h3 className="text-[#001A4D] font-bold text-base">SAO Adviser Authorization</h3>
-            <span className="px-2 py-0.5 bg-[#83358E] text-white text-xs rounded">Admin Only</span>
+          <div className={`flex items-center gap-2 mb-4 border-l-4 ${accentBorder} pl-3`}>
+            <h3 className="text-[#001A4D] font-bold text-base">
+              {isOfficer ? 'Officer Submission Acknowledgement' : 'SAO Adviser Authorization'}
+            </h3>
+            <span className={`px-2 py-0.5 ${accentBg} text-white text-xs rounded`}>
+              {isOfficer ? 'Officer' : 'Admin Only'}
+            </span>
           </div>
 
           <div className="p-6 bg-[#001A4D] border-4 border-[#FFC107] rounded-lg">
             <div className="flex items-start gap-4 mb-4">
               <Shield className="w-8 h-8 text-[#FFC107] flex-shrink-0" />
               <div>
-                <h4 className="text-white font-bold text-lg mb-2">SAO Adviser Authorization</h4>
+                <h4 className="text-white font-bold text-lg mb-2">
+                  {isOfficer ? 'Officer Proposal Acknowledgement' : 'SAO Adviser Authorization'}
+                </h4>
                 <p className="text-gray-300 text-sm">
-                  By proceeding to publish this event, you are certifying that all provided information is accurate,
-                  all compliance items are verified, and this event is hereby officially approved under your authority
-                  as SAO Adviser of STI College Ormoc.
+                  {isOfficer
+                    ? 'By submitting this event proposal, you certify that all information is accurate and has been reviewed by your organization officers.'
+                    : 'By proceeding to publish this event, you are certifying that all provided information is accurate, all compliance items are verified, and this event is hereby officially approved under your authority as SAO Adviser of STI College Ormoc.'}
                 </p>
               </div>
             </div>
@@ -279,20 +298,22 @@ export default function Step6Documents({ data, onUpdate }: Step6Props) {
                 onChange={(e) => setAuthorizationChecked(e.target.checked)}
                 className="mt-1 text-[#FFC107] bg-white/20 border-[#FFC107] rounded focus:ring-[#FFC107]"
               />
-              <span className="text-white font-medium">I authorize this event creation.</span>
+              <span className="text-white font-medium">
+                {isOfficer ? 'I certify this proposal is ready for SAO review.' : 'I authorize this event creation.'}
+              </span>
             </label>
 
             <div className="mt-4 pt-4 border-t border-white/20 grid grid-cols-2 gap-4">
               <div>
-                <div className="text-xs text-gray-400 mb-1">Adviser Name</div>
-                <div className="text-white font-medium">SAO Adviser</div>
+                <div className="text-xs text-gray-400 mb-1">Signatory</div>
+                <div className="text-white font-medium">{isOfficer ? 'Club Officer' : 'SAO Adviser'}</div>
               </div>
               <div>
                 <div className="text-xs text-gray-400 mb-1">Role</div>
-                <div className="text-white font-medium">System Administrator</div>
+                <div className="text-white font-medium">{isOfficer ? 'Event Lead' : 'System Administrator'}</div>
               </div>
               <div>
-                <div className="text-xs text-gray-400 mb-1">Authorization Date</div>
+                <div className="text-xs text-gray-400 mb-1">Date</div>
                 <div className="text-white font-medium">{formatAppDate(new Date())}</div>
               </div>
             </div>
@@ -351,7 +372,7 @@ export default function Step6Documents({ data, onUpdate }: Step6Props) {
               </div>
             </div>
 
-            <div className="p-3 bg-gradient-to-br from-[#001A4D] to-[#83358E] rounded-lg text-white text-center">
+            <div className={`p-3 bg-gradient-to-br ${accentGradient} rounded-lg text-white text-center shadow-xs`}>
               <Shield className="w-6 h-6 mx-auto mb-1 text-[#FFC107]" />
               <div className="text-xs font-bold mb-1">Compliance Status</div>
               <div className={`text-sm font-medium ${

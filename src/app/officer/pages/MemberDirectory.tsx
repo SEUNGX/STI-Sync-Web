@@ -201,9 +201,9 @@ export default function MemberDirectory() {
 
         <button
           onClick={() => setActiveTab('pending')}
-          className={`pb-3 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 relative ${
+          className={`pb-3 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 relative cursor-pointer ${
             activeTab === 'pending'
-              ? 'border-[#83358E] text-[#83358E]'
+              ? 'border-[#0E4EBD] text-[#0E4EBD]'
               : 'border-transparent text-gray-500 hover:text-gray-700'
           }`}
         >
@@ -419,14 +419,14 @@ export default function MemberDirectory() {
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="bg-[#F3E8FF] border border-[#83358E]/30 rounded-xl p-4 text-xs text-[#83358E] flex items-center justify-between">
+            <div className="bg-blue-50/70 border border-blue-200 rounded-xl p-4 text-xs text-[#0E4EBD] flex items-center justify-between shadow-xs">
               <div className="flex items-center gap-2 font-medium">
-                <AlertCircle className="w-4 h-4 text-[#83358E] flex-shrink-0" />
-                <span>
+                <AlertCircle className="w-4 h-4 text-[#0E4EBD] flex-shrink-0" />
+                <span className="text-gray-700">
                   Approving an applicant grants official club membership and automatically creates a membership fee payable if configured for this organization.
                 </span>
               </div>
-              <span className="font-bold font-mono">{filteredPendingMembers.length} Applicant(s)</span>
+              <span className="font-bold font-mono text-[#001A4D]">{filteredPendingMembers.length} Applicant(s)</span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -440,7 +440,7 @@ export default function MemberDirectory() {
                     <div>
                       <div className="flex items-start justify-between gap-3 mb-3">
                         <div className="flex items-center gap-3">
-                          <div className="w-12 h-12 bg-gradient-to-br from-[#83358E] to-[#001A4D] rounded-full flex items-center justify-center text-white font-bold text-base shadow-xs flex-shrink-0">
+                          <div className="w-12 h-12 bg-gradient-to-br from-[#001A4D] to-[#0E4EBD] rounded-full flex items-center justify-center text-white font-bold text-base shadow-xs flex-shrink-0">
                             {getInitials(member.studentName)}
                           </div>
                           <div>

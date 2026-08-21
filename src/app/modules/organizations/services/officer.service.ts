@@ -1,33 +1,71 @@
-import { collection, doc, writeBatch, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { collection, doc, writeBatch, updateDoc, increment, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../../../services/firebase';
 
-interface OfficerAssignmentData {
+export interface OfficerAssignmentData {
   roleId: string;
+  roleName?: string;
   studentId: string;
   studentName: string;
   email: string;
+  course?: string;
+  year?: string;
+  department?: string;
+  contactNumber?: string;
   password?: string;
 }
 
 export const batchCreateOfficers = async (organizationId: string, officers: OfficerAssignmentData[]) => {
+  if (!officers || officers.length === 0) return;
+
   const batch = writeBatch(db);
-  const collectionRef = collection(db, 'organization_officers');
+  const officersCollectionRef = collection(db, 'organization_officers');
+  const membersCollectionRef = collection(db, 'organization_members');
   
   for (const officer of officers) {
-    const docRef = doc(collectionRef);
-    batch.set(docRef, {
-      id: docRef.id,
+    // 1. Create Officer document
+    const officerDocRef = doc(officersCollectionRef);
+    batch.set(officerDocRef, {
+      id: officerDocRef.id,
       organizationId,
       roleId: officer.roleId,
+      roleName: officer.roleName || '',
       studentId: officer.studentId,
       studentName: officer.studentName,
       email: officer.email,
-      temporaryPassword: officer.password, // Store temporary password
       isActive: true,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
+
+    // 2. Create Member document (officers are automatically active organization members)
+    const memberDocRef = doc(membersCollectionRef);
+    batch.set(memberDocRef, {
+      id: memberDocRef.id,
+      organizationId,
+      studentId: officer.studentId,
+      studentName: officer.studentName,
+      email: officer.email,
+      course: officer.course || 'N/A',
+      year: officer.year || 'N/A',
+      department: officer.department || 'N/A',
+      contactNumber: officer.contactNumber || '',
+      status: 'active',
+      paymentStatus: 'paid',
+      isOfficer: true,
+      dateJoined: serverTimestamp(),
+      applicationDate: serverTimestamp(),
+      addedBy: 'Organization Creation',
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
   }
+
+  // 3. Atomically update organization memberCount
+  const orgDocRef = doc(db, 'organizations', organizationId);
+  batch.update(orgDocRef, {
+    memberCount: increment(officers.length),
+    updatedAt: serverTimestamp(),
+  });
   
   // Implement a timeout to prevent infinite hanging
   const commitPromise = batch.commit();

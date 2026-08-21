@@ -24,6 +24,7 @@ import {
   sendPasswordResetEmail,
 } from 'firebase/auth';
 import { auth, db } from '../../../../services/firebase';
+import { sendStudentWelcomeCredentialsEmail } from '../../../../services/email.service';
 import { formatCurrency } from '../../../utils/currency';
 import { formatAppDate } from '../../../utils/date';
 import { syncStudentPayablesForActiveEvents } from '../../finance/services/payable.service';
@@ -33,6 +34,7 @@ import type {
   StudentYearLevel,
   StudentSemester,
   StudentSex,
+  AcademicLevel,
 } from '../types/student.types';
 
 // ─── Collection ───────────────────────────────────────────────────────────────
@@ -50,6 +52,7 @@ export interface ManualStudentPayload {
   contactNumber: string;
 
   // Step 2 — Academic Info
+  academicLevel?: AcademicLevel;
   courseId:      string;
   courseName:    string;
   courseCode:    string;
@@ -63,6 +66,7 @@ export interface ManualStudentPayload {
   // Step 3 — Account Credentials
   email:         string;
   password:      string;
+  sendWelcomeEmail?: boolean;
 
   // Step 4 & 5 — Media (optional at creation; URLs filled after upload)
   profilePhotoUrl:  string;
@@ -81,14 +85,29 @@ export async function isStudentIdTaken(studentId: string): Promise<boolean> {
   return !snap.empty;
 }
 
-/** Returns true if a student with this email already exists in Firestore. */
+/** Returns true if an email is already registered across any user role (students, sas_admins, organization_advisers, organization_officers). */
 export async function isEmailTaken(email: string): Promise<boolean> {
-  const q = query(
-    collection(db, STUDENTS_COLLECTION),
-    where('email', '==', email.trim().toLowerCase())
-  );
-  const snap = await getDocs(q);
-  return !snap.empty;
+  const cleanEmail = email.trim().toLowerCase();
+  if (!cleanEmail) return false;
+
+  try {
+    const [studentsSnap, adminsSnap, advisersSnap, officersSnap] = await Promise.all([
+      getDocs(query(collection(db, STUDENTS_COLLECTION), where('email', '==', cleanEmail))),
+      getDocs(query(collection(db, 'sas_admins'), where('email', '==', cleanEmail))),
+      getDocs(query(collection(db, 'organization_advisers'), where('email', '==', cleanEmail))),
+      getDocs(query(collection(db, 'organization_officers'), where('email', '==', cleanEmail))),
+    ]);
+
+    return (
+      !studentsSnap.empty ||
+      !adminsSnap.empty ||
+      !advisersSnap.empty ||
+      !officersSnap.empty
+    );
+  } catch (err) {
+    console.warn('[isEmailTaken] Error checking user email uniqueness:', err);
+    return false;
+  }
 }
 
 // ─── Create ───────────────────────────────────────────────────────────────────
@@ -99,7 +118,7 @@ export async function isEmailTaken(email: string): Promise<boolean> {
  *  1. Validates studentId and email uniqueness.
  *  2. Creates a Firebase Auth account with the provided credentials.
  *  3. Writes the Firestore student document using the Auth UID.
- *  4. Sends a password reset / welcome email so the student can set their own password.
+ *  4. Syncs event payables and sends credentials email in background if enabled.
  *
  * @throws Error with a human-readable `.message` on any validation or Firebase failure.
  */
@@ -112,7 +131,6 @@ export async function createStudentManually(
     isStudentIdTaken(payload.studentId),
     isEmailTaken(payload.email),
   ]);
-
   if (idTaken) {
     throw new Error(`Student ID "${payload.studentId}" is already registered.`);
   }
@@ -140,7 +158,7 @@ export async function createStudentManually(
     throw new Error('Failed to create account. Please try again.');
   }
 
-  // ── 4. Write Firestore document ─────────────────────────────────────────
+  // ── 3. Write Firestore document ─────────────────────────────────────────
   const docRef = doc(db, STUDENTS_COLLECTION, authUid);
 
   const studentDoc: StudentDocument = {
@@ -153,6 +171,7 @@ export async function createStudentManually(
     sex:             payload.sex,
     contactNumber:   payload.contactNumber.trim(),
 
+    academicLevel:   payload.academicLevel || (String(payload.semester).includes('Trimester') ? 'SHS' : 'COLLEGE'),
     courseId:        payload.courseId,
     courseName:      payload.courseName,
     courseCode:      payload.courseCode,
@@ -162,9 +181,12 @@ export async function createStudentManually(
     section:         payload.section.trim(),
     schoolYear:      payload.schoolYear,
     semester:        payload.semester,
+    term:            payload.semester,
 
     email:           payload.email.trim().toLowerCase(),
     authUid,
+    requiresPasswordChange: true,
+    requiresChangePassword: true,
 
     profilePhotoUrl:  payload.profilePhotoUrl,
     schoolIdPhotoUrl: payload.schoolIdPhotoUrl,
@@ -179,20 +201,37 @@ export async function createStudentManually(
 
   await setDoc(docRef, studentDoc);
 
-  // ── 4. Auto-sync payables for active events & dues ───────────────────────
-  try {
-    await syncStudentPayablesForActiveEvents(studentDoc, addedByUid);
-  } catch (syncErr) {
-    console.warn('Could not auto-sync payables for new student:', syncErr);
-  }
+  // ── 4 & 5. Background Asynchronous Tasks (Payables Sync & Credentials Email) ──
+  // Run non-blocking so the admin registration completes immediately (<300ms)
+  void (async () => {
+    try {
+      await syncStudentPayablesForActiveEvents(studentDoc, addedByUid);
+    } catch (syncErr) {
+      console.warn('Could not auto-sync payables for new student:', syncErr);
+    }
 
-  // ── 5. Send welcome / password email ────────────────────────────────────
-  try {
-    await sendPasswordResetEmail(auth, payload.email.trim().toLowerCase());
-  } catch {
-    // Non-fatal: the account and document are already created.
-    console.warn('Could not send welcome email — student account is still active.');
-  }
+    if (payload.sendWelcomeEmail !== false) {
+      try {
+        await sendStudentWelcomeCredentialsEmail({
+          to: payload.email.trim().toLowerCase(),
+          studentName: `${payload.firstName} ${payload.lastName}`.trim(),
+          studentId: payload.studentId.trim(),
+          temporaryPassword: payload.password,
+          courseName: payload.courseName || payload.courseCode,
+          yearLevel: payload.yearLevel,
+          section: payload.section,
+        });
+      } catch (emailErr) {
+        console.warn('Could not send student credentials email:', emailErr);
+      }
+
+      try {
+        await sendPasswordResetEmail(auth, payload.email.trim().toLowerCase());
+      } catch {
+        console.warn('Could not send password reset email — student account is still active.');
+      }
+    }
+  })();
 
   return authUid;
 }

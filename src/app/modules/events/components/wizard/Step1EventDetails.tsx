@@ -23,7 +23,7 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer }: Step1Pr
   const { categories, loading: categoriesLoading } = useEventCategoriesStream();
 
   // Determine Creator Details
-  const showOfficerMode = isOfficer || !!officerProfile;
+  const showOfficerMode = isOfficer !== undefined ? isOfficer : !!officerProfile;
   const creatorName = showOfficerMode
     ? (officerProfile?.studentName || data.createdByName || 'Student Officer')
     : (adviserProfile?.displayName || 'SAO Adviser');
@@ -40,6 +40,13 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer }: Step1Pr
   };
 
   const creatorAvatar = showOfficerMode ? getInitials(creatorName) : 'SAO';
+
+  // Dynamic Theme Styling based on Officer vs Admin
+  const accentBorder = 'border-[#0E4EBD]';
+  const accentText = 'text-[#0E4EBD]';
+  const accentBg = 'bg-[#0E4EBD]';
+  const accentFocusRing = 'focus:ring-[#0E4EBD]';
+  const accentGradient = 'from-[#001A4D] to-[#0E4EBD]';
 
   // Active Orgs, Types, Categories
   const activeOrgs = orgs.filter(o => !o.archived);
@@ -112,7 +119,7 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer }: Step1Pr
 
         {/* Section A — Administrative Context */}
         <div>
-          <div className="border-l-4 border-[#83358E] pl-3 mb-4">
+          <div className={`border-l-4 ${accentBorder} pl-3 mb-4`}>
             <h3 className="text-[#001A4D] font-bold text-base">Administrative Context</h3>
           </div>
           <div className="space-y-4">
@@ -132,7 +139,7 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer }: Step1Pr
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Created By</label>
               <div className="flex items-center gap-3 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#0E4EBD] to-[#83358E] flex items-center justify-center text-white font-bold text-sm">
+                <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${accentGradient} flex items-center justify-center text-white font-bold text-sm`}>
                   {creatorAvatar}
                 </div>
                 <div>
@@ -146,7 +153,7 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer }: Step1Pr
 
         {/* Section B — Organization Hosting Assignment */}
         <div>
-          <div className="border-l-4 border-[#83358E] pl-3 mb-4">
+          <div className={`border-l-4 ${accentBorder} pl-3 mb-4`}>
             <h3 className="text-[#001A4D] font-bold text-base">
               {showOfficerMode ? 'Hosting Organization' : 'Institutional Organization Context'}
             </h3>
@@ -174,10 +181,10 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer }: Step1Pr
               </div>
             </div>
           ) : (
-            <div className="p-4 bg-gradient-to-r from-blue-50/70 via-indigo-50/50 to-purple-50/60 border border-blue-200/80 rounded-xl">
+            <div className="p-4 bg-blue-50/60 border border-blue-200 rounded-xl">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-[#001A4D] to-[#83358E] flex items-center justify-center text-white font-bold text-xs shadow-sm">
+                  <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-[#001A4D] to-[#0E4EBD] flex items-center justify-center text-white font-bold text-xs shadow-sm">
                     SAS
                   </div>
                   <div>
@@ -193,7 +200,7 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer }: Step1Pr
                   Institutional / SAS
                 </span>
               </div>
-              <p className="text-xs text-gray-500 mt-2.5 pt-2.5 border-t border-blue-200/60">
+              <p className="text-xs text-gray-500 mt-2.5 pt-2.5 border-t border-blue-200">
                 💡 <span className="font-medium text-gray-700">Scanner recruitment:</span> In Step 4 (Staff), you can select and recruit student officers as scanners from specific organizations or across all organizations.
               </p>
             </div>
@@ -202,7 +209,7 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer }: Step1Pr
 
         {/* Section C — Event Identity */}
         <div>
-          <div className="border-l-4 border-[#83358E] pl-3 mb-4">
+          <div className={`border-l-4 ${accentBorder} pl-3 mb-4`}>
             <h3 className="text-[#001A4D] font-bold text-base">Event Identity</h3>
           </div>
           <div className="space-y-4">
@@ -215,20 +222,20 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer }: Step1Pr
                 placeholder="Enter event title..."
                 value={data.title || ''}
                 onChange={(e) => updateField('title', e.target.value)}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+                className={`w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 ${accentFocusRing} focus:border-transparent`}
               />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Event Description <span className="text-red-500">*</span>
+                Event Description <span className="text-gray-400 font-normal text-xs">(Optional)</span>
               </label>
               <textarea
                 rows={5}
-                placeholder="Detailed description of the event..."
+                placeholder="Detailed description of the event (optional)..."
                 value={data.description || ''}
                 onChange={(e) => updateField('description', e.target.value)}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent resize-none"
+                className={`w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 ${accentFocusRing} focus:border-transparent resize-none`}
               />
             </div>
           </div>
@@ -236,7 +243,7 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer }: Step1Pr
 
         {/* Section D — Classification */}
         <div>
-          <div className="border-l-4 border-[#83358E] pl-3 mb-4">
+          <div className={`border-l-4 ${accentBorder} pl-3 mb-4`}>
             <h3 className="text-[#001A4D] font-bold text-base">Classification</h3>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -250,7 +257,7 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer }: Step1Pr
                   onUpdate({ eventTypeId: e.target.value, eventCategoryId: '' });
                 }}
                 disabled={typesLoading}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent disabled:opacity-50"
+                className={`w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 ${accentFocusRing} focus:border-transparent disabled:opacity-50`}
               >
                 <option value="">{typesLoading ? 'Loading types...' : 'Select type...'}</option>
                 {activeTypes.map(t => (
@@ -267,7 +274,7 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer }: Step1Pr
                 value={data.eventCategoryId || ''}
                 onChange={(e) => updateField('eventCategoryId', e.target.value)}
                 disabled={!data.eventTypeId || categoriesLoading}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent disabled:opacity-50"
+                className={`w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 ${accentFocusRing} focus:border-transparent disabled:opacity-50`}
               >
                 <option value="">
                   {!data.eventTypeId ? 'Select a type first' : categoriesLoading ? 'Loading...' : 'Select category...'}
@@ -282,7 +289,7 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer }: Step1Pr
 
         {/* Section E — Event Settings */}
         <div>
-          <div className="border-l-4 border-[#83358E] pl-3 mb-4">
+          <div className={`border-l-4 ${accentBorder} pl-3 mb-4`}>
             <h3 className="text-[#001A4D] font-bold text-base">Event Settings</h3>
           </div>
           <div className="space-y-3">
@@ -299,8 +306,9 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer }: Step1Pr
                     <p className="text-sm text-gray-600">{setting.desc}</p>
                   </div>
                   <button
+                    type="button"
                     onClick={() => updateField('enableQRTickets' as keyof EventFormData, !isQRActive)}
-                    className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ml-4 ${isQRActive ? 'bg-[#83358E]' : 'bg-gray-300'}`}
+                    className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ml-4 cursor-pointer ${isQRActive ? accentBg : 'bg-gray-300'}`}
                   >
                     <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${isQRActive ? 'translate-x-6' : ''}`} />
                   </button>
@@ -312,7 +320,7 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer }: Step1Pr
 
         {/* Section F — Event Media */}
         <div>
-          <div className="border-l-4 border-[#83358E] pl-3 mb-4">
+          <div className={`border-l-4 ${accentBorder} pl-3 mb-4`}>
             <h3 className="text-[#001A4D] font-bold text-base">Event Media</h3>
           </div>
           <div className="space-y-4">
@@ -320,7 +328,7 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer }: Step1Pr
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Event Banner Image <span className="text-red-500">*</span>
               </label>
-              <div className="relative border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-[#83358E] transition-colors cursor-pointer overflow-hidden group">
+              <div className={`relative border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:${accentBorder} transition-colors cursor-pointer overflow-hidden group`}>
                 <input 
                   type="file" 
                   accept="image/png, image/jpeg" 
@@ -337,20 +345,19 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer }: Step1Pr
                   </div>
                 ) : (
                   <>
-                    <Upload className={`w-8 h-8 ${isUploadingBanner ? 'text-[#83358E] animate-bounce' : 'text-gray-400'} mx-auto mb-2`} />
+                    <Upload className={`w-8 h-8 ${isUploadingBanner ? `${accentText} animate-bounce` : 'text-gray-400'} mx-auto mb-2`} />
                     <p className="text-sm text-gray-600">{isUploadingBanner ? 'Uploading...' : 'Click to upload or drag and drop'}</p>
                     <p className="text-xs text-gray-500 mt-1">PNG, JPG up to 10MB • Recommended: 1200x630px</p>
                   </>
                 )}
               </div>
             </div>
-
           </div>
         </div>
 
         {/* Section G — Event Visibility */}
         <div>
-          <div className="border-l-4 border-[#83358E] pl-3 mb-4">
+          <div className={`border-l-4 ${accentBorder} pl-3 mb-4`}>
             <h3 className="text-[#001A4D] font-bold text-base">Event Visibility</h3>
           </div>
           <div className="space-y-4">
@@ -362,8 +369,9 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer }: Step1Pr
                 <p className="text-sm text-gray-600">Controls if this event appears in the STI Sync mobile app.</p>
               </div>
               <button
+                type="button"
                 onClick={() => updateField('isVisible', data.isVisible === undefined ? false : !data.isVisible)}
-                className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ml-4 ${(data.isVisible !== false) ? 'bg-[#83358E]' : 'bg-gray-300'}`}
+                className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ml-4 cursor-pointer ${(data.isVisible !== false) ? accentBg : 'bg-gray-300'}`}
               >
                 <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${(data.isVisible !== false) ? 'translate-x-6' : ''}`} />
               </button>
@@ -378,7 +386,7 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer }: Step1Pr
                   type="datetime-local"
                   value={data.visibilityStart || ''}
                   onChange={(e) => updateField('visibilityStart', e.target.value)}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#83358E] focus:border-transparent"
+                  className={`w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 ${accentFocusRing} focus:border-transparent`}
                 />
                 <p className="text-xs text-gray-500 mt-1">If blank, it becomes visible immediately upon publishing.</p>
               </div>
@@ -392,7 +400,7 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer }: Step1Pr
         <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm sticky top-0">
           <h4 className="font-bold text-gray-900 mb-3">Student Feed Preview</h4>
           <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-            <div className="aspect-video bg-gradient-to-br from-[#0E4EBD] to-[#83358E] rounded-lg mb-3 flex items-center justify-center overflow-hidden">
+            <div className={`aspect-video bg-gradient-to-br ${accentGradient} rounded-lg mb-3 flex items-center justify-center overflow-hidden`}>
               {data.bannerImageUrl ? (
                 <img src={data.bannerImageUrl} alt="Banner Preview" className="w-full h-full object-cover" />
               ) : (
@@ -400,9 +408,9 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer }: Step1Pr
               )}
             </div>
             <h5 className="font-bold text-gray-900 mb-1">{data.title || 'Event Title'}</h5>
-            <p className="text-sm text-gray-600 mb-3">{data.tagline || 'Event tagline will appear here'}</p>
+            <p className="text-sm text-gray-600 mb-3 line-clamp-3">{data.description || 'Event description will appear here'}</p>
             <div className="flex items-center gap-2 mb-3">
-              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-[#0E4EBD] to-[#83358E]" />
+              <div className={`w-6 h-6 rounded-full bg-gradient-to-br ${accentGradient}`} />
               <span className="text-xs text-gray-600 font-medium">
                 {showOfficerMode ? (selectedOrg ? selectedOrg.name : 'Club Name') : 'Student Affairs and Services (SAS)'}
               </span>
@@ -417,9 +425,9 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer }: Step1Pr
           <div className="mt-4 pt-4 border-t border-gray-200">
             <h5 className="text-sm font-bold text-gray-900 mb-2">Admin Controls Preview</h5>
             <div className="flex flex-wrap gap-2">
-              <button className="px-3 py-1.5 text-xs border border-[#83358E] text-[#83358E] rounded hover:bg-[#83358E]/5 disabled:opacity-50">Edit</button>
-              <button className="px-3 py-1.5 text-xs border border-amber-600 text-amber-600 rounded hover:bg-amber-50 disabled:opacity-50">Suspend</button>
-              <button className="px-3 py-1.5 text-xs border border-red-600 text-red-600 rounded hover:bg-red-50 disabled:opacity-50">Cancel Event</button>
+              <button type="button" className={`px-3 py-1.5 text-xs border ${accentBorder} ${accentText} rounded hover:bg-gray-50 disabled:opacity-50`}>Edit</button>
+              <button type="button" className="px-3 py-1.5 text-xs border border-amber-600 text-amber-600 rounded hover:bg-amber-50 disabled:opacity-50">Suspend</button>
+              <button type="button" className="px-3 py-1.5 text-xs border border-red-600 text-red-600 rounded hover:bg-red-50 disabled:opacity-50">Cancel Event</button>
             </div>
           </div>
         </div>

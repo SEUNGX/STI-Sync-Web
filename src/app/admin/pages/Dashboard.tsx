@@ -25,7 +25,7 @@ import { useAllLiquidations } from "../../modules/finance/hooks/useLiquidationSt
 import { useOrganizationStream } from "../../modules/organizations/hooks/useOrganizationStream";
 import { formatCurrency } from "../../utils/currency";
 import { useIncomingDocuments } from "../../modules/documents/hooks/useDocumentStream";
-import { useSemesters } from "../../modules/academic/hooks/useAcademicStream";
+import { useActiveAcademicPeriods } from "../../modules/academic/hooks/useAcademicStream";
 import { getMillis, formatTimestampDate } from "../../modules/students/utils/date.utils";
 
 export function Dashboard() {
@@ -38,11 +38,7 @@ export function Dashboard() {
   const { liquidations = [] } = useAllLiquidations();
   const { data: organizations = [] } = useOrganizationStream();
   const { data: incomingDocs = [] } = useIncomingDocuments();
-  const { data: semesters = [] } = useSemesters();
-
-  const activeSemester = useMemo(() => {
-    return semesters.find((s) => s.status === "ACTIVE");
-  }, [semesters]);
+  const { activeCollegePeriod, activeShsPeriod } = useActiveAcademicPeriods();
 
   // ─── Time-of-Day Greeting ──────────────────────────────────────────────────
   const greeting = useMemo(() => {
@@ -216,13 +212,18 @@ export function Dashboard() {
         <div className="absolute left-0 top-0 bottom-0 w-2.5 bg-[#FFD41C]" />
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2 mb-1.5">
+            <div className="flex flex-wrap items-center gap-2 mb-1.5">
               <span className="px-3 py-0.5 rounded-full text-xs font-bold bg-[#FFD41C] text-[#001A4D] uppercase tracking-wider">
                 SAO Portal
               </span>
-              {activeSemester && (
+              {activeCollegePeriod && (
                 <span className="px-3 py-0.5 rounded-full text-xs font-semibold bg-white/20 text-white">
-                  {activeSemester.label} ({activeSemester.semester})
+                  College: {activeCollegePeriod.semester}
+                </span>
+              )}
+              {activeShsPeriod && (
+                <span className="px-3 py-0.5 rounded-full text-xs font-semibold bg-amber-400/25 text-amber-200 border border-amber-400/30">
+                  SHS: {activeShsPeriod.semester}
                 </span>
               )}
             </div>

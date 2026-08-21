@@ -270,13 +270,13 @@ export default function StudentDetailModal({
                   </div>
 
                   <div className="border border-gray-200 rounded-xl p-4 bg-gray-50 flex flex-col items-center">
-                    <span className="text-xs font-bold text-gray-700 uppercase mb-3">Physical School ID Card Photo</span>
-                    <div className="w-48 h-48 rounded-xl overflow-hidden bg-white border-2 border-gray-200 shadow-inner flex items-center justify-center">
+                    <span className="text-xs font-bold text-gray-700 uppercase mb-3">Physical School ID Card (Portrait)</span>
+                    <div className="w-52 h-72 aspect-[3/4] rounded-xl overflow-hidden bg-white border-2 border-gray-300 shadow-sm flex items-center justify-center p-1.5">
                       {student.schoolIdPhotoUrl ? (
                         <img 
                           src={student.schoolIdPhotoUrl} 
                           alt="School ID Card" 
-                          className="w-full h-full object-cover" 
+                          className="w-full h-full object-contain rounded-lg" 
                         />
                       ) : (
                         <span className="text-xs text-gray-400 italic">No school ID card photo uploaded</span>

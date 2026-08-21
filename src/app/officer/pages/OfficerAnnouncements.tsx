@@ -269,15 +269,15 @@ export default function OfficerAnnouncements() {
                         <Building2 className="w-3.5 h-3.5" /> All Organizations
                       </span>
                     ) : (
-                      <span className="flex items-center gap-1 text-purple-700 font-medium">
+                      <span className="flex items-center gap-1 text-blue-700 font-medium">
                         <Users className="w-3.5 h-3.5" /> Targeted Members
                         {announcement.targetDepartments && announcement.targetDepartments.length > 0 && (
-                          <span className="bg-purple-100 px-1.5 py-0.5 rounded text-[10px]">
+                          <span className="bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded text-[10px] font-bold">
                             Depts: {announcement.targetDepartments.join(', ')}
                           </span>
                         )}
                         {announcement.targetYearLevels && announcement.targetYearLevels.length > 0 && (
-                          <span className="bg-purple-100 px-1.5 py-0.5 rounded text-[10px]">
+                          <span className="bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded text-[10px] font-bold">
                             Years: {announcement.targetYearLevels.join(', ')}
                           </span>
                         )}

@@ -13,6 +13,7 @@ import {
   ChevronDown,
   Wallet,
   Files,
+  BarChart3,
 } from 'lucide-react';
 import { useOfficerProfile } from '../../auth/hooks/useOfficerProfile';
 import { useOrganizationStream } from '../../modules/organizations/hooks/useOrganizationStream';
@@ -39,6 +40,7 @@ const navGroups = [
       { icon: Wallet, label: 'Finance Center', path: '/officer/finance', badge: 2 },
       { icon: Receipt, label: 'Financial Liquidation', path: '/officer/liquidation', badge: null },
       { icon: Files, label: 'Documents', path: '/officer/documents', badge: 2 },
+      { icon: BarChart3, label: 'Reports & Analytics', path: '/officer/reports', badge: null },
     ]
   },
   {
@@ -80,11 +82,11 @@ export function OfficerSidebar() {
         </div>
 
         {/* Organization Context Switcher */}
-        <button className="w-full flex items-center justify-between px-3 py-2 bg-[#EEEDFE] rounded-lg hover:bg-[#EEEDFE]/80 transition-colors">
-          <span className="text-[#7F77DD] text-sm font-medium truncate pr-2" title={activeOrg?.name || ''}>
+        <button className="w-full flex items-center justify-between px-3 py-2 bg-blue-50/70 border border-blue-200/80 rounded-lg hover:bg-blue-100/70 transition-colors">
+          <span className="text-[#0E4EBD] text-sm font-semibold truncate pr-2" title={activeOrg?.name || ''}>
             {activeOrg ? activeOrg.name : (profile?.activeOrganizationId ? 'Managing Organization...' : 'Select Organization')}
           </span>
-          <ChevronDown className="w-[#7F77DD] flex-shrink-0 w-4 h-4" />
+          <ChevronDown className="text-[#0E4EBD] flex-shrink-0 w-4 h-4" />
         </button>
       </div>
 
@@ -92,7 +94,7 @@ export function OfficerSidebar() {
       <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-6 no-scrollbar">
         {navGroups.map((group, groupIdx) => (
           <div key={groupIdx}>
-            <h3 className="px-3 mb-2 text-xs font-semibold text-[#888780] uppercase tracking-wider">
+            <h3 className="px-3 mb-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">
               {group.title}
             </h3>
             <div className="space-y-1">
@@ -109,15 +111,15 @@ export function OfficerSidebar() {
                     to={item.path}
                     className={`relative flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all group ${
                       isActive
-                        ? 'bg-[#F3E8FF] text-[#83358E]'
-                        : 'text-[#888780] hover:text-[#001A4D] hover:bg-gray-50'
+                        ? 'bg-[#F0F6FF] text-[#0E4EBD] font-semibold'
+                        : 'text-gray-600 hover:text-[#001A4D] hover:bg-gray-50'
                     }`}
                   >
                     {isActive && (
-                      <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-[#83358E] rounded-r" />
+                      <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-[#0E4EBD] rounded-r" />
                     )}
-                    <Icon className="w-5 h-5 flex-shrink-0" />
-                    <span className="text-sm font-medium flex-1">{item.label}</span>
+                    <Icon className={`w-5 h-5 flex-shrink-0 ${isActive ? 'text-[#0E4EBD]' : 'text-gray-400 group-hover:text-[#001A4D]'}`} />
+                    <span className="text-sm flex-1">{item.label}</span>
                     {item.badge !== null && (
                       <span className={`w-2 h-2 rounded-full ${item.path === '/officer/certificates' ? 'bg-[#FFC107]' : 'bg-[#E24B4A]'}`} />
                     )}
@@ -132,19 +134,19 @@ export function OfficerSidebar() {
       {/* Officer Profile */}
       <div className="p-4 border-t border-[#E0E0E0]">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-[#7F77DD] rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0">
+          <div className="w-10 h-10 bg-gradient-to-br from-[#001A4D] to-[#0E4EBD] rounded-full flex items-center justify-center text-white font-bold text-sm shadow-xs flex-shrink-0">
             {initials}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-[#001A4D] text-sm font-medium truncate">{profile?.studentName || 'Officer'}</div>
-            <div className="text-[#888780] text-xs truncate">Organization Officer</div>
+            <div className="text-[#001A4D] text-sm font-semibold truncate">{profile?.studentName || 'Officer'}</div>
+            <div className="text-gray-400 text-xs truncate">Organization Officer</div>
           </div>
           <button
             onClick={handleLogout}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
             title="Logout"
           >
-            <LogOut className="w-4 h-4 text-[#888780]" />
+            <LogOut className="w-4 h-4 text-gray-500 hover:text-red-600" />
           </button>
         </div>
       </div>

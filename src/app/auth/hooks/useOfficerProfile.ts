@@ -15,6 +15,8 @@ export interface OfficerProfile {
   email: string;
   activeOrganizationId: string | null;
   activeRoleId: string | null;
+  isAdviser?: boolean;
+  requiresPasswordChange?: boolean;
 }
 
 const SESSION_KEY = 'sti_sync_officer_session';
@@ -45,8 +47,16 @@ export function useOfficerProfile() {
       return;
     }
 
-    const { studentId, studentName, email, activeOrganizationId, activeRoleId } = parsedSession;
-    setProfile({ studentId, studentName, email, activeOrganizationId, activeRoleId });
+    const { studentId, studentName, email, activeOrganizationId, activeRoleId, isAdviser, requiresPasswordChange } = parsedSession;
+    setProfile({
+      studentId,
+      studentName,
+      email,
+      activeOrganizationId,
+      activeRoleId,
+      isAdviser: isAdviser ?? false,
+      requiresPasswordChange: requiresPasswordChange ?? false,
+    });
 
     // Listen for their roles to ensure they are still active and to get their list of orgs
     const q = query(
@@ -115,12 +125,20 @@ export function useOfficerProfile() {
     localStorage.setItem(SESSION_KEY, JSON.stringify(newProfile));
   };
 
+  const markPasswordChanged = () => {
+    if (!profile) return;
+    const newProfile = { ...profile, requiresPasswordChange: false };
+    setProfile(newProfile);
+    localStorage.setItem(SESSION_KEY, JSON.stringify(newProfile));
+  };
+
   const logout = () => {
     localStorage.removeItem(SESSION_KEY);
+    sessionStorage.removeItem('sti_dismissed_pwd_reminder');
     setProfile(null);
     setRoles([]);
   };
 
-  return { profile, roles, activeOrgStatus, activeOrgName, loading, switchOrganization, logout };
+  return { profile, roles, activeOrgStatus, activeOrgName, loading, switchOrganization, markPasswordChanged, logout };
 }
 

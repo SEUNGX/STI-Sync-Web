@@ -33,6 +33,7 @@ import OfficerDocuments from "./officer/pages/OfficerDocuments";
 import MemberDirectory from "./officer/pages/MemberDirectory";
 import OfficerAnnouncements from "./officer/pages/OfficerAnnouncements";
 import OfficerSettings from "./officer/pages/OfficerSettings";
+import OfficerReportsPage from "./officer/pages/OfficerReportsPage";
 
 // Error Page
 import ErrorPage from "./ErrorPage";
@@ -93,6 +94,7 @@ export const router = createBrowserRouter([
       { path: "finance", Component: FinanceCenter },
       { path: "documents", Component: OfficerDocuments },
       { path: "members", Component: MemberDirectory },
+      { path: "reports", Component: OfficerReportsPage },
       { path: "organization", Component: () => <OfficerSettings defaultTab="organization" /> },
       { path: "announcements", Component: OfficerAnnouncements },
       { path: "settings", Component: OfficerSettings },

@@ -135,11 +135,14 @@ const checkStepModified = (stepName: string, currentData: EventFormData, baselin
       return (
         Boolean(currentData.attendanceEnabled !== false) !== Boolean(baseline.attendanceEnabled !== false) ||
         Boolean(currentData.certificatesEnabled !== false) !== Boolean(baseline.certificatesEnabled !== false) ||
+        (currentData.targetAudienceScope || '').trim() !== (baseline.targetAudienceScope || '').trim() ||
         (currentData.scope || '').trim() !== (baseline.scope || '').trim() ||
         Number(currentData.maxAttendees || 0) !== Number(baseline.maxAttendees || 0) ||
         (currentData.registrationDeadline || '').trim() !== (baseline.registrationDeadline || '').trim() ||
         Boolean(currentData.requiresRegistration) !== Boolean(baseline.requiresRegistration) ||
+        JSON.stringify(cleanStringArray(currentData.targetCourses)) !== JSON.stringify(cleanStringArray(baseline.targetCourses)) ||
         JSON.stringify(cleanStringArray(currentData.targetYearLevels)) !== JSON.stringify(cleanStringArray(baseline.targetYearLevels)) ||
+        JSON.stringify(cleanStringArray(currentData.targetSections)) !== JSON.stringify(cleanStringArray(baseline.targetSections)) ||
         JSON.stringify(cleanStringArray(currentData.targetDepartmentIds)) !== JSON.stringify(cleanStringArray(baseline.targetDepartmentIds)) ||
         JSON.stringify(cleanStringArray(currentData.allowedCourses)) !== JSON.stringify(cleanStringArray(baseline.allowedCourses)) ||
         JSON.stringify(cleanStringArray(currentData.allowedYearLevels)) !== JSON.stringify(cleanStringArray(baseline.allowedYearLevels)) ||
@@ -339,8 +342,8 @@ export default function OfficerEventProposalModal({ isOpen, onClose, initialDraf
       <div className="absolute inset-0 flex items-center justify-center p-4">
         <div className="relative w-full max-w-[1280px] h-[90vh] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden">
 
-          {/* Header — solid violet (officer pattern) */}
-          <div className="bg-[#83358E] px-6 py-4 flex items-center justify-between flex-shrink-0">
+          {/* Header — Deep Navy to Royal Blue */}
+          <div className="bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] px-6 py-4 flex items-center justify-between flex-shrink-0">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
                 <span className="text-white font-bold text-sm">S</span>
@@ -353,7 +356,7 @@ export default function OfficerEventProposalModal({ isOpen, onClose, initialDraf
                     ? 'Revise Event Proposal'
                     : 'Create Event Proposal'}
                 </p>
-                <p className="text-white/70 text-xs">
+                <p className="text-white/80 text-xs">
                   {currentOrg?.name || currentOrg?.acronym || 'My Organization'} {activeDraftId ? '· Resuming Draft' : ''}
                 </p>
               </div>
@@ -362,7 +365,7 @@ export default function OfficerEventProposalModal({ isOpen, onClose, initialDraf
               <span className="text-white/90 text-sm font-medium">
                 Step {currentStep + 1} of {activeSteps.length} — <span className="text-white font-bold">{currentStepName}</span>
               </span>
-              <button onClick={onClose} className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors">
+              <button onClick={onClose} className="text-white/80 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -405,8 +408,8 @@ export default function OfficerEventProposalModal({ isOpen, onClose, initialDraf
           )}
 
           {/* Progress bar */}
-          <div className="h-1 bg-white/20 bg-gray-100 flex-shrink-0">
-            <div className="h-full bg-[#83358E] transition-all duration-300" style={{ width: `${((currentStep + 1) / activeSteps.length) * 100}%` }} />
+          <div className="h-1 bg-gray-100 flex-shrink-0">
+            <div className="h-full bg-[#0E4EBD] transition-all duration-300" style={{ width: `${((currentStep + 1) / activeSteps.length) * 100}%` }} />
           </div>
 
           {/* Step navigator */}
@@ -418,9 +421,9 @@ export default function OfficerEventProposalModal({ isOpen, onClose, initialDraf
 
               return (
                 <button key={i} onClick={() => goTo(i)} disabled={i > currentStep}
-                  className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all flex items-center gap-1.5 ${
-                    i === currentStep ? 'bg-[#83358E] text-white' :
-                    i < currentStep ? 'bg-[#83358E]/80 text-white hover:bg-[#83358E]' :
+                  className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
+                    i === currentStep ? 'bg-[#001A4D] text-white font-bold shadow-xs' :
+                    i < currentStep ? 'bg-[#0E4EBD] text-white hover:bg-[#001A4D]' :
                     'bg-gray-100 text-gray-400 cursor-not-allowed'
                   }`}>
                   <span>{step}</span>
@@ -481,7 +484,7 @@ export default function OfficerEventProposalModal({ isOpen, onClose, initialDraf
           {/* Footer */}
           <div className="border-t border-gray-200 bg-white px-6 py-4 flex items-center justify-between flex-shrink-0">
             <button onClick={prev} disabled={currentStep === 0}
-              className="px-5 py-2.5 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+              className="px-5 py-2.5 border border-gray-300 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer">
               Previous
             </button>
 
@@ -490,13 +493,13 @@ export default function OfficerEventProposalModal({ isOpen, onClose, initialDraf
                 <button 
                   onClick={handleSaveDraft} 
                   disabled={saving || loading}
-                  className="px-5 py-2.5 border border-[#83358E] text-[#83358E] rounded-lg text-sm font-medium hover:bg-[#83358E]/5 disabled:opacity-50 transition-colors flex items-center gap-2"
+                  className="px-5 py-2.5 border border-[#0E4EBD] text-[#0E4EBD] rounded-xl text-sm font-bold hover:bg-blue-50 disabled:opacity-50 transition-colors flex items-center gap-2 cursor-pointer"
                 >
                   <Save className="w-4 h-4" />
                   {saving ? 'Saving...' : 'Save as Draft'}
                 </button>
                 <button onClick={next}
-                  className="px-5 py-2.5 bg-[#83358E] text-white rounded-lg text-sm font-medium hover:bg-[#6D2A78] transition-colors">
+                  className="px-5 py-2.5 bg-[#001A4D] hover:bg-[#0E4EBD] text-white rounded-xl text-sm font-bold transition-colors shadow-xs cursor-pointer">
                   Next Step
                 </button>
               </div>
@@ -504,9 +507,9 @@ export default function OfficerEventProposalModal({ isOpen, onClose, initialDraf
               <button 
                 onClick={handleSubmitProposal} 
                 disabled={saving || loading}
-                className="px-6 py-2.5 bg-[#83358E] text-white rounded-lg text-sm font-medium hover:bg-[#6D2A78] disabled:opacity-50 transition-colors flex items-center gap-2"
+                className="px-6 py-2.5 bg-[#001A4D] hover:bg-[#0E4EBD] text-white rounded-xl text-sm font-bold disabled:opacity-50 transition-colors flex items-center gap-2 shadow-xs cursor-pointer"
               >
-                <Send className="w-4 h-4" />
+                <Send className="w-4 h-4 text-[#FFD41C]" />
                 {saving || loading ? 'Submitting...' : (initialDraft?.proposalStatus === 'rejected' ? 'Revise & Resubmit Proposal' : 'Submit Proposal for SAO Approval')}
               </button>
             )}
