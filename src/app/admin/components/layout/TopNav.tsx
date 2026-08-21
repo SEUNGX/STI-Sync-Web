@@ -41,15 +41,17 @@ export function TopNav({ title, globalSearch, onSearchChange, onLogout, onNaviga
 
       {/* Right Side */}
       <div className="flex items-center gap-3">
-        {/* Quick Dev Data Seeder Trigger */}
-        <button
-          onClick={() => setShowSeederModal(true)}
-          title="Open Dev Test Data Seeder"
-          className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-xl text-amber-700 font-bold text-xs transition-all cursor-pointer shadow-2xs"
-        >
-          <Zap className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
-          <span className="hidden sm:inline">Dev Seeder</span>
-        </button>
+        {/* Quick Dev Data Seeder Trigger (Development Only) */}
+        {import.meta.env.DEV && (
+          <button
+            onClick={() => setShowSeederModal(true)}
+            title="Open Dev Test Data Seeder (Development Only)"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-xl text-amber-700 font-bold text-xs transition-all cursor-pointer shadow-2xs"
+          >
+            <Zap className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
+            <span className="hidden sm:inline">Dev Seeder</span>
+          </button>
+        )}
 
         {/* Search */}
         <div className="relative">
@@ -136,8 +138,10 @@ export function TopNav({ title, globalSearch, onSearchChange, onLogout, onNaviga
         </div>
       </div>
 
-      {/* Dev Test Data Seeder Modal */}
-      <DevDataSeederModal isOpen={showSeederModal} onClose={() => setShowSeederModal(false)} />
+      {/* Dev Test Data Seeder Modal (Development Only) */}
+      {import.meta.env.DEV && (
+        <DevDataSeederModal isOpen={showSeederModal} onClose={() => setShowSeederModal(false)} />
+      )}
     </div>
   );
 }
