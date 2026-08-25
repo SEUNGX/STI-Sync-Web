@@ -236,6 +236,59 @@ export async function createStudentManually(
   return authUid;
 }
 
+/**
+ * Automatically syncs a student's institutional status (ACTIVE vs INACTIVE)
+ * to their organization membership document(s) in `organization_members`.
+ */
+export async function syncOrgMembersOnStudentStatusChange(
+  studentId: string,
+  newStatus: StudentStatus
+): Promise<void> {
+  try {
+    const studentRef = doc(db, STUDENTS_COLLECTION, studentId);
+    const snap = await getDoc(studentRef);
+    if (!snap.exists()) return;
+    const student = snap.data() as StudentDocument;
+
+    const membersRef = collection(db, 'organization_members');
+    const queries = [
+      query(membersRef, where('studentId', '==', student.id)),
+    ];
+    if (student.studentId) {
+      queries.push(query(membersRef, where('studentId', '==', student.studentId)));
+    }
+
+    const snapshots = await Promise.all(queries.map((q) => getDocs(q)));
+    const matchingDocs: import('firebase/firestore').QueryDocumentSnapshot[] = [];
+    const seenIds = new Set<string>();
+
+    snapshots.forEach((s) => {
+      s.docs.forEach((d) => {
+        if (!seenIds.has(d.id)) {
+          seenIds.add(d.id);
+          matchingDocs.push(d);
+        }
+      });
+    });
+
+    if (matchingDocs.length === 0) return;
+
+    const batch = (await import('firebase/firestore')).writeBatch(db);
+    const orgMemberStatus = newStatus === 'ACTIVE' ? 'active' : 'inactive';
+
+    matchingDocs.forEach((mDoc) => {
+      batch.update(mDoc.ref, {
+        status: orgMemberStatus,
+        updatedAt: Timestamp.now(),
+      });
+    });
+
+    await batch.commit();
+  } catch (err) {
+    console.warn('Failed to sync organization membership status:', err);
+  }
+}
+
 // ─── Update ───────────────────────────────────────────────────────────────────
 
 export async function updateStudent(
@@ -252,6 +305,9 @@ export async function updateStudentStatus(
 ): Promise<void> {
   const ref = doc(db, STUDENTS_COLLECTION, id);
   await updateDoc(ref, { status, updatedAt: Timestamp.now() });
+
+  // Sync organization membership status automatically
+  await syncOrgMembersOnStudentStatusChange(id, status);
 
   if (status === 'ACTIVE') {
     try {
@@ -294,6 +350,8 @@ export async function reEnrollStudent(
     ...(updates || {}),
     updatedAt: Timestamp.now(),
   });
+  
+  await syncOrgMembersOnStudentStatusChange(id, 'ACTIVE');
 }
 
 export async function bulkReEnrollStudents(
@@ -331,6 +389,11 @@ export async function bulkReEnrollStudents(
     });
   }
   await batch.commit();
+
+  // Sync org membership status to active for promoted students
+  for (const id of studentIds) {
+    await syncOrgMembersOnStudentStatusChange(id, 'ACTIVE');
+  }
 }
 
 export async function inactivateOverdueStudents(studentIds: string[]): Promise<void> {

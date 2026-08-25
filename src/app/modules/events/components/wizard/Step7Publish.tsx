@@ -27,25 +27,39 @@ export default function Step7Publish({ data, onUpdate, onPublish, isPublishing, 
   const accentBg = 'bg-[#0E4EBD]';
   const accentGradient = 'from-[#001A4D] to-[#0E4EBD]';
 
-  // Validate steps based on real data (Admin does not require club hostingOrgId)
+  // Validate steps based on real proposal data
   const isDetailsComplete = showOfficerMode
-    ? (!!data.title && !!data.eventTypeId && !!data.hostingOrgId)
-    : (!!data.title && !!data.eventTypeId);
+    ? Boolean(data.title && data.eventTypeId && data.hostingOrgId)
+    : Boolean(data.title && data.eventTypeId);
 
-  const isScheduleComplete = !!data.semesterId && (!!data.venueId || !!data.customVenueName) && (data.sessions?.length ?? 0) > 0;
-  const isStaffComplete = true; // Automatically valid for admin & officer
-  const isBudgetValid = (data.totalApprovedBudget ?? 0) >= 0;
+  const isScheduleComplete = Boolean(
+    (data.venueId || data.customVenueName || data.eventFormat) && (data.sessions?.length ?? 0) > 0
+  );
+  const isStaffComplete = Boolean(
+    data.eventHeadUid || data.officerInChargeUid || (data.scanners && data.scanners.length > 0)
+  );
+  const isBudgetValid = (data.totalApprovedBudget ?? data.totalRequestedBudget ?? 0) >= 0;
+
+  const activityPropDoc = (data.documents || []).find(
+    (d) => d.id === 'req_activity_proposal' || (d.name || '').toLowerCase().includes('activity proposal')
+  );
+  const isDocumentUploaded = Boolean(activityPropDoc?.fileUrl);
+  const isCertified = Boolean(data.isCertified || data.officerAcknowledgement);
 
   const validationItems = [
-    { id: 1, label: 'Event details complete', desc: 'title, description, type', status: isDetailsComplete ? 'valid' : 'invalid' },
-    { id: 2, label: 'Schedule and venue assigned', desc: 'dates, sessions, venue', status: isScheduleComplete ? 'valid' : 'invalid' },
-    { id: 3, label: 'Participant settings configured', desc: 'limits, audience, attendance rules', status: 'valid' },
-    { id: 4, label: 'Staff fully assigned', desc: 'Event Head, Officer-in-Charge, scanners', status: isStaffComplete ? 'valid' : 'invalid' },
-    { id: 5, label: 'Budget requested', desc: 'amounts set, line items', status: isBudgetValid ? 'valid' : 'invalid' },
-    { id: 6, label: 'Required documents uploaded', desc: 'compliance verified', status: 'warning' },
+    { id: 1, label: 'Event details complete', desc: 'Title, description, type, and hosting organization', status: isDetailsComplete ? 'valid' : 'invalid' },
+    { id: 2, label: 'Schedule and venue assigned', desc: 'Session dates, time slots, and venue location', status: isScheduleComplete ? 'valid' : 'invalid' },
+    { id: 3, label: 'Participant settings configured', desc: 'Target audience, limits, and attendance rules', status: 'valid' },
+    { id: 4, label: 'Staff fully assigned', desc: 'Event Head, Officer-in-Charge, and scanners', status: isStaffComplete ? 'valid' : 'invalid' },
+    { id: 5, label: 'Budget requested', desc: 'Source of funds and itemized line items', status: isBudgetValid ? 'valid' : 'invalid' },
+    { id: 6, label: 'Activity Proposal uploaded', desc: 'Official Activity Proposal document attached', status: isDocumentUploaded ? 'valid' : 'invalid' },
+    { id: 7, label: 'Officer Proposal Acknowledgement', desc: 'Proposal certified accurate and ready for SAO review', status: isCertified ? 'valid' : 'invalid' },
   ];
 
-  const allValid = validationItems.filter(item => item.status === 'valid' || item.status === 'warning').length === validationItems.length;
+  const validCount = validationItems.filter(item => item.status === 'valid').length;
+  const totalCount = validationItems.length;
+  const compliancePct = Math.round((validCount / totalCount) * 100);
+  const allValid = validCount === totalCount;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
@@ -148,8 +162,8 @@ export default function Step7Publish({ data, onUpdate, onPublish, isPublishing, 
               <div className="flex-1">
                 <h3 className="text-sm font-bold text-gray-700 mb-2">Budget</h3>
                 <div className="space-y-2">
-                  <div className="text-2xl font-bold text-[#001A4D]">{formatCurrency(data.totalApprovedBudget || 0)}</div>
-                  <div className="text-xs text-gray-600">Total Approved Amount across {data.budgetItems?.length || 0} line items</div>
+                  <div className="text-2xl font-bold text-[#001A4D]">{formatCurrency(data.totalApprovedBudget || data.totalRequestedBudget || 0)}</div>
+                  <div className="text-xs text-gray-600">Total Amount across {data.budgetItems?.length || 0} line items</div>
                 </div>
               </div>
             </div>
@@ -158,8 +172,11 @@ export default function Step7Publish({ data, onUpdate, onPublish, isPublishing, 
 
         {/* Admin Validation Checklist */}
         <div className="border border-gray-200 rounded-lg overflow-hidden">
-          <div className="bg-[#001A4D] px-4 py-3">
-            <h3 className="text-white font-bold">Final Validation</h3>
+          <div className="bg-[#001A4D] px-4 py-3 flex items-center justify-between">
+            <h3 className="text-white font-bold">Final Validation Checklist</h3>
+            <span className="text-xs text-[#FFD41C] font-mono font-bold">
+              {validCount} / {totalCount} Validated
+            </span>
           </div>
 
           <div className="p-4 space-y-2">
@@ -191,7 +208,7 @@ export default function Step7Publish({ data, onUpdate, onPublish, isPublishing, 
               <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
                 <div className="w-5 h-5 rounded-full bg-red-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0 mt-0.5">!</div>
                 <p className="text-sm text-red-800">
-                  <strong>Resolve all validation issues before publishing this event.</strong> Please go back to previous steps and fill in missing information.
+                  <strong>Resolve all validation issues before submitting this event.</strong> Ensure the Activity Proposal document is attached and the Officer Proposal Acknowledgement is certified.
                 </p>
               </div>
             </div>
@@ -220,14 +237,16 @@ export default function Step7Publish({ data, onUpdate, onPublish, isPublishing, 
 
               <div className="p-3 bg-gradient-to-br from-[#001A4D] to-[#0E4EBD] rounded-lg text-white text-center shadow-xs">
                 <DollarSign className="w-5 h-5 mx-auto mb-1 text-[#FFD41C]" />
-                <div className="text-xl font-bold">{((data.totalApprovedBudget || 0)/1000).toFixed(1)}K</div>
+                <div className="text-xl font-bold">{((data.totalApprovedBudget || data.totalRequestedBudget || 0)/1000).toFixed(1)}K</div>
                 <div className="text-xs opacity-90">Budget</div>
               </div>
 
               <div className="p-3 bg-gradient-to-br from-[#FFC107] to-[#FFD41C] rounded-lg text-white text-center shadow-xs">
                 <Award className="w-5 h-5 mx-auto mb-1 text-[#001A4D]" />
-                <div className="text-xl font-bold text-[#001A4D]">83%</div>
-                <div className="text-xs text-[#001A4D]/80 font-medium">Compliance</div>
+                <div className="text-xl font-bold text-[#001A4D]">{compliancePct}%</div>
+                <div className="text-xs text-[#001A4D]/80 font-bold">
+                  {compliancePct === 100 ? 'Fully Compliant' : 'Compliance'}
+                </div>
               </div>
             </div>
 
@@ -264,7 +283,9 @@ export default function Step7Publish({ data, onUpdate, onPublish, isPublishing, 
               {isPublishing
                 ? 'Submitting...'
                 : showOfficerMode
-                ? (data.proposalStatus === 'rejected' ? 'Revise & Resubmit Proposal' : 'Submit Proposal for SAO Approval')
+                ? (data.proposalStatus === 'returned' || data.proposalStatus === 'rejected'
+                    ? 'Save Changes & Resubmit Proposal'
+                    : 'Submit Proposal for SAO Approval')
                 : 'Create & Publish Event'}
             </button>
 

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { X, Search, Loader2 } from 'lucide-react';
 import { useStudents } from '../../modules/students/hooks/useStudentStream';
 import { useSemesters } from '../../modules/academic/hooks/useAcademicStream';
+import { useOrgMembers } from '../../modules/organizations/hooks/useOrgMembers';
 import { addMember } from '../../modules/organizations/services/member.service';
 import type { AddMemberPayload } from '../../modules/organizations/types/member.types';
 
@@ -14,6 +15,7 @@ interface AddMemberModalProps {
 
 export function AddMemberModal({ isOpen, onClose, organizationId, addedBy }: AddMemberModalProps) {
   const { data: allStudents = [], loading: loadingStudents } = useStudents();
+  const { members: existingOrgMembers = [], loading: loadingMembers } = useOrgMembers(organizationId);
   const { data: semesters = [] } = useSemesters();
   
   const [searchQuery, setSearchQuery] = useState('');
@@ -93,12 +95,12 @@ export function AddMemberModal({ isOpen, onClose, organizationId, addedBy }: Add
         <div className="p-6 overflow-y-auto flex-1 space-y-4">
           {/* Quick Search Student */}
           <div className="relative">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Search Registered Student</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Search Eligible Student</label>
             <div className="relative">
               <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                placeholder="Search by name, ID, or email..."
+                placeholder="Search active student by name, ID, or email..."
                 value={searchQuery}
                 onChange={(e) => {
                   setSearchQuery(e.target.value);
@@ -108,35 +110,66 @@ export function AddMemberModal({ isOpen, onClose, organizationId, addedBy }: Add
                 className="w-full pl-9 pr-4 py-2 border border-[#E0E0E0] rounded-lg text-sm focus:ring-2 focus:ring-[#1E70E8] outline-none"
               />
             </div>
+            <p className="text-[11px] text-gray-500 mt-1">
+              Only active, enrolled students who are not yet members of this organization will be shown.
+            </p>
 
             {/* Dropdown */}
             {showDropdown && searchQuery.trim().length > 0 && (
               <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#E0E0E0] rounded-lg shadow-xl z-50 max-h-48 overflow-y-auto">
-                {loadingStudents ? (
-                  <div className="p-3 text-sm text-gray-500 text-center">Loading students...</div>
+                {loadingStudents || loadingMembers ? (
+                  <div className="p-3 text-sm text-gray-500 text-center">Loading eligible students...</div>
                 ) : (
                   (() => {
                     const query = searchQuery.trim().toLowerCase();
-                    const matches = allStudents.filter(s => {
-                      if (!s) return false;
-                      const fullName = `${s.firstName || ''} ${s.lastName || ''}`.toLowerCase();
-                      const sId = (s.studentId || '').toLowerCase();
-                      const sEmail = (s.email || '').toLowerCase();
-                      return fullName.includes(query) || sId.includes(query) || sEmail.includes(query);
-                    }).slice(0, 5);
+                    const existingMemberIds = new Set<string>();
+                    const existingMemberEmails = new Set<string>();
+
+                    existingOrgMembers.forEach((m) => {
+                      if (m.studentId) existingMemberIds.add(m.studentId.toLowerCase().trim());
+                      if (m.email) existingMemberEmails.add(m.email.toLowerCase().trim());
+                    });
+
+                    const matches = allStudents
+                      .filter((s) => {
+                        if (!s) return false;
+
+                        // 1. Exclude INACTIVE students
+                        if (s.status === 'INACTIVE') return false;
+
+                        // 2. Exclude students already in this org
+                        const sDocId = (s.id || '').toLowerCase().trim();
+                        const sSchoolId = (s.studentId || '').toLowerCase().trim();
+                        const sEmail = (s.email || '').toLowerCase().trim();
+
+                        if (
+                          existingMemberIds.has(sDocId) ||
+                          (sSchoolId && existingMemberIds.has(sSchoolId)) ||
+                          (sEmail && existingMemberEmails.has(sEmail))
+                        ) {
+                          return false;
+                        }
+
+                        // 3. Search query matching
+                        const fullName = `${s.firstName || ''} ${s.lastName || ''}`.toLowerCase();
+                        return fullName.includes(query) || sSchoolId.includes(query) || sEmail.includes(query);
+                      })
+                      .slice(0, 5);
 
                     if (matches.length === 0) {
-                      return <div className="p-3 text-sm text-gray-500 text-center">No students found</div>;
+                      return <div className="p-3 text-sm text-gray-500 text-center">No eligible active students found</div>;
                     }
 
-                    return matches.map(s => (
+                    return matches.map((s) => (
                       <div
                         key={s.id}
                         onClick={() => handleSelectStudent(s)}
                         className="px-4 py-2.5 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-0"
                       >
                         <div className="font-medium text-[#001A4D] text-sm">{s.firstName} {s.lastName}</div>
-                        <div className="text-xs text-gray-500">{s.studentId} • {s.courseCode || s.courseName || 'Student'}</div>
+                        <div className="text-xs text-gray-500">
+                          {s.studentId} • {s.courseCode || s.courseName || 'Student'} • <span className="text-green-600 font-semibold">Active</span>
+                        </div>
                       </div>
                     ));
                   })()
@@ -222,7 +255,7 @@ export function AddMemberModal({ isOpen, onClose, organizationId, addedBy }: Add
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Initial Payment Status</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Membership Payment</label>
               <select
                 value={formData.paymentStatus}
                 onChange={(e) => setFormData({ ...formData, paymentStatus: e.target.value as 'paid' | 'outstanding' })}

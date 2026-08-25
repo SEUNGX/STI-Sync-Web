@@ -18,6 +18,9 @@ import {
   Building2,
   Loader2,
   RotateCcw,
+  Search,
+  Maximize2,
+  Shield,
 } from 'lucide-react';
 import { collection, query, where, onSnapshot, collectionGroup } from 'firebase/firestore';
 import { db } from '../../../services/firebase';
@@ -28,6 +31,8 @@ import { formatAppDate, formatAppDateTime } from '../../utils/date';
 import type { PayableDocument } from '../../modules/finance/types/payable.types';
 import { updateMemberStatus } from '../../modules/organizations/services/member.service';
 import { useOfficerProfile } from '../../auth/hooks/useOfficerProfile';
+import { useRoles } from '../../modules/roles/hooks/useRoles';
+import { useStudents } from '../../modules/students/hooks/useStudentStream';
 
 interface MemberProfilePanelProps {
   member: OrganizationMemberDocument;
@@ -47,6 +52,9 @@ export function MemberProfilePanel({
   onRemoveMember,
 }: MemberProfilePanelProps) {
   const { profile } = useOfficerProfile();
+  const { data: roles = [] } = useRoles();
+  const { data: allStudents = [] } = useStudents();
+
   const activeOrgId = profile?.activeOrganizationId || member.organizationId || '';
 
   const [activeTab, setActiveTab] = useState<ModalTab>('ledger');
@@ -56,6 +64,49 @@ export function MemberProfilePanel({
   const [loadingAttendance, setLoadingAttendance] = useState(true);
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+
+  // Filters & Search states
+  const [payableSearch, setPayableSearch] = useState('');
+  const [payableStatusFilter, setPayableStatusFilter] = useState('All');
+  const [payableTypeFilter, setPayableTypeFilter] = useState('All');
+
+  const [attendanceSearch, setAttendanceSearch] = useState('');
+  const [attendanceStatusFilter, setAttendanceStatusFilter] = useState('All');
+
+  // Lightbox Image Preview
+  const [enlargedImage, setEnlargedImage] = useState<{ url: string; title: string } | null>(null);
+
+  // Match student document from `students` collection for middle name & profile picture
+  const studentDoc = useMemo(() => {
+    return allStudents.find(
+      (s) =>
+        s.id === member.studentId ||
+        s.studentId === member.studentId ||
+        (s.email && member.email && s.email.toLowerCase() === member.email.toLowerCase())
+    );
+  }, [allStudents, member]);
+
+  // Full Name including Middle Name
+  const fullNameWithMiddle = useMemo(() => {
+    if (studentDoc?.firstName || studentDoc?.lastName) {
+      return [studentDoc.firstName, studentDoc.middleName, studentDoc.lastName]
+        .filter(Boolean)
+        .join(' ')
+        .trim();
+    }
+    return member.studentName || 'Student';
+  }, [studentDoc, member]);
+
+  // Resolve Officer Role / Position Name
+  const officerPositionName = useMemo(() => {
+    if (!officerRecord) return null;
+    const roleDoc = roles.find((r) => r.id === officerRecord.roleId);
+    return roleDoc?.name || officerRecord.roleName || officerRecord.roleId || 'Officer';
+  }, [officerRecord, roles]);
+
+  // Profile Photo URL
+  const profilePhotoUrl =
+    studentDoc?.profilePhotoUrl || (member as any).profilePhotoUrl || (member as any).photoUrl || '';
 
   const getInitials = (name: string) =>
     (name || 'Student')
@@ -67,7 +118,7 @@ export function MemberProfilePanel({
 
   const formattedDateJoined = formatAppDate(member.dateJoined, 'Recently Joined');
 
-  // ─── Real-time Payables & Financial Ledger Listener (Scoped to Student) ────
+  // ─── Real-time Payables & Financial Ledger Listener ──────────────────────────
   useEffect(() => {
     if (!member) return;
     setLoadingPayables(true);
@@ -75,7 +126,6 @@ export function MemberProfilePanel({
     const sId = member.studentId;
     const payablesRef = collection(db, 'payables');
 
-    // Subscribe to payables matching either studentId or studentSchoolId
     const q1 = query(payablesRef, where('studentId', '==', sId));
     const q2 = query(payablesRef, where('studentSchoolId', '==', sId));
 
@@ -108,11 +158,38 @@ export function MemberProfilePanel({
     };
   }, [member]);
 
-  // ─── Filter Payables to THIS Specific Organization (All Events, Fines, Dues) ─
+  // ─── Filter Payables to THIS Specific Organization ──────────────────────────
   const orgPayables = useMemo(() => {
     if (!activeOrgId) return allPayables;
     return allPayables.filter((p) => p.organizationId === activeOrgId);
   }, [allPayables, activeOrgId]);
+
+  // Filtered Payables (Search & Dropdowns)
+  const filteredOrgPayables = useMemo(() => {
+    return orgPayables.filter((p) => {
+      const q = payableSearch.trim().toLowerCase();
+      const matchesSearch =
+        !q ||
+        (p.label || '').toLowerCase().includes(q) ||
+        (p.type || '').toLowerCase().includes(q) ||
+        (p.organizationName || '').toLowerCase().includes(q);
+
+      const assigned = Number(p.assignedAmount) || 0;
+      const paid = Number(p.paidAmount) || 0;
+      const bal = assigned - paid;
+      const isSettled = p.status === 'paid' || p.status === 'waived' || bal <= 0;
+
+      let matchesStatus = true;
+      if (payableStatusFilter === 'outstanding') matchesStatus = !isSettled && bal > 0;
+      if (payableStatusFilter === 'paid') matchesStatus = isSettled;
+      if (payableStatusFilter === 'partial') matchesStatus = p.status === 'partial';
+
+      let matchesType = true;
+      if (payableTypeFilter !== 'All') matchesType = p.type === payableTypeFilter;
+
+      return matchesSearch && matchesStatus && matchesType;
+    });
+  }, [orgPayables, payableSearch, payableStatusFilter, payableTypeFilter]);
 
   // ─── Real-time Attendance History Logs Listener ────────────────────────────
   useEffect(() => {
@@ -157,12 +234,30 @@ export function MemberProfilePanel({
     return () => unsubscribe();
   }, [member]);
 
+  // Filtered Attendances (Search & Dropdowns)
+  const filteredAttendances = useMemo(() => {
+    return attendances.filter((att) => {
+      const q = attendanceSearch.trim().toLowerCase();
+      const eventName = (att.eventName || att.event || '').toLowerCase();
+      const gateType = (att.gateType || '').toLowerCase();
+      const matchesSearch = !q || eventName.includes(q) || gateType.includes(q);
+
+      const attStatus = (att.status || 'Present').toLowerCase();
+      let matchesStatus = true;
+      if (attendanceStatusFilter !== 'All') {
+        matchesStatus = attStatus === attendanceStatusFilter.toLowerCase();
+      }
+
+      return matchesSearch && matchesStatus;
+    });
+  }, [attendances, attendanceSearch, attendanceStatusFilter]);
+
   // Handle Reactivate Member Action
   const handleReactivate = async () => {
     setIsUpdatingStatus(true);
     try {
       await updateMemberStatus(member.id, 'active', profile?.studentId || 'Officer');
-      setActionFeedback(`Successfully reactivated ${member.studentName}! Membership is now Active.`);
+      setActionFeedback(`Successfully reactivated ${fullNameWithMiddle}! Membership is now Active.`);
       setTimeout(() => setActionFeedback(null), 4000);
     } catch (err: any) {
       console.error(err);
@@ -172,7 +267,7 @@ export function MemberProfilePanel({
     }
   };
 
-  // Financial Computations for this Specific Organization
+  // Financial Computations
   const totalAssigned = useMemo(
     () => orgPayables.reduce((sum, p) => sum + (Number(p.assignedAmount) || 0), 0),
     [orgPayables]
@@ -186,23 +281,45 @@ export function MemberProfilePanel({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
       <div
-        className="bg-white rounded-3xl w-full max-w-4xl max-h-[90vh] shadow-2xl flex flex-col overflow-hidden border border-[#E0E0E0] animate-in zoom-in-95 duration-200"
+        className="bg-white rounded-3xl w-full max-w-4xl h-[85vh] shadow-2xl flex flex-col overflow-hidden border border-[#E0E0E0] animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
         <div className="bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] px-6 py-4 flex items-center justify-between text-white flex-shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 bg-white/20 rounded-full flex items-center justify-center text-white font-bold text-base shadow-inner backdrop-blur-sm">
-              {getInitials(member.studentName)}
+            {/* Profile Picture with Click to Enlarge */}
+            <div
+              onClick={() => {
+                if (profilePhotoUrl) {
+                  setEnlargedImage({ url: profilePhotoUrl, title: fullNameWithMiddle });
+                }
+              }}
+              className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-base shadow-inner overflow-hidden border-2 border-white/30 flex-shrink-0 ${
+                profilePhotoUrl ? 'cursor-pointer hover:opacity-90 hover:scale-105 transition-all' : ''
+              }`}
+              title={profilePhotoUrl ? 'Click to enlarge profile picture' : fullNameWithMiddle}
+            >
+              {profilePhotoUrl ? (
+                <img src={profilePhotoUrl} alt={fullNameWithMiddle} className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full bg-white/20 text-white flex items-center justify-center">
+                  {getInitials(fullNameWithMiddle)}
+                </div>
+              )}
             </div>
+
             <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg font-bold leading-tight">{member.studentName}</h2>
-                {officerRecord && (
-                  <span className="px-2 py-0.5 bg-[#FFD41C] text-[#001A4D] text-[10px] font-bold rounded-full uppercase flex items-center gap-1">
-                    <Crown className="w-3 h-3" /> {officerRecord.roleId || 'Officer'}
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-lg font-bold leading-tight">{fullNameWithMiddle}</h2>
+
+                {/* Officer Role Badge */}
+                {officerRecord && officerPositionName && (
+                  <span className="px-2.5 py-0.5 bg-[#FFD41C] text-[#001A4D] text-[11px] font-extrabold rounded-full uppercase flex items-center gap-1 shadow-xs border border-[#FFC107]">
+                    <Crown className="w-3.5 h-3.5 text-[#001A4D]" />
+                    {officerPositionName}
                   </span>
                 )}
+
                 {member.status !== 'active' && (
                   <span className="px-2 py-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full uppercase">
                     {member.status}
@@ -225,7 +342,7 @@ export function MemberProfilePanel({
 
         {/* Action feedback toast */}
         {actionFeedback && (
-          <div className="p-3.5 bg-green-50 border-b border-green-200 flex items-center gap-2 text-xs font-semibold text-green-800 animate-in fade-in">
+          <div className="p-3 bg-green-50 border-b border-green-200 flex items-center gap-2 text-xs font-semibold text-green-800 animate-in fade-in flex-shrink-0">
             <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0" />
             <span>{actionFeedback}</span>
           </div>
@@ -248,19 +365,19 @@ export function MemberProfilePanel({
 
             <button
               onClick={() => setActiveTab('overview')}
-              className={`py-3.5 text-sm font-bold border-b-2 transition-all flex items-center gap-2 ${
+              className={`py-3.5 text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
                 activeTab === 'overview'
                   ? 'border-[#0E4EBD] text-[#0E4EBD]'
                   : 'border-transparent text-gray-500 hover:text-gray-800'
               }`}
             >
               <User className="w-4 h-4" />
-              Member Profile & Info
+              Member Profile &amp; Info
             </button>
 
             <button
               onClick={() => setActiveTab('attendance')}
-              className={`py-3.5 text-sm font-bold border-b-2 transition-all flex items-center gap-2 ${
+              className={`py-3.5 text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
                 activeTab === 'attendance'
                   ? 'border-[#0E4EBD] text-[#0E4EBD]'
                   : 'border-transparent text-gray-500 hover:text-gray-800'
@@ -286,7 +403,7 @@ export function MemberProfilePanel({
 
         {/* Modal Scrollable Body */}
         <div className="p-6 overflow-y-auto flex-1 space-y-6">
-          {/* ─── TAB 1: FINANCIAL LEDGER & PAYABLES (SPECIFIC TO THIS ORG) ──── */}
+          {/* ─── TAB 1: FINANCIAL LEDGER & PAYABLES (STATEMENT OF ACCOUNT) ──── */}
           {activeTab === 'ledger' && (
             <div className="space-y-5">
               {/* Financial Metrics Summary Grid */}
@@ -298,7 +415,7 @@ export function MemberProfilePanel({
                   <div className="text-2xl font-bold font-mono text-[#001A4D] mt-1">
                     {formatCurrency(totalAssigned)}
                   </div>
-                  <span className="text-[11px] text-gray-400">Club dues, fines & event fees</span>
+                  <span className="text-[11px] text-gray-400">Club dues, fines &amp; event fees</span>
                 </div>
 
                 <div className="p-4 bg-green-50/60 border border-green-200 rounded-2xl">
@@ -338,15 +455,49 @@ export function MemberProfilePanel({
                 </div>
               </div>
 
-              {/* Payables Ledger Table */}
+              {/* Payables Search & Filters */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 bg-gray-50/80 p-3 rounded-xl border border-gray-200">
+                <div className="flex-1 relative">
+                  <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Search payable item or fee name..."
+                    value={payableSearch}
+                    onChange={(e) => setPayableSearch(e.target.value)}
+                    className="w-full pl-9 pr-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-[#0E4EBD]/30"
+                  />
+                </div>
+                <select
+                  value={payableStatusFilter}
+                  onChange={(e) => setPayableStatusFilter(e.target.value)}
+                  className="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-medium text-gray-700 outline-none"
+                >
+                  <option value="All">All Statuses</option>
+                  <option value="outstanding">Outstanding / Unpaid</option>
+                  <option value="paid">Paid / Settled</option>
+                  <option value="partial">Partial Payment</option>
+                </select>
+                <select
+                  value={payableTypeFilter}
+                  onChange={(e) => setPayableTypeFilter(e.target.value)}
+                  className="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-medium text-gray-700 outline-none"
+                >
+                  <option value="All">All Item Types</option>
+                  <option value="membership_fee">Membership Fee</option>
+                  <option value="event_fee">Event Fee</option>
+                  <option value="fine">Fine / Penalty</option>
+                </select>
+              </div>
+
+              {/* Scrollable Payables Ledger Table */}
               <div className="bg-white border border-[#E0E0E0] rounded-2xl overflow-hidden shadow-2xs">
                 <div className="px-5 py-3.5 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
                   <h4 className="font-bold text-[#001A4D] text-sm flex items-center gap-2">
                     <Receipt className="w-4 h-4 text-[#0E4EBD]" />
-                    Statement of Account & Organization Dues
+                    Statement of Account &amp; Organization Dues
                   </h4>
                   <span className="text-xs text-gray-500 font-mono">
-                    {orgPayables.length} record(s) found
+                    {filteredOrgPayables.length} of {orgPayables.length} record(s)
                   </span>
                 </div>
 
@@ -355,18 +506,15 @@ export function MemberProfilePanel({
                     <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-[#0E4EBD]" />
                     Loading student ledger...
                   </div>
-                ) : orgPayables.length === 0 ? (
+                ) : filteredOrgPayables.length === 0 ? (
                   <div className="p-10 text-center text-gray-400">
                     <Coins className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-                    <p className="font-bold text-gray-600">No payables recorded for this member in this organization.</p>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      Membership dues, event fees, and fines assigned by this organization will appear here.
-                    </p>
+                    <p className="font-bold text-gray-600">No payables match your filters.</p>
                   </div>
                 ) : (
-                  <div className="overflow-x-auto">
+                  <div className="max-h-[300px] overflow-y-auto">
                     <table className="w-full text-left text-xs">
-                      <thead className="bg-gray-50/80 text-gray-600 font-bold uppercase tracking-wider border-b border-gray-200">
+                      <thead className="bg-gray-100 text-gray-700 font-bold uppercase tracking-wider border-b border-gray-200 sticky top-0 z-10">
                         <tr>
                           <th className="px-5 py-3">Payable Item</th>
                           <th className="px-5 py-3">Type</th>
@@ -377,7 +525,7 @@ export function MemberProfilePanel({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
-                        {orgPayables.map((p) => {
+                        {filteredOrgPayables.map((p) => {
                           const assigned = Number(p.assignedAmount) || 0;
                           const paid = Number(p.paidAmount) || 0;
                           const bal = assigned - paid;
@@ -436,13 +584,17 @@ export function MemberProfilePanel({
           {/* ─── TAB 2: MEMBER PROFILE OVERVIEW ─────────────────────────────── */}
           {activeTab === 'overview' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Academic & Personal Information */}
+              {/* Academic & Identity Information */}
               <div className="bg-gray-50/70 border border-gray-200 rounded-2xl p-5 space-y-4">
                 <h4 className="font-bold text-[#001A4D] text-sm flex items-center gap-2">
-                  <GraduationCap className="w-4 h-4 text-[#0E4EBD]" /> Academic & Identity Details
+                  <GraduationCap className="w-4 h-4 text-[#0E4EBD]" /> Academic &amp; Identity Details
                 </h4>
 
                 <div className="space-y-2.5 text-xs">
+                  <div className="flex justify-between py-1.5 border-b border-gray-200">
+                    <span className="text-gray-500">Full Name</span>
+                    <span className="font-bold text-[#001A4D]">{fullNameWithMiddle}</span>
+                  </div>
                   <div className="flex justify-between py-1.5 border-b border-gray-200">
                     <span className="text-gray-500">Student ID Number</span>
                     <span className="font-bold font-mono text-[#001A4D]">{member.studentId}</span>
@@ -469,6 +621,16 @@ export function MemberProfilePanel({
                 </h4>
 
                 <div className="space-y-2.5 text-xs">
+                  {/* Officer Position Display */}
+                  {officerRecord && officerPositionName && (
+                    <div className="flex justify-between py-1.5 border-b border-gray-200 bg-amber-50/80 -mx-2 px-2 rounded-lg">
+                      <span className="text-amber-900 font-bold flex items-center gap-1">
+                        <Crown className="w-3.5 h-3.5 text-amber-600" /> Officer Position
+                      </span>
+                      <span className="font-bold text-amber-900 uppercase">{officerPositionName}</span>
+                    </div>
+                  )}
+
                   <div className="flex justify-between py-1.5 border-b border-gray-200">
                     <span className="text-gray-500">Date Joined</span>
                     <span className="font-semibold text-gray-800">{formattedDateJoined}</span>
@@ -498,67 +660,93 @@ export function MemberProfilePanel({
 
           {/* ─── TAB 3: ATTENDANCE HISTORY ──────────────────────────────────── */}
           {activeTab === 'attendance' && (
-            <div className="bg-white border border-[#E0E0E0] rounded-2xl overflow-hidden shadow-2xs">
-              <div className="px-5 py-3.5 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
-                <h4 className="font-bold text-[#001A4D] text-sm flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-[#0E4EBD]" /> Event Attendance Logs
-                </h4>
-                <span className="text-xs text-gray-500 font-mono">{attendances.length} event(s)</span>
+            <div className="space-y-4">
+              {/* Attendance Search & Filters */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 bg-gray-50/80 p-3 rounded-xl border border-gray-200">
+                <div className="flex-1 relative">
+                  <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Search event name or gate type..."
+                    value={attendanceSearch}
+                    onChange={(e) => setAttendanceSearch(e.target.value)}
+                    className="w-full pl-9 pr-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-[#0E4EBD]/30"
+                  />
+                </div>
+                <select
+                  value={attendanceStatusFilter}
+                  onChange={(e) => setAttendanceStatusFilter(e.target.value)}
+                  className="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-medium text-gray-700 outline-none"
+                >
+                  <option value="All">All Attendance Statuses</option>
+                  <option value="Present">Present</option>
+                  <option value="Late">Late</option>
+                  <option value="Absent">Absent</option>
+                </select>
               </div>
 
-              {loadingAttendance ? (
-                <div className="p-10 text-center text-gray-400">
-                  <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-[#0E4EBD]" />
-                  Loading attendance scans...
+              {/* Scrollable Attendance History Table */}
+              <div className="bg-white border border-[#E0E0E0] rounded-2xl overflow-hidden shadow-2xs">
+                <div className="px-5 py-3.5 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+                  <h4 className="font-bold text-[#001A4D] text-sm flex items-center gap-2">
+                    <Calendar className="w-4 h-4 text-[#0E4EBD]" /> Event Attendance Logs
+                  </h4>
+                  <span className="text-xs text-gray-500 font-mono">
+                    {filteredAttendances.length} of {attendances.length} event(s)
+                  </span>
                 </div>
-              ) : attendances.length === 0 ? (
-                <div className="p-10 text-center text-gray-400">
-                  <Calendar className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-                  <p className="font-bold text-gray-600">No attendance scans on record.</p>
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    When this student scans their QR pass at event gates, logs will show here.
-                  </p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-gray-50 text-gray-600 font-bold uppercase tracking-wider border-b border-gray-200">
-                      <tr>
-                        <th className="px-5 py-3">Event Name</th>
-                        <th className="px-5 py-3">Check-In Time</th>
-                        <th className="px-5 py-3">Gate Type</th>
-                        <th className="px-5 py-3 text-center">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {attendances.map((att) => {
-                        const scanTime = att.scannedAt
-                          ? formatAppDateTime(att.scannedAt)
-                          : att.checkIn || 'Logged';
 
-                        return (
-                          <tr key={att.id} className="hover:bg-gray-50 transition-colors">
-                            <td className="px-5 py-3 font-semibold text-[#001A4D]">
-                              {att.eventName || att.event || 'Campus Event'}
-                            </td>
-                            <td className="px-5 py-3 font-mono text-gray-600">{scanTime}</td>
-                            <td className="px-5 py-3">
-                              <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-[11px] font-medium uppercase">
-                                {att.gateType || 'Time In'}
-                              </span>
-                            </td>
-                            <td className="px-5 py-3 text-center">
-                              <span className="px-2.5 py-0.5 bg-green-100 text-green-800 rounded-full font-bold text-[10px]">
-                                {att.status || 'Present'}
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+                {loadingAttendance ? (
+                  <div className="p-10 text-center text-gray-400">
+                    <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-[#0E4EBD]" />
+                    Loading attendance scans...
+                  </div>
+                ) : filteredAttendances.length === 0 ? (
+                  <div className="p-10 text-center text-gray-400">
+                    <Calendar className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+                    <p className="font-bold text-gray-600">No attendance logs match your search.</p>
+                  </div>
+                ) : (
+                  <div className="max-h-[300px] overflow-y-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-gray-100 text-gray-700 font-bold uppercase tracking-wider border-b border-gray-200 sticky top-0 z-10">
+                        <tr>
+                          <th className="px-5 py-3">Event Name</th>
+                          <th className="px-5 py-3">Check-In Time</th>
+                          <th className="px-5 py-3">Gate Type</th>
+                          <th className="px-5 py-3 text-center">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {filteredAttendances.map((att) => {
+                          const scanTime = att.scannedAt
+                            ? formatAppDateTime(att.scannedAt)
+                            : att.checkIn || 'Logged';
+
+                          return (
+                            <tr key={att.id} className="hover:bg-gray-50 transition-colors">
+                              <td className="px-5 py-3 font-semibold text-[#001A4D]">
+                                {att.eventName || att.event || 'Campus Event'}
+                              </td>
+                              <td className="px-5 py-3 font-mono text-gray-600">{scanTime}</td>
+                              <td className="px-5 py-3">
+                                <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-[11px] font-medium uppercase">
+                                  {att.gateType || 'Time In'}
+                                </span>
+                              </td>
+                              <td className="px-5 py-3 text-center">
+                                <span className="px-2.5 py-0.5 bg-green-100 text-green-800 rounded-full font-bold text-[10px]">
+                                  {att.status || 'Present'}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -566,7 +754,6 @@ export function MemberProfilePanel({
         {/* Modal Footer Actions */}
         <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex flex-wrap items-center justify-between gap-3 flex-shrink-0">
           <div className="flex items-center gap-2">
-            {/* Reactivate Member Button when status is not active */}
             {member.status !== 'active' && (
               <button
                 onClick={handleReactivate}
@@ -609,6 +796,38 @@ export function MemberProfilePanel({
           </button>
         </div>
       </div>
+
+      {/* Lightbox / Fixed-Size Image Enlarge Preview Modal */}
+      {enlargedImage && (
+        <div
+          className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in"
+          onClick={() => setEnlargedImage(null)}
+        >
+          <div
+            className="relative w-80 h-80 sm:w-96 sm:h-96 md:w-[400px] md:h-[400px] p-2 bg-white/10 rounded-3xl border border-white/20 shadow-2xl flex flex-col items-center justify-center animate-in zoom-in-95"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setEnlargedImage(null)}
+              className="absolute -top-3 -right-3 w-9 h-9 bg-white text-gray-800 rounded-full flex items-center justify-center font-bold shadow-lg hover:bg-gray-100 transition-colors z-10 cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <div className="w-full h-full rounded-2xl overflow-hidden shadow-2xl bg-black/40">
+              <img
+                src={enlargedImage.url}
+                alt={enlargedImage.title}
+                className="w-full h-full object-cover"
+              />
+            </div>
+            {enlargedImage.title && (
+              <p className="mt-3 text-white text-xs sm:text-sm font-bold tracking-wide bg-black/60 backdrop-blur-sm px-4 py-1.5 rounded-full border border-white/20 truncate max-w-full">
+                {enlargedImage.title}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

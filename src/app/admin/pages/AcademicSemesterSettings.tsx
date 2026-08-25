@@ -20,6 +20,9 @@ import {
   Clock,
   FileText,
   Download,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { useSemesters } from "../../modules/academic/hooks/useAcademicStream";
 import {
@@ -31,6 +34,7 @@ import {
   getAcademicYearSuggestions,
   getSemesterTermAvailability,
   executeSemesterRollover,
+  sortSemestersChronologically,
 } from "../../modules/academic/services/academic.service";
 import { useAdviserProfile } from "../../modules/auth/hooks/useAdviserProfile";
 import type { SemesterDocument, SemesterStatus, SemesterTerm } from "../../modules/academic/types/academic.types";
@@ -892,8 +896,8 @@ function RolloverModal({ existingSemesters, defaultAcademicLevel = "COLLEGE", on
   );
 
   const upcomingSemesters = useMemo(
-    () =>
-      existingSemesters.filter(
+    () => {
+      const filtered = existingSemesters.filter(
         (s) =>
           s.status === "UPCOMING" &&
           !s.archived &&
@@ -901,7 +905,9 @@ function RolloverModal({ existingSemesters, defaultAcademicLevel = "COLLEGE", on
             (rolloverTrack === "SHS"
               ? String(s.semester).includes("Trimester")
               : !s.academicLevel && !String(s.semester).includes("Trimester")))
-      ),
+      );
+      return sortSemestersChronologically(filtered, "asc");
+    },
     [existingSemesters, rolloverTrack]
   );
 
@@ -2025,6 +2031,7 @@ export function AcademicSemesterSettings() {
   const { data: semesters, loading, error } = useSemesters();
 
   const [activeTab, setActiveTab] = useState<"college" | "shs" | "archived">("college");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [showAddModal, setShowAddModal] = useState(false);
   const [showRollover, setShowRollover] = useState(false);
   const [historyTarget, setHistoryTarget] = useState<SemesterDocument | null>(null);
@@ -2060,20 +2067,22 @@ export function AcademicSemesterSettings() {
   );
 
   const filteredSemesters = useMemo(() => {
+    let list: SemesterDocument[] = [];
     if (activeTab === "archived") {
-      return semesters.filter((s) => s.archived || s.status === "COMPLETED");
-    }
-    if (activeTab === "shs") {
-      return semesters.filter(
+      list = semesters.filter((s) => s.archived || s.status === "COMPLETED");
+    } else if (activeTab === "shs") {
+      list = semesters.filter(
         (s) => !s.archived && (s.academicLevel === "SHS" || String(s.semester).includes("Trimester"))
       );
+    } else {
+      list = semesters.filter(
+        (s) =>
+          !s.archived &&
+          (s.academicLevel === "COLLEGE" || (!s.academicLevel && !String(s.semester).includes("Trimester")))
+      );
     }
-    return semesters.filter(
-      (s) =>
-        !s.archived &&
-        (s.academicLevel === "COLLEGE" || (!s.academicLevel && !String(s.semester).includes("Trimester")))
-    );
-  }, [semesters, activeTab]);
+    return sortSemestersChronologically(list, sortOrder);
+  }, [semesters, activeTab, sortOrder]);
 
   return (
     <div className="space-y-6">
@@ -2111,7 +2120,7 @@ export function AcademicSemesterSettings() {
       <div className="bg-white border border-[#E0E0E0] rounded-2xl overflow-hidden shadow-xs">
         {/* Section Header */}
         <div className="flex flex-wrap items-center justify-between px-6 py-4 border-b border-gray-100 gap-3">
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <div className="border-l-4 border-[#0E4EBD] pl-3">
               <h3 className="text-[#001A4D] font-bold text-base">Academic Records</h3>
             </div>
@@ -2148,13 +2157,25 @@ export function AcademicSemesterSettings() {
               </button>
             </div>
           </div>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="px-4 py-2 bg-[#001A4D] text-[#FFD41C] rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-[#001A4D]/90 transition-colors shadow-xs"
-          >
-            <Plus className="w-4 h-4" />
-            Add {activeTab === "shs" ? "Trimester" : "Semester"}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"))}
+              className="px-3 py-2 bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors border border-gray-200 cursor-pointer"
+              title="Toggle Chronological Sort Order"
+            >
+              <ArrowUpDown className="w-3.5 h-3.5 text-[#0E4EBD]" />
+              <span>
+                Sort: {sortOrder === "asc" ? "Chronological (Oldest First)" : "Reverse Chronological (Newest First)"}
+              </span>
+            </button>
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="px-4 py-2 bg-[#001A4D] text-[#FFD41C] rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-[#001A4D]/90 transition-colors shadow-xs"
+            >
+              <Plus className="w-4 h-4" />
+              Add {activeTab === "shs" ? "Trimester" : "Semester"}
+            </button>
+          </div>
         </div>
 
         {/* Table */}
@@ -2164,15 +2185,19 @@ export function AcademicSemesterSettings() {
           <div className="py-16 text-center">
             <Calendar className="w-10 h-10 mx-auto mb-3 text-gray-300" />
             <p className="text-gray-500 font-medium text-sm">
-              {activeTab === "active" ? "No active or upcoming semesters." : "No archived semesters."}
+              {activeTab === "college"
+                ? "No active or upcoming college semesters."
+                : activeTab === "shs"
+                ? "No active or upcoming SHS trimesters."
+                : "No archived semesters."}
             </p>
-            {activeTab === "active" && (
+            {activeTab !== "archived" && (
               <button
                 onClick={() => setShowAddModal(true)}
-                className="mt-3 px-4 py-2 text-[#0E4EBD] text-sm font-bold hover:underline flex items-center gap-1 mx-auto"
+                className="mt-3 px-4 py-2 text-[#0E4EBD] text-sm font-bold hover:underline flex items-center gap-1 mx-auto cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
-                Add your first semester
+                Add your first {activeTab === "shs" ? "trimester" : "semester"}
               </button>
             )}
           </div>
@@ -2181,16 +2206,58 @@ export function AcademicSemesterSettings() {
             <table className="w-full">
               <thead className="bg-gray-50">
                 <tr>
-                  {["Status", "Academic Year", "Semester", "Label", "Start Date", "End Date", "Duration", "Events", "Students", "Actions"].map(
-                    (col) => (
-                      <th
-                        key={col}
-                        className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide border-b border-[#E0E0E0]"
-                      >
-                        {col}
-                      </th>
-                    )
-                  )}
+                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide border-b border-[#E0E0E0]">
+                    Status
+                  </th>
+                  <th
+                    onClick={() => setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"))}
+                    className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide border-b border-[#E0E0E0] cursor-pointer hover:bg-gray-100 transition-colors select-none"
+                    title="Click to toggle chronological sort order"
+                  >
+                    <div className="flex items-center gap-1">
+                      <span>Academic Year</span>
+                      {sortOrder === "asc" ? (
+                        <ArrowUp className="w-3 h-3 text-[#0E4EBD]" />
+                      ) : (
+                        <ArrowDown className="w-3 h-3 text-[#0E4EBD]" />
+                      )}
+                    </div>
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide border-b border-[#E0E0E0]">
+                    Semester
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide border-b border-[#E0E0E0]">
+                    Label
+                  </th>
+                  <th
+                    onClick={() => setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"))}
+                    className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide border-b border-[#E0E0E0] cursor-pointer hover:bg-gray-100 transition-colors select-none"
+                    title="Click to toggle chronological sort order"
+                  >
+                    <div className="flex items-center gap-1">
+                      <span>Start Date</span>
+                      {sortOrder === "asc" ? (
+                        <ArrowUp className="w-3 h-3 text-[#0E4EBD]" />
+                      ) : (
+                        <ArrowDown className="w-3 h-3 text-[#0E4EBD]" />
+                      )}
+                    </div>
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide border-b border-[#E0E0E0]">
+                    End Date
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide border-b border-[#E0E0E0]">
+                    Duration
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide border-b border-[#E0E0E0]">
+                    Events
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide border-b border-[#E0E0E0]">
+                    Students
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide border-b border-[#E0E0E0]">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#E0E0E0]">
@@ -2229,16 +2296,22 @@ export function AcademicSemesterSettings() {
                           <Eye className="w-4 h-4" />
                         </button>
 
-                        {/* Edit — disabled for ACTIVE */}
+                        {/* Edit — allowed ONLY for UPCOMING semesters */}
                         <button
                           onClick={() => setEditTarget(sem)}
-                          disabled={sem.status === "ACTIVE"}
+                          disabled={sem.status !== "UPCOMING"}
                           className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${
-                            sem.status === "ACTIVE"
+                            sem.status !== "UPCOMING"
                               ? "text-gray-300 cursor-not-allowed"
                               : "hover:bg-gray-100 text-gray-500"
                           }`}
-                          title={sem.status === "ACTIVE" ? "Cannot edit active semester — run rollover first." : "Edit Semester"}
+                          title={
+                            sem.status === "ACTIVE"
+                              ? "Cannot edit active semester."
+                              : sem.status === "COMPLETED"
+                              ? "Cannot edit completed historical semester."
+                              : "Edit Semester"
+                          }
                         >
                           <Edit className="w-4 h-4" />
                         </button>

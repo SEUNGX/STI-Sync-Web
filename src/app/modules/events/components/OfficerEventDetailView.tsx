@@ -801,6 +801,7 @@ export default function OfficerEventDetailView({
                 <div className="relative pl-6 space-y-6 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-gray-200">
                   {event.proposalHistory.map((item, idx) => {
                     const itemDate = formatAppDateTime(item.performedAt, '—');
+                    const versionTag = item.versionLabel || (item.version ? `v${item.version}.0` : null);
 
                     return (
                       <div key={item.id || idx} className="relative space-y-1.5 text-xs">
@@ -811,16 +812,36 @@ export default function OfficerEventDetailView({
                               : item.action === 'rejected'
                               ? 'bg-red-500'
                               : item.action === 'returned'
-                              ? 'bg-purple-600'
-                              : 'bg-blue-500'
+                              ? 'bg-amber-500'
+                              : item.action === 'edited' || item.action === 'resubmitted'
+                              ? 'bg-[#0E4EBD]'
+                              : 'bg-blue-400'
                           }`}
                         />
                         <div className="flex items-center justify-between">
-                          <span className="font-bold text-gray-900 uppercase tracking-wide">
-                            {item.action}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-[#001A4D] uppercase tracking-wide">
+                              {item.action === 'edited'
+                                ? 'Edited & Updated'
+                                : item.action === 'resubmitted'
+                                ? 'Resubmitted Proposal'
+                                : item.action === 'draft_saved'
+                                ? 'Draft Saved'
+                                : item.action}
+                            </span>
+                            {versionTag && (
+                              <span className="px-2 py-0.5 bg-blue-100 text-[#0E4EBD] font-mono text-[10px] font-bold rounded-md">
+                                {versionTag}
+                              </span>
+                            )}
+                          </div>
                           <span className="text-gray-400 font-mono text-[11px]">{itemDate}</span>
                         </div>
+                        {item.performedByName && (
+                          <p className="text-gray-500 text-[11px]">
+                            By: <strong className="text-gray-700 font-semibold">{item.performedByName}</strong>
+                          </p>
+                        )}
                         {item.reason && (
                           <p className="text-gray-700">
                             <strong>Reason:</strong> {item.reason}

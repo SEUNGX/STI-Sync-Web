@@ -186,11 +186,27 @@ export async function generatePayablesForEvent(
   }
 }
 
+const cleanUndefined = (obj: any): any => {
+  if (obj === null || obj === undefined) return null;
+  if (Array.isArray(obj)) return obj.map(cleanUndefined);
+  if (typeof obj === 'object' && typeof obj.toDate !== 'function' && !(obj instanceof Date)) {
+    const res: any = {};
+    for (const key of Object.keys(obj)) {
+      if (obj[key] !== undefined) {
+        res[key] = cleanUndefined(obj[key]);
+      }
+    }
+    return res;
+  }
+  return obj;
+};
+
 export const createEvent = async (
   data: EventFormData,
   uid: string,
   draftId?: string,
-  isOfficerProposal = false
+  isOfficerProposal = false,
+  userName?: string
 ): Promise<string> => {
   const refId = data.referenceId || generateReferenceId();
 
@@ -201,50 +217,88 @@ export const createEvent = async (
     : [];
 
   let isResubmission = false;
+  let currentVersion = 1;
+  let existingDocData: any = null;
+
   if (draftId) {
     const existingSnap = await getDoc(doc(db, EVENTS_COLLECTION, draftId));
     if (existingSnap.exists()) {
-      const prevStatus = existingSnap.data()?.proposalStatus;
+      existingDocData = existingSnap.data();
+      const prevStatus = existingDocData?.proposalStatus;
+      currentVersion = Number(existingDocData?.version || 1);
       if (prevStatus === 'rejected' || prevStatus === 'returned') {
         isResubmission = true;
       }
     }
   }
 
-  const actionType: EventProposalHistoryLog['action'] = isResubmission
-    ? 'resubmitted'
-    : isOfficerProposal
-    ? 'submitted'
-    : 'approved';
+  // Version incrementing ONLY for returned/resubmitted proposals
+  const newVersion = draftId && isResubmission ? currentVersion + 1 : currentVersion;
+  const versionLabel = `v${newVersion}.0`;
 
-  const historyEntry: EventProposalHistoryLog = {
+  let actionType: EventProposalHistoryLog['action'] = 'submitted';
+  if (isResubmission) actionType = 'resubmitted';
+  else if (!isOfficerProposal) actionType = 'approved';
+
+  const historyEntry: EventProposalHistoryLog = cleanUndefined({
     id: `log-${Date.now()}`,
     action: actionType,
     performedBy: uid,
+    performedByName: userName || null,
     performedAt: Timestamp.now(),
-  };
+    version: newVersion,
+    versionLabel,
+    remarks: isResubmission
+      ? `Revised proposal resubmitted for SAO review (${versionLabel})`
+      : `Proposal submitted for review (${versionLabel})`,
+  });
 
-  const eventPayload: Partial<EventDocument> = {
+  const versionSnapshot: any = cleanUndefined({
+    version: newVersion,
+    versionLabel,
+    savedAt: Timestamp.now(),
+    savedBy: uid,
+    savedByName: userName || null,
+    proposalStatus: isOfficerProposal ? 'pending' : 'approved',
+    snapshot: buildEventSnapshot(data),
+  });
+
+  const eventPayload: Partial<EventDocument> = cleanUndefined({
     ...data,
     referenceId: refId,
     scannerUserIds,
     isOfficerProposal: Boolean(isOfficerProposal),
     proposalStatus: isOfficerProposal ? 'pending' : 'approved',
+    version: newVersion,
+    versionLabel,
     createdBy: uid,
     updatedAt: serverTimestamp() as any,
-  };
+  });
 
   let docId = draftId;
 
   if (draftId) {
     const docRef = doc(db, EVENTS_COLLECTION, draftId);
-    await updateDoc(docRef, {
-      ...eventPayload,
-      proposalHistory: arrayUnion(historyEntry),
-    });
+
+    // If resubmitting a returned proposal, record version history & history log
+    if (isResubmission) {
+      await updateDoc(docRef, {
+        ...eventPayload,
+        proposalHistory: arrayUnion(historyEntry),
+        versionHistory: arrayUnion(versionSnapshot),
+      });
+    } else {
+      await updateDoc(docRef, {
+        ...eventPayload,
+        proposalHistory: arrayUnion(historyEntry),
+      });
+    }
   } else {
     eventPayload.createdAt = serverTimestamp() as any;
     eventPayload.proposalHistory = [historyEntry];
+    if (isResubmission) {
+      eventPayload.versionHistory = [versionSnapshot];
+    }
     const docRef = await addDoc(collection(db, EVENTS_COLLECTION), eventPayload);
     docId = docRef.id;
   }
@@ -265,14 +319,27 @@ export const createEvent = async (
 export const saveEventDraft = async (
   data: EventFormData,
   uid: string,
-  existingId?: string
+  existingId?: string,
+  userName?: string
 ): Promise<string> => {
-  const eventPayload: Partial<EventDocument> = {
+  let currentVersion = 1;
+  if (existingId) {
+    const snap = await getDoc(doc(db, EVENTS_COLLECTION, existingId));
+    if (snap.exists()) {
+      currentVersion = Number(snap.data()?.version || 1);
+    }
+  }
+
+  const versionLabel = `v${currentVersion}.0`;
+
+  const eventPayload: Partial<EventDocument> = cleanUndefined({
     ...data,
     proposalStatus: 'draft',
+    version: currentVersion,
+    versionLabel,
     createdBy: uid,
     updatedAt: serverTimestamp() as any,
-  };
+  });
 
   if (data.scanners) {
     eventPayload.scannerUserIds = data.scanners

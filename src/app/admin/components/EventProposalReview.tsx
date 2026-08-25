@@ -690,15 +690,24 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
                           <div className={`absolute -left-[19px] top-1 w-3.5 h-3.5 rounded-full ${dotBg} ring-4 ring-white`} />
                           <div className="flex-1 bg-gray-50/70 border border-gray-200 rounded-xl p-3.5 space-y-1">
                             <div className="flex items-center justify-between">
-                              <span className="font-bold text-xs uppercase tracking-wide text-[#001A4D]">
-                                {item.action === 'created' ? 'Proposal Created' :
-                                 item.action === 'submitted' ? 'Submitted for SAO Review' :
-                                 item.action === 'approved' ? 'Proposal Approved' :
-                                 item.action === 'rejected' ? 'Proposal Rejected' :
-                                 item.action === 'returned' ? 'Returned for Revision' :
-                                 item.action === 'resubmitted' ? 'Proposal Resubmitted by Officer' :
-                                 item.action}
-                              </span>
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-xs uppercase tracking-wide text-[#001A4D]">
+                                  {item.action === 'created' ? 'Proposal Created' :
+                                   item.action === 'submitted' ? 'Submitted for SAO Review' :
+                                   item.action === 'approved' ? 'Proposal Approved' :
+                                   item.action === 'rejected' ? 'Proposal Rejected' :
+                                   item.action === 'returned' ? 'Returned for Revision' :
+                                   item.action === 'resubmitted' ? 'Proposal Resubmitted by Officer' :
+                                   item.action === 'edited' ? 'Edited & Updated' :
+                                   item.action === 'draft_saved' ? 'Draft Saved' :
+                                   item.action}
+                                </span>
+                                {(item.versionLabel || item.version) && (
+                                  <span className="px-2 py-0.5 bg-blue-100 text-[#0E4EBD] font-mono text-[10px] font-bold rounded-md">
+                                    {item.versionLabel || `v${item.version}.0`}
+                                  </span>
+                                )}
+                              </div>
                               <span className="text-gray-400 text-xs">{itemDate}</span>
                             </div>
 

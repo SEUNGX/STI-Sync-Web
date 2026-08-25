@@ -77,7 +77,7 @@ export interface EventDocument {
   createdAt: Timestamp;
   updatedAt: Timestamp;
 
-  // ─── Review Metadata ───
+  // ─── Review & Version Metadata ───
   approvedBy?: string | null;
   approvedAt?: Timestamp | null;
   rejectedBy?: string | null;
@@ -90,18 +90,33 @@ export interface EventDocument {
   returnFlags?: string[];
   returnDeadline?: string | null;
   returnedSnapshot?: Record<string, any> | null;
+  version?: number;                        // e.g. 1, 2, 3
+  versionLabel?: string;                   // e.g. "v1.0", "v2.0"
   proposalHistory?: EventProposalHistoryLog[];
+  versionHistory?: EventVersionSnapshot[];
 }
 
 export interface EventProposalHistoryLog {
   id: string;
-  action: 'created' | 'submitted' | 'approved' | 'returned' | 'rejected' | 'resubmitted';
+  action: 'created' | 'submitted' | 'approved' | 'returned' | 'rejected' | 'resubmitted' | 'edited' | 'draft_saved';
   performedBy: string;
   performedByName?: string;
-  performedAt: Timestamp;
+  performedAt: Timestamp | Date | any;
+  version?: number;
+  versionLabel?: string;
   reason?: string;
   remarks?: string;
   returnFlags?: string[];
+}
+
+export interface EventVersionSnapshot {
+  version: number;
+  versionLabel: string;
+  savedAt: Timestamp | Date | any;
+  savedBy: string;
+  savedByName?: string;
+  proposalStatus: string;
+  snapshot: Record<string, any>;
 }
 
 export interface EventSession {

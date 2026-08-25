@@ -510,7 +510,11 @@ export default function OfficerEventProposalModal({ isOpen, onClose, initialDraf
                 className="px-6 py-2.5 bg-[#001A4D] hover:bg-[#0E4EBD] text-white rounded-xl text-sm font-bold disabled:opacity-50 transition-colors flex items-center gap-2 shadow-xs cursor-pointer"
               >
                 <Send className="w-4 h-4 text-[#FFD41C]" />
-                {saving || loading ? 'Submitting...' : (initialDraft?.proposalStatus === 'rejected' ? 'Revise & Resubmit Proposal' : 'Submit Proposal for SAO Approval')}
+                {saving || loading
+                  ? 'Submitting...'
+                  : initialDraft?.proposalStatus === 'returned' || initialDraft?.proposalStatus === 'rejected'
+                  ? 'Save Changes & Resubmit Proposal'
+                  : 'Submit Proposal for SAO Approval'}
               </button>
             )}
           </div>

@@ -203,6 +203,67 @@ export function generateSemesterLabel(
   return `${prefix}${clean}-${suffix}`;
 }
 
+/**
+ * Sorts an array of SemesterDocument items chronologically by Academic Year, Term, or Start Date.
+ * @param semesters Array of semesters to sort
+ * @param direction 'asc' (earliest to latest) or 'desc' (latest to earliest). Default 'asc'.
+ */
+export function sortSemestersChronologically<T extends {
+  startDate?: string;
+  academicYear?: string;
+  semester?: string;
+  term?: string;
+  createdAt?: any;
+}>(
+  semesters: T[],
+  direction: 'asc' | 'desc' = 'asc'
+): T[] {
+  const getTermRank = (termStr?: string): number => {
+    if (!termStr) return 0;
+    const t = termStr.toLowerCase();
+    if (t.includes('1st sem') || t.includes('1st tri')) return 1;
+    if (t.includes('2nd sem') || t.includes('2nd tri')) return 2;
+    if (t.includes('3rd tri')) return 3;
+    if (t.includes('summer') || t.includes('midyear')) return 4;
+    return 5;
+  };
+
+  const parseStartYear = (ayStr?: string): number => {
+    if (!ayStr) return 0;
+    const match = ayStr.match(/\d{4}/);
+    return match ? parseInt(match[0], 10) : 0;
+  };
+
+  const sorted = [...semesters].sort((a, b) => {
+    // 1. Compare by startDate if both exist and differ
+    if (a.startDate && b.startDate && a.startDate !== b.startDate) {
+      return a.startDate.localeCompare(b.startDate);
+    }
+
+    // 2. Compare by Academic Year start year
+    const yearA = parseStartYear(a.academicYear);
+    const yearB = parseStartYear(b.academicYear);
+    if (yearA !== yearB) {
+      return yearA - yearB;
+    }
+
+    // 3. Compare by Term Rank (1st -> 2nd -> 3rd -> Summer)
+    const rankA = getTermRank(a.semester || a.term);
+    const rankB = getTermRank(b.semester || b.term);
+    if (rankA !== rankB) {
+      return rankA - rankB;
+    }
+
+    // 4. Fallback to createdAt if available
+    const timeA = a.createdAt?.seconds || 0;
+    const timeB = b.createdAt?.seconds || 0;
+    return timeA - timeB;
+  });
+
+  return direction === 'desc' ? sorted.reverse() : sorted;
+}
+
+
 export async function createSemester(
   data: Pick<SemesterDocument, 'academicYear' | 'semester' | 'startDate' | 'endDate' | 'reenrollDeadline' | 'status'> & {
     academicLevel?: AcademicLevel;
