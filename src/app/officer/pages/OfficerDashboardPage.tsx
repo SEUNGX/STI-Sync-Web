@@ -206,7 +206,7 @@ export default function OfficerDashboardPage() {
                           </div>
                           <div className="flex items-center gap-1">
                             <MapPin className="w-3.5 h-3.5 text-[#0E4EBD]" />
-                            <span>{event.eventFormat || 'On-Campus'}</span>
+                            <span>{event.customVenueName || 'On-Campus'}</span>
                           </div>
                         </div>
                       </div>

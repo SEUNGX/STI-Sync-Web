@@ -187,13 +187,17 @@ export async function generatePayablesForEvent(
 }
 
 const cleanUndefined = (obj: any): any => {
-  if (obj === null || obj === undefined) return null;
-  if (Array.isArray(obj)) return obj.map(cleanUndefined);
+  if (obj === null || obj === undefined) return undefined;
+  if (Array.isArray(obj)) return obj.map(cleanUndefined).filter(v => v !== undefined);
   if (typeof obj === 'object' && typeof obj.toDate !== 'function' && !(obj instanceof Date)) {
     const res: any = {};
     for (const key of Object.keys(obj)) {
-      if (obj[key] !== undefined) {
-        res[key] = cleanUndefined(obj[key]);
+      const val = obj[key];
+      if (val !== undefined && val !== null) {
+        const cleaned = cleanUndefined(val);
+        if (cleaned !== undefined) {
+          res[key] = cleaned;
+        }
       }
     }
     return res;
@@ -237,20 +241,28 @@ export const createEvent = async (
   const versionLabel = `v${newVersion}.0`;
 
   let actionType: EventProposalHistoryLog['action'] = 'submitted';
-  if (isResubmission) actionType = 'resubmitted';
-  else if (!isOfficerProposal) actionType = 'approved';
+  let logRemarks = '';
+
+  if (isResubmission) {
+    actionType = 'resubmitted';
+    logRemarks = `Revised proposal resubmitted for SAO review (${versionLabel})`;
+  } else if (isOfficerProposal) {
+    actionType = 'submitted';
+    logRemarks = `Proposal submitted for review (${versionLabel})`;
+  } else {
+    actionType = 'approved';
+    logRemarks = `Institutional Event created and published by SAS/SAO (${versionLabel})`;
+  }
 
   const historyEntry: EventProposalHistoryLog = cleanUndefined({
     id: `log-${Date.now()}`,
     action: actionType,
     performedBy: uid,
-    performedByName: userName || null,
+    performedByName: userName || (isOfficerProposal ? 'Student Officer' : 'SAS / SAO Administrator'),
     performedAt: Timestamp.now(),
     version: newVersion,
     versionLabel,
-    remarks: isResubmission
-      ? `Revised proposal resubmitted for SAO review (${versionLabel})`
-      : `Proposal submitted for review (${versionLabel})`,
+    remarks: logRemarks,
   });
 
   const versionSnapshot: any = cleanUndefined({
@@ -258,7 +270,7 @@ export const createEvent = async (
     versionLabel,
     savedAt: Timestamp.now(),
     savedBy: uid,
-    savedByName: userName || null,
+    savedByName: userName || (isOfficerProposal ? 'Student Officer' : 'SAS / SAO Administrator'),
     proposalStatus: isOfficerProposal ? 'pending' : 'approved',
     snapshot: buildEventSnapshot(data),
   });

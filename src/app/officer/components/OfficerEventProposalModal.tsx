@@ -4,6 +4,8 @@ import { toast } from 'sonner';
 import { useEventCreation } from '../../modules/events/hooks/useEventCreation';
 import { useOfficerProfile } from '../../auth/hooks/useOfficerProfile';
 import { useOrganizationStream } from '../../modules/organizations';
+import { useAllEvents } from '../../modules/events/hooks/useEventStream';
+import { validateWizardStep, validateStep7 } from '../../modules/events/utils/event-validation';
 import type { EventDocument, EventFormData } from '../../modules/events/types/event.types';
 
 import Step1EventDetails from '../../modules/events/components/wizard/Step1EventDetails';
@@ -198,6 +200,7 @@ export default function OfficerEventProposalModal({ isOpen, onClose, initialDraf
   );
   const [activeDraftId, setActiveDraftId] = useState<string | undefined>(draftId);
   const [saving, setSaving] = useState(false);
+  const [stepErrors, setStepErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (activeOrgId && (!formData.hostingOrgId || formData.hostingOrgId === 'sas')) {
@@ -206,6 +209,7 @@ export default function OfficerEventProposalModal({ isOpen, onClose, initialDraf
   }, [activeOrgId]);
 
   const { createEvent, saveDraft, loading } = useEventCreation();
+  const { events: allEvents } = useAllEvents();
 
   if (!isOpen) return null;
 
@@ -216,16 +220,19 @@ export default function OfficerEventProposalModal({ isOpen, onClose, initialDraf
     ...formData,
   });
 
-  const isQREnabled = formData.enableQR !== false && formData.enableQRTickets !== false;
-  const activeSteps = ['Event Details', 'Schedule', 'Participants', 'Staff', 'Budget', 'Documents', 'Submit'];
+  const isQREnabled = Boolean(formData.enableQRTickets === true || (formData as any).enableQR === true);
+  const activeSteps = isQREnabled
+    ? ['Event Details', 'Schedule', 'Participants', 'Staff', 'Budget', 'Documents', 'Submit']
+    : ['Event Details', 'Schedule', 'Participants', 'Budget', 'Documents', 'Submit'];
 
   const currentStepName = activeSteps[currentStep] || activeSteps[0];
 
   const next = () => {
+    const payload = getPayload();
     const activeReturnFlags = initialDraft?.returnFlags || [];
     const stepFlagged = activeReturnFlags.some(flag => getStepForFlag(flag) === currentStepName);
 
-    if (stepFlagged && !checkStepModified(currentStepName, formData, initialDraft)) {
+    if (stepFlagged && !checkStepModified(currentStepName, payload, initialDraft)) {
       toast.error(`Revision Required for ${currentStepName}`, {
         description: `The SAO Adviser flagged this section. You must make modifications to ${currentStepName} before proceeding to the next step.`,
         duration: 5000,
@@ -233,19 +240,43 @@ export default function OfficerEventProposalModal({ isOpen, onClose, initialDraf
       return;
     }
 
+    // Step Validation
+    const valResult = validateWizardStep(
+      currentStep,
+      currentStepName,
+      payload,
+      true,
+      allEvents,
+      activeDraftId
+    );
+
+    if (!valResult.isValid) {
+      setStepErrors(valResult.fieldErrors || {});
+      toast.error(`Incomplete: ${currentStepName}`, {
+        description: valResult.errors[0] || 'Please complete all required fields before proceeding.',
+        duration: 5000,
+      });
+      return;
+    }
+
+    setStepErrors({});
     if (currentStep < activeSteps.length - 1) {
       setCurrentStep(currentStep + 1);
     }
   };
 
-  const prev = () => { if (currentStep > 0) setCurrentStep(currentStep - 1); };
+  const prev = () => {
+    setStepErrors({});
+    if (currentStep > 0) setCurrentStep(currentStep - 1);
+  };
 
   const goTo = (i: number) => {
+    const payload = getPayload();
     const activeReturnFlags = initialDraft?.returnFlags || [];
     for (let stepIdx = 0; stepIdx < i; stepIdx++) {
       const stepName = activeSteps[stepIdx];
       const isFlagged = activeReturnFlags.some(flag => getStepForFlag(flag) === stepName);
-      if (isFlagged && !checkStepModified(stepName, formData, initialDraft)) {
+      if (isFlagged && !checkStepModified(stepName, payload, initialDraft)) {
         toast.error(`Revision Required for ${stepName}`, {
           description: `You must resolve flagged changes in ${stepName} before skipping forward.`,
           duration: 5000,
@@ -253,17 +284,27 @@ export default function OfficerEventProposalModal({ isOpen, onClose, initialDraf
         setCurrentStep(stepIdx);
         return;
       }
+
+      const res = validateWizardStep(stepIdx, stepName, payload, true, allEvents, activeDraftId);
+      if (!res.isValid) {
+        setStepErrors(res.fieldErrors || {});
+        toast.error(`Please complete ${stepName}`, {
+          description: res.errors[0] || `Please resolve errors in ${stepName} before advancing.`,
+          duration: 5000,
+        });
+        setCurrentStep(stepIdx);
+        return;
+      }
     }
-    if (i <= currentStep || i === currentStep + 1) {
-      setCurrentStep(i);
-    }
+    setStepErrors({});
+    setCurrentStep(i);
   };
 
   const handleSaveDraft = async () => {
     setSaving(true);
     try {
       const payload = getPayload();
-      const id = await saveDraft(payload, activeDraftId);
+      const id = await saveDraft(payload, activeDraftId, true);
       if (id) {
         setActiveDraftId(id);
         toast.success('Draft saved!', {
@@ -281,11 +322,12 @@ export default function OfficerEventProposalModal({ isOpen, onClose, initialDraf
   };
 
   const handleSubmitProposal = async () => {
+    const payload = getPayload();
     const activeReturnFlags = initialDraft?.returnFlags || [];
     for (const flag of activeReturnFlags) {
       const stepName = getStepForFlag(flag);
       if (stepName && activeSteps.includes(stepName)) {
-        const isModified = checkStepModified(stepName, formData, initialDraft);
+        const isModified = checkStepModified(stepName, payload, initialDraft);
         if (!isModified) {
           toast.error(`Cannot Resubmit Proposal`, {
             description: `Flagged section "${stepName}" has not been modified yet. Please make the required changes before resubmitting.`,
@@ -298,6 +340,31 @@ export default function OfficerEventProposalModal({ isOpen, onClose, initialDraf
           return;
         }
       }
+    }
+
+    // Validate all wizard steps
+    for (let sIdx = 0; sIdx < activeSteps.length - 1; sIdx++) {
+      const sName = activeSteps[sIdx];
+      const res = validateWizardStep(sIdx, sName, payload, true, allEvents, activeDraftId);
+      if (!res.isValid) {
+        setStepErrors(res.fieldErrors || {});
+        toast.error(`Cannot Submit: Incomplete ${sName}`, {
+          description: res.errors[0] || `Please review and complete ${sName}.`,
+          duration: 6000,
+        });
+        setCurrentStep(sIdx);
+        return;
+      }
+    }
+
+    // Validate Step 7 / Submission requirements
+    const s7Res = validateStep7(payload, true);
+    if (!s7Res.isValid) {
+      toast.error('Cannot Submit Proposal', {
+        description: s7Res.errors[0] || 'Please acknowledge the proposal certification before submitting.',
+        duration: 6000,
+      });
+      return;
     }
 
     setSaving(true);
@@ -323,7 +390,12 @@ export default function OfficerEventProposalModal({ isOpen, onClose, initialDraf
   };
 
   const renderStep = () => {
-    const props = { data: { hostingOrgId: activeOrgId, ...formData }, onUpdate: update, isOfficer: true };
+    const props = {
+      data: { hostingOrgId: activeOrgId, ...formData },
+      onUpdate: update,
+      isOfficer: true,
+      errors: stepErrors,
+    };
     switch (currentStepName) {
       case 'Event Details': return <Step1EventDetails {...props} />;
       case 'Schedule': return <Step2Schedule {...props} />;

@@ -1,0 +1,91 @@
+@startuml Unified_Master_Use_Case_Diagram
+title STI Sync - Unified Master Platform Use Case Diagram
+left to right direction
+
+skinparam defaultFontName Arial
+skinparam defaultFontSize 11
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam actorStyle awesome
+
+skinparam actor {
+    BorderColor #2C3E50
+    FontStyle bold
+}
+
+skinparam usecase {
+    BackgroundColor #DAE8FC
+    BorderColor #6C8EBF
+    FontColor #001A4D
+    FontStyle bold
+}
+
+actor "SAO / SAS Administrator\n(Web Admin Portal)" as Admin #FFF2CC
+actor "Student Organization Officer\n(Web Officer Portal)" as Officer #E1D5E7
+actor "Student User\n(Mobile Application)" as Student #D5E8D4
+actor "Student Scanner Officer\n(Mobile Scanner Mode)" as Scanner #FFE6CC
+
+rectangle "STI Sync Integrated Web & Mobile Platform" {
+    package "Academic & Identity Governance" {
+        usecase "Manage Dual-Track Academic\nTerms & Rollover" as UC_Acad
+        usecase "Manage Student Registry\n& ID Verification" as UC_Registry
+        usecase "Govern Student Organizations\n& Charters" as UC_Orgs
+    }
+
+    package "Event Management & Gate Access" {
+        usecase "Create SAS Institutional Event" as UC_SAOEvent
+        usecase "Submit Club Event Proposal" as UC_Proposal
+        usecase "Review & Approve Event Proposals" as UC_Approve
+        usecase "Browse & Register for Events" as UC_Browse
+        usecase "Access Dynamic QR Entry Ticket" as UC_QRTicket
+        usecase "Scan QR Entry Ticket at Gate" as UC_ScanGate
+        usecase "Record Manual / Walk-in Attendance" as UC_Manual
+        usecase "Monitor Real-Time Attendance Logs" as UC_Logs
+    }
+
+    package "Financial Payables & Liquidations" {
+        usecase "Generate Member Dues & Payables" as UC_Payables
+        usecase "Record Cash Payment & Unlock QR Ticket" as UC_Payment
+        usecase "View Assigned Payables, Dues & Fines" as UC_ViewPay
+        usecase "Submit Financial Liquidation Report" as UC_SubmitLiq
+        usecase "Audit & Reconcile Liquidations" as UC_AuditLiq
+    }
+
+    package "Certificates & System Governance" {
+        usecase "Design & Batch Generate Certificates" as UC_GenCerts
+        usecase "Download Verified Digital Certificate" as UC_DownCert
+        usecase "Broadcast System / Club Announcements" as UC_Announce
+    }
+}
+
+' Admin Solid Line Associations (NO ARROWS)
+Admin -- UC_Acad
+Admin -- UC_Registry
+Admin -- UC_Orgs
+Admin -- UC_SAOEvent
+Admin -- UC_Approve
+Admin -- UC_AuditLiq
+Admin -- UC_GenCerts
+Admin -- UC_Announce
+
+' Officer Solid Line Associations (NO ARROWS)
+Officer -- UC_Proposal
+Officer -- UC_Payables
+Officer -- UC_Payment
+Officer -- UC_SubmitLiq
+Officer -- UC_GenCerts
+Officer -- UC_Logs
+Officer -- UC_Announce
+
+' Student Solid Line Associations (NO ARROWS)
+Student -- UC_Browse
+Student -- UC_QRTicket
+Student -- UC_ViewPay
+Student -- UC_DownCert
+
+' Scanner Solid Line Associations (NO ARROWS)
+Scanner -- UC_ScanGate
+Scanner -- UC_Manual
+Scanner -- UC_Logs
+
+@enduml

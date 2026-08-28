@@ -740,38 +740,65 @@ interface StudentDocument {
 interface EventDocument {
   // ─── Identity ───
   id: string;
+  referenceId: string;                     // Unique human-readable identifier (e.g., EVT-ADM-20260828-ABCD)
   title: string;
   description: string;
+  eventTypeId: string;                     // FK → /event_types or sentinel '__other__'
+  eventTypeName?: string;
+  customEventTypeName?: string;            // Name for one-off / newly registered event type
+  customEventTypeColor?: string;           // Hex color for custom type
+  eventCategoryId: string;                 // FK → /event_categories or sentinel '__other__'
+  categoryName?: string;
+  customEventCategoryName?: string;        // Name for custom category
   eventType: 'academic' | 'co-curricular' | 'institutional' | 'community-outreach';
   format: 'in-person' | 'virtual' | 'hybrid';
+  eventFormat?: string;
 
   // ─── Ownership ───
+  hostingOrgId?: string;                   // FK → /organizations or 'sas'
   organizationId: string;                  // FK → /organizations
   organizationName: string;                // Denormalized
   createdBy: string;                       // User ID of the creator
+  createdByName?: string;                  // Display name of creator
   createdByRole: 'admin' | 'officer';      // Tracks origin context
+  isOfficerProposal: boolean;
 
   // ─── Approval Pipeline ───
-  proposalStatus: 'draft' | 'pending_review' | 'approved' | 'rejected' | 'cancelled';
+  proposalStatus: 'draft' | 'pending' | 'approved' | 'rejected' | 'returned' | 'cancelled';
   approvedBy: string | null;              // Admin user ID who approved
   approvedAt: Timestamp | null;
   rejectionReason: string | null;
-  fastTrack: boolean;                     // Admin-only: bypasses normal review queue
+  returnFlags?: string[];                  // Step names/flags marked for officer revision
+  proposalHistory?: EventProposalHistoryLog[]; // Array of revision and audit actions
+  version?: number;
+  versionLabel?: string;
 
   // ─── Schedule ───
+  semesterId: string;                      // FK → /semesters (active semester)
+  schoolYear: string;
   academicYear: string;
   semester: '1st' | '2nd' | 'summer';
-  sessions: Session[];                     // Nested array — defined below
+  targetAcademicLevel: 'SHS' | 'COLLEGE' | 'BOTH';
+  sessions: Session[];                     // Nested array of sessions (date, start/end time, attendance windows)
+  venueId?: string;                        // FK → /venues or sentinel '__other__'
+  venueName?: string;
+  customVenueName?: string;                // Name for custom venue
   venue: string;
 
-  // ─── Participants ───
+  // ─── Participants & Scope ───
+  targetAudienceScope: 'all' | 'custom' | 'members';
   eligibleParticipants: 'all' | 'specific';
-  targetYearLevels: number[];              // e.g., [1, 2, 3, 4]
-  targetPrograms: string[];               // e.g., ["BSIT", "BSCS"]
+  targetYearLevels: string[] | number[];   // e.g., ["1st Year", "2nd Year"] or ["G11", "G12"]
+  targetCourses: string[];                 // Array of Course IDs (e.g., ["course-bsit", "course-bscs"])
+  targetSections: string[];                // Array of Section names/IDs (e.g., ["BSIT 301", "STEM 11-A"])
   expectedParticipantCount: number;
 
-  // ─── Budget ───
-  budget: EventBudget;                     // Nested object — defined below
+  // ─── Budget & Treasury ───
+  budgetItems?: BudgetLineItem[];          // Proposed line items (item, description, quantity, unitCost)
+  totalProposedBudget?: number;
+  totalRequestedBudget?: number;
+  totalApprovedBudget?: number;
+  maxAllowedBudget?: number;               // Captured treasury fund balance limit
 
   // ─── Student Payables Policy ───
   studentPayablesEnabled: boolean;         // Master toggle (Admin Step 5)
@@ -780,18 +807,19 @@ interface EventDocument {
   totalExpectedCollection: number | null;  // adminFeeOverride × participantCount
 
   // ─── Document Checklist ───
-  documents: DocumentChecklist;            // Nested object — defined below
+  documents: DocumentChecklist | EventDocumentFile[]; // Array of uploaded verification attachments
 
-  // ─── Media ───
+  // ─── Media & Visibility ───
   bannerImageUrl: string | null;
-
-  // ─── Visibility ───
   isVisible: boolean;                      // Whether event is shown in feed
-  visibilityStart: Timestamp | null;       // Datetime event becomes visible
+  visibilityStart: Timestamp | string | null; // Datetime event becomes visible (must not be after sessions)
 
-  // ─── Staff ───
-  coreTeam: StaffAssignment[];             // Event committee members
-  scannerOfficers: ScannerAssignment[];    // QR scanner-assigned officers
+  // ─── Staff & QR Attendance ───
+  enableQRTickets?: boolean;               // Master toggle for QR ticket generation & scanning
+  gracePeriodMinutes?: number;             // Buffer minutes before late check-in
+  lateThresholdMinutes?: number;           // Cutoff minutes for check-in
+  scanners?: ScannerAssignment[];          // QR scanner-assigned officers
+  scannerUserIds?: string[];               // Flat array of scanner officer UIDs for fast Firestore lookup
 
   // ─── Timestamps ───
   createdAt: Timestamp;

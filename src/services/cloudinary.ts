@@ -73,15 +73,28 @@ export function validateUploadFile(file: File, options: UploadOptions = {}): voi
   const accepted = options.acceptedTypes ?? DEFAULT_ACCEPTED;
   const maxBytes = options.maxBytes ?? DEFAULT_MAX_BYTES;
 
-  if (accepted.length > 0 && !accepted.includes(file.type)) {
-    throw new Error(
-      `Unsupported file type "${file.type || 'unknown'}". Allowed: ${accepted
-        .map((t) => t.split('/')[1])
-        .join(', ')}.`
-    );
+  if (accepted.length > 0) {
+    const fileType = file.type?.toLowerCase() || '';
+    const fileName = file.name?.toLowerCase() || '';
+
+    const matchesMime = accepted.some(t => t.toLowerCase() === fileType);
+    const matchesExtension = accepted.some(t => {
+      if (t.startsWith('.')) return fileName.endsWith(t.toLowerCase());
+      if (t === 'application/pdf' && fileName.endsWith('.pdf')) return true;
+      if ((t.includes('word') || t.includes('msword') || t.includes('officedocument.word')) && (fileName.endsWith('.doc') || fileName.endsWith('.docx'))) return true;
+      if ((t.includes('excel') || t.includes('spreadsheet') || t.includes('officedocument.sheet')) && (fileName.endsWith('.xls') || fileName.endsWith('.xlsx') || fileName.endsWith('.csv'))) return true;
+      if (t === 'image/*' && fileType.startsWith('image/')) return true;
+      return false;
+    });
+
+    if (!matchesMime && !matchesExtension) {
+      throw new Error(
+        `Unsupported file type "${file.type || fileName.split('.').pop() || 'unknown'}". Allowed formats: PDF, Word DOC/DOCX, PNG, JPG.`
+      );
+    }
   }
   if (file.size > maxBytes) {
-    throw new Error(`File is too large (max ${formatBytes(maxBytes)}).`);
+    throw new Error(`File is too large (${(file.size / (1024 * 1024)).toFixed(1)} MB). Max allowed size is ${formatBytes(maxBytes)}.`);
   }
 }
 

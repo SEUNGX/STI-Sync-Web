@@ -12,19 +12,6 @@ export function useEventCreation() {
   const { user: adviserUser, profile: adviserProfile } = useAdviserProfile();
   const { profile: officerProfile } = useOfficerProfile();
 
-  const uid =
-    officerProfile?.studentId ||
-    officerProfile?.id ||
-    adviserUser?.uid ||
-    auth.currentUser?.uid ||
-    'system_officer';
-
-  const userName =
-    officerProfile?.studentName ||
-    adviserProfile?.displayName ||
-    adviserUser?.displayName ||
-    'Officer';
-
   const handleCreateEvent = async (
     data: EventFormData,
     draftId?: string,
@@ -33,6 +20,32 @@ export function useEventCreation() {
     setLoading(true);
     setError(null);
     try {
+      let uid: string;
+      let userName: string;
+
+      if (isOfficerProposal) {
+        uid =
+          officerProfile?.studentId ||
+          officerProfile?.id ||
+          auth.currentUser?.uid ||
+          'student_officer';
+        userName =
+          officerProfile?.studentName ||
+          officerProfile?.studentSchoolId ||
+          auth.currentUser?.displayName ||
+          'Student Officer';
+      } else {
+        uid =
+          adviserUser?.uid ||
+          auth.currentUser?.uid ||
+          'sao_admin';
+        userName =
+          adviserProfile?.displayName ||
+          adviserUser?.displayName ||
+          auth.currentUser?.displayName ||
+          'SAS / SAO Administrator';
+      }
+
       const id = await createEvent(data, uid, draftId, isOfficerProposal, userName);
       setLoading(false);
       return id;
@@ -46,11 +59,36 @@ export function useEventCreation() {
 
   const handleSaveDraft = async (
     data: EventFormData,
-    existingId?: string
+    existingId?: string,
+    isOfficerProposal = false
   ): Promise<string | null> => {
     setLoading(true);
     setError(null);
     try {
+      let uid: string;
+      let userName: string;
+
+      if (isOfficerProposal) {
+        uid =
+          officerProfile?.studentId ||
+          officerProfile?.id ||
+          auth.currentUser?.uid ||
+          'student_officer';
+        userName =
+          officerProfile?.studentName ||
+          auth.currentUser?.displayName ||
+          'Student Officer';
+      } else {
+        uid =
+          adviserUser?.uid ||
+          auth.currentUser?.uid ||
+          'sao_admin';
+        userName =
+          adviserProfile?.displayName ||
+          adviserUser?.displayName ||
+          'SAS / SAO Administrator';
+      }
+
       const id = await saveEventDraft(data, uid, existingId, userName);
       setLoading(false);
       return id;

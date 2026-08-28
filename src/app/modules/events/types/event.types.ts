@@ -14,12 +14,16 @@ export interface EventDocument {
 
   // ─── Classification ───
   eventTypeId: string;                     // FK → /event_types
+  customEventTypeName?: string | null;     // For one-off custom event types
+  customEventTypeColor?: string | null;    // Color for one-off custom event types
   eventCategoryId: string;                 // FK → /event_categories
+  customEventCategoryName?: string | null; // For one-off custom event categories
   hostingOrgId: string;                    // FK → /organizations
 
   // ─── Academic Context ───
   semesterId: string;                      // FK → /semesters
   schoolYear: string;                      // auto-derived from active semester
+  targetAcademicLevel?: 'COLLEGE' | 'SHS' | 'BOTH' | null;
 
   // ─── Schedule ───
   sessions: EventSession[];

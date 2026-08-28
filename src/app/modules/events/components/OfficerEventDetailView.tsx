@@ -11,6 +11,8 @@ import { useOrganizationStream } from '../../organizations/hooks/useOrganization
 import { useEventTypesStream, useVenuesStream } from '../hooks/useEventConfigStream';
 import { useDepartments } from '../../academic/hooks/useAcademicStream';
 import { EventPayablesQRControl } from '../../finance/components/EventPayablesQRControl';
+import { exportEventProposalPDF } from '../utils/event-proposal-pdf';
+import { toast } from 'sonner';
 import { formatCurrency } from '../../../utils/currency';
 import { formatAppDate, formatAppDateTime } from '../../../utils/date';
 
@@ -64,12 +66,33 @@ export default function OfficerEventDetailView({
     event.proposalStatus === 'returned' ||
     (event.proposalStatus === 'rejected' && event.allowResubmission !== false);
 
+  const isSas = !event.hostingOrgId || event.hostingOrgId === 'sas';
   const orgObj = orgs.find((o) => o.id === event.hostingOrgId);
-  const orgName = orgObj ? orgObj.name : event.hostingOrgId || 'My Organization';
-  const orgAcronym = orgObj?.acronym || 'Club';
+  const orgName = isSas ? 'Student Affairs & Services (SAS)' : (orgObj?.name || event.hostingOrgId || 'My Organization');
+  const orgAcronym = isSas ? 'SAS' : (orgObj?.acronym || 'Club');
+  const orgLogo = isSas ? null : (orgObj?.logoUrl || orgObj?.logo || null);
   const eventTypeName = eventTypes.find((t) => t.id === event.eventTypeId)?.name || 'General Event';
   const venueObj = venues.find((v) => v.id === event.venueId);
-  const venueName = venueObj ? venueObj.name : event.venueId || 'On-Campus Venue';
+  const venueName = venueObj ? venueObj.name : event.customVenueName || event.venueId || 'On-Campus Venue';
+
+  const [exportingPdf, setExportingPdf] = useState(false);
+
+  const handleExportPDF = async () => {
+    setExportingPdf(true);
+    try {
+      await exportEventProposalPDF(event, {
+        org: orgObj,
+        eventTypeName,
+        venueName,
+      });
+      toast.success('Event proposal PDF exported successfully!');
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Failed to export PDF proposal.');
+    } finally {
+      setExportingPdf(false);
+    }
+  };
 
   const budgetItems = event.budgetItems || [];
   const totalRequested = budgetItems.reduce((acc, item) => {
@@ -114,7 +137,7 @@ export default function OfficerEventDetailView({
         <div className="flex items-center gap-4">
           <button
             onClick={onClose}
-            className="flex items-center gap-2 text-white/80 hover:text-white hover:bg-white/10 px-3 py-1.5 rounded-lg transition-colors text-xs font-semibold"
+            className="flex items-center gap-2 text-white/80 hover:text-white hover:bg-white/10 px-3 py-1.5 rounded-lg transition-colors text-xs font-semibold cursor-pointer"
           >
             <ArrowLeft className="w-4 h-4" />
             <span>Back to Event Management</span>
@@ -140,11 +163,21 @@ export default function OfficerEventDetailView({
             <span>{currentStatus.label}</span>
           </div>
 
+          {/* Export PDF */}
+          <button
+            onClick={handleExportPDF}
+            disabled={exportingPdf}
+            className="px-3.5 py-1.5 bg-[#FFD41C] text-[#001A4D] hover:bg-amber-400 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer disabled:opacity-50"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>{exportingPdf ? 'Exporting...' : 'Export PDF'}</span>
+          </button>
+
           {/* Edit Proposal Action */}
           {isEditable && onEdit && (
             <button
               onClick={onEdit}
-              className="px-4 py-1.5 bg-[#001A4D] text-white hover:bg-[#0E4EBD] rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs"
+              className="px-4 py-1.5 bg-[#0E4EBD] text-white hover:bg-[#1E70E8] rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
             >
               <Edit className="w-3.5 h-3.5" />
               <span>Revise / Edit Proposal</span>
@@ -168,12 +201,26 @@ export default function OfficerEventDetailView({
           {/* Organization Badge */}
           <div className="p-3.5 bg-white border border-gray-200 rounded-xl shadow-xs">
             <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-[#001A4D] to-[#0E4EBD] flex items-center justify-center text-white font-bold text-xs shadow-xs">
-                {orgAcronym.slice(0, 3)}
-              </div>
+              {isSas ? (
+                <div className="w-9 h-9 rounded-lg bg-[#001A4D] flex items-center justify-center text-[#FFD41C] font-bold text-xs shadow-xs">
+                  SAS
+                </div>
+              ) : orgLogo ? (
+                <img
+                  src={orgLogo}
+                  alt={orgAcronym}
+                  className="w-9 h-9 rounded-lg object-cover border border-blue-200 shadow-xs"
+                />
+              ) : (
+                <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-[#001A4D] to-[#0E4EBD] flex items-center justify-center text-white font-bold text-xs shadow-xs">
+                  {orgAcronym.slice(0, 3)}
+                </div>
+              )}
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-bold text-gray-900 truncate">{orgName}</p>
-                <p className="text-[11px] text-gray-500 truncate">Host Organization</p>
+                <p className="text-[11px] text-gray-500 truncate">
+                  {isSas ? 'Institutional Host' : 'Host Organization'}
+                </p>
               </div>
             </div>
           </div>
@@ -316,26 +363,34 @@ export default function OfficerEventDetailView({
                   </div>
                 )}
                 <div className="absolute top-3 right-3 flex items-center gap-2">
-                  <span className="px-3 py-1 bg-black/60 backdrop-blur-md text-white text-xs font-semibold rounded-lg">
-                    {event.eventFormat || 'On-Campus'}
+                  <span className="px-3 py-1 bg-black/60 backdrop-blur-md text-white text-xs font-semibold rounded-lg border border-white/20">
+                    {eventTypeName}
                   </span>
                 </div>
               </div>
 
+              {/* Highlighted Event Title Banner */}
+              <div className="p-4 bg-gradient-to-r from-blue-50/80 via-white to-amber-50/40 rounded-xl border-l-4 border-[#0E4EBD] shadow-2xs">
+                <div className="flex items-center justify-between gap-3 mb-1">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-[#0E4EBD]">
+                    Official Event Title
+                  </span>
+                  <span className="text-xs font-mono font-bold px-2.5 py-0.5 bg-[#FFD41C] text-[#001A4D] rounded-md">
+                    {event.referenceId || 'EVT-REF'}
+                  </span>
+                </div>
+                <h2 className="text-2xl font-extrabold text-[#001A4D] tracking-tight">
+                  {event.title}
+                </h2>
+                {event.tagline && (
+                  <p className="text-sm font-semibold text-[#0E4EBD] mt-1 italic">
+                    "{event.tagline}"
+                  </p>
+                )}
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-4">
-                  <div>
-                    <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
-                      Event Title
-                    </label>
-                    <p className="text-lg font-bold text-[#001A4D] mt-0.5">{event.title}</p>
-                    {event.tagline && (
-                      <p className="text-xs text-[#0E4EBD] font-semibold mt-0.5 italic">
-                        "{event.tagline}"
-                      </p>
-                    )}
-                  </div>
-
                   <div>
                     <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
                       Description
@@ -355,8 +410,23 @@ export default function OfficerEventDetailView({
                   </div>
 
                   <div className="flex items-center justify-between pb-2.5 border-b border-gray-200 text-xs">
-                    <span className="text-gray-500 font-medium">Host Organization</span>
-                    <span className="font-bold text-[#001A4D]">{orgName}</span>
+                    <span className="text-gray-500 font-medium">
+                      {isSas ? 'Issuer / Host' : 'Host Organization'}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      {isSas ? (
+                        <div className="w-5 h-5 bg-[#001A4D] text-[#FFD41C] rounded-full flex items-center justify-center text-[9px] font-bold">
+                          SAS
+                        </div>
+                      ) : orgLogo ? (
+                        <img src={orgLogo} alt={orgAcronym} className="w-5 h-5 rounded-full object-cover border" />
+                      ) : (
+                        <div className="w-5 h-5 bg-[#001A4D] rounded-full flex items-center justify-center text-white text-[9px] font-bold">
+                          {orgAcronym.charAt(0)}
+                        </div>
+                      )}
+                      <span className="font-bold text-[#001A4D]">{orgName}</span>
+                    </div>
                   </div>
 
                   <div className="flex items-center justify-between pb-2.5 border-b border-gray-200 text-xs">
@@ -368,7 +438,7 @@ export default function OfficerEventDetailView({
                           : 'bg-gray-200 text-gray-600'
                       }`}
                     >
-                      {event.enableQRTickets !== false ? 'Enabled' : 'Disabled'}
+                      {event.enableQRTickets !== false ? 'Enabled (Option A)' : 'Disabled'}
                     </span>
                   </div>
 
@@ -419,12 +489,12 @@ export default function OfficerEventDetailView({
                   <p className="text-sm font-bold text-[#001A4D] mt-0.5">{event.schoolYear || 'SY 2025-2026'}</p>
                 </div>
                 <div className="p-3.5 bg-gray-50 border border-gray-200 rounded-xl text-center">
-                  <span className="text-[11px] font-bold text-gray-400 uppercase">Requested Venue</span>
-                  <p className="text-sm font-bold text-[#0E4EBD] mt-0.5">{venueName}</p>
+                  <span className="text-[11px] font-bold text-gray-400 uppercase">Academic Term</span>
+                  <p className="text-sm font-bold text-[#001A4D] mt-0.5">{event.semester || 'Active Semester'}</p>
                 </div>
                 <div className="p-3.5 bg-gray-50 border border-gray-200 rounded-xl text-center">
-                  <span className="text-[11px] font-bold text-gray-400 uppercase">Format</span>
-                  <p className="text-sm font-bold text-emerald-700 mt-0.5">{event.eventFormat || 'On-Campus'}</p>
+                  <span className="text-[11px] font-bold text-gray-400 uppercase">Requested Venue</span>
+                  <p className="text-sm font-bold text-[#0E4EBD] mt-0.5">{venueName}</p>
                 </div>
               </div>
 

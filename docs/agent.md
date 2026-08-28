@@ -97,13 +97,17 @@ src/
 │   │   │   │       ├── Step5Budget.tsx
 │   │   │   │       ├── Step6Documents.tsx
 │   │   │   │       └── Step7Publish.tsx
+│   │   │   ├── utils/
+│   │   │   │   └── event-validation.ts        # Steps 1–7 validation engine, session overlap & venue collision checks
 │   │   │   ├── hooks/
 │   │   │   │   ├── useEventStream.ts          # onSnapshot() for /events collection
 │   │   │   │   ├── usePendingProposals.ts     # Admin: pending event proposal stream
 │   │   │   │   ├── useOrgEvents.ts            # Officer: org-scoped event stream
+│   │   │   │   ├── useEventCreation.ts        # Wizard creation & proposal state controller
 │   │   │   │   └── useEventMutations.ts       # create / update / approve / reject writes
 │   │   │   ├── services/
-│   │   │   │   └── event.service.ts           # Firestore CRUD for /events
+│   │   │   │   ├── event.service.ts           # Firestore CRUD for /events
+│   │   │   │   └── event-config.service.ts    # Firestore CRUD for event types, categories, venues
 │   │   │   ├── types/
 │   │   │   │   └── event.types.ts             # EventDocument, Session, BudgetLine interfaces
 │   │   │   └── index.ts                       # Public barrel exports
@@ -446,4 +450,5 @@ If you catch yourself doing any of the following, **stop and restructure:**
 
 <!-- AGENT-UPDATED: 2026-08-01 — Documented student_payables, financial_liquidations, certificate_templates, issued_certificates, and organization profile services -->
 <!-- AGENT-UPDATED: 2026-08-01 — Implemented automated payables denormalization on event approval and database sync helper in EventPayablesQRControl -->
+<!-- AGENT-UPDATED: 2026-08-28 — Implemented 7-step validation engine, real-time internal/external session conflict detection, interactive mini-calendar widget, cascading sections filtering, dynamic treasury balance verification, and multi-format document uploads -->
 

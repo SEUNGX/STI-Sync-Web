@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Users, Globe, UserCheck, CheckSquare, Layers, BookOpen } from 'lucide-react';
-import { useCourses, useSections } from '../../../academic';
+import { Users, Globe, UserCheck, CheckSquare, Layers, BookOpen, GraduationCap, ShieldAlert } from 'lucide-react';
+import { useCourses, useSections, useSemesters } from '../../../academic';
 import { useStudents } from '../../../students/hooks/useStudentStream';
 import { useOrgMembers } from '../../../organizations/hooks/useOrgMembers';
 import { useOrganizationStream } from '../../../organizations';
@@ -10,9 +10,10 @@ interface Step3Props {
   data: EventFormData;
   onUpdate: (data: Partial<EventFormData>) => void;
   isOfficer?: boolean;
+  errors?: Record<string, string>;
 }
 
-const YEAR_LEVELS = ['1st Year', '2nd Year', '3rd Year', '4th Year', 'G11', 'G12'];
+const ALL_YEAR_LEVELS = ['1st Year', '2nd Year', '3rd Year', '4th Year', 'G11', 'G12'];
 
 function formatTime12Hour(timeStr?: string): string {
   if (!timeStr) return 'TBA';
@@ -42,16 +43,80 @@ function addMinutesToTime(timeStr: string, minutesToAdd: number): string {
   return `${newH.toString().padStart(2, '0')}:${newM.toString().padStart(2, '0')}`;
 }
 
-export default function Step3Participants({ data, onUpdate, isOfficer }: Step3Props) {
+export default function Step3Participants({ data, onUpdate, isOfficer, errors = {} }: Step3Props) {
   const { data: courses, loading: coursesLoading } = useCourses();
   const { data: sections, loading: sectionsLoading } = useSections();
   const { data: students, loading: studentsLoading } = useStudents();
   const { data: orgs } = useOrganizationStream();
+  const { data: semesters } = useSemesters();
   const { members: orgMembers, loading: membersLoading } = useOrgMembers(data.hostingOrgId || '');
 
   const activeCourses = useMemo(() => courses.filter(c => !c.archived), [courses]);
   const activeSections = useMemo(() => sections.filter(s => !s.archived), [sections]);
   const currentOrg = useMemo(() => orgs.find(o => o.id === data.hostingOrgId), [orgs, data.hostingOrgId]);
+
+  // Determine active semester cohort level (SHS vs COLLEGE vs BOTH)
+  const selectedSemester = useMemo(
+    () => semesters.find(s => s.id === data.semesterId),
+    [semesters, data.semesterId]
+  );
+
+  const cohortLevel = useMemo(() => {
+    if (data.targetAcademicLevel) return data.targetAcademicLevel;
+    if (!selectedSemester) return 'BOTH';
+    const isShs = selectedSemester.academicLevel === 'SHS' || String(selectedSemester.semester).includes('Trimester');
+    return isShs ? 'SHS' : selectedSemester.academicLevel === 'COLLEGE' || !selectedSemester.academicLevel ? 'COLLEGE' : 'BOTH';
+  }, [data.targetAcademicLevel, selectedSemester]);
+
+  // Available year levels strictly based on cohort level
+  const availableYearLevels = useMemo(() => {
+    if (cohortLevel === 'SHS') return ['G11', 'G12'];
+    if (cohortLevel === 'COLLEGE') return ['1st Year', '2nd Year', '3rd Year', '4th Year'];
+    return ALL_YEAR_LEVELS;
+  }, [cohortLevel]);
+
+  // Filter courses by cohort level
+  const cohortCourses = useMemo(() => {
+    return activeCourses.filter(c => {
+      const isShsCourse =
+        c.academicLevel === 'SHS' ||
+        c.departmentId === 'SHS' ||
+        String(c.code).includes('SHS') ||
+        String(c.code).includes('STEM') ||
+        String(c.code).includes('ABM') ||
+        String(c.code).includes('HUMSS') ||
+        String(c.code).includes('TVL') ||
+        String(c.code).includes('GAS') ||
+        String(c.name).toLowerCase().includes('senior high');
+
+      if (cohortLevel === 'SHS') return isShsCourse;
+      if (cohortLevel === 'COLLEGE') return !isShsCourse;
+      return true;
+    });
+  }, [activeCourses, cohortLevel]);
+
+  // Filter sections by cohort level
+  const cohortSections = useMemo(() => {
+    return activeSections.filter(sec => {
+      const isShsSection =
+        sec.academicLevel === 'SHS' ||
+        sec.yearLevel === 11 ||
+        sec.yearLevel === 12 ||
+        String(sec.name).toUpperCase().includes('G11') ||
+        String(sec.name).toUpperCase().includes('G12') ||
+        String(sec.name).toUpperCase().includes('GRADE 11') ||
+        String(sec.name).toUpperCase().includes('GRADE 12') ||
+        String(sec.name).toUpperCase().includes('STEM') ||
+        String(sec.name).toUpperCase().includes('ABM') ||
+        String(sec.name).toUpperCase().includes('HUMSS') ||
+        String(sec.name).toUpperCase().includes('TVL') ||
+        String(sec.name).toUpperCase().includes('GAS');
+
+      if (cohortLevel === 'SHS') return isShsSection;
+      if (cohortLevel === 'COLLEGE') return !isShsSection;
+      return true;
+    });
+  }, [activeSections, cohortLevel]);
 
   // Dynamic Theme Styling based on Officer vs Admin
   const accentBorder = 'border-[#0E4EBD]';
@@ -67,6 +132,23 @@ export default function Step3Participants({ data, onUpdate, isOfficer }: Step3Pr
   const selectedCourses = data.targetCourses || data.allowedCourses || [];
   const selectedYears = data.targetYearLevels || [];
   const selectedSections = data.targetSections || [];
+
+  // Auto-prune any selected years / courses that don't belong to the active cohort level
+  useEffect(() => {
+    let changed = false;
+    const nextYears = selectedYears.filter(y => availableYearLevels.includes(y));
+    const cohortCourseIds = cohortCourses.map(c => c.id);
+    const nextCourses = selectedCourses.filter(cId => cohortCourseIds.includes(cId));
+
+    if (nextYears.length !== selectedYears.length) {
+      onUpdate({ targetYearLevels: nextYears });
+      changed = true;
+    }
+    if (nextCourses.length !== selectedCourses.length) {
+      onUpdate({ targetCourses: nextCourses, allowedCourses: nextCourses });
+      changed = true;
+    }
+  }, [cohortLevel, availableYearLevels, cohortCourses]);
 
   // Initialize defaults
   useEffect(() => {
@@ -98,7 +180,7 @@ export default function Step3Participants({ data, onUpdate, isOfficer }: Step3Pr
   };
 
   const selectAllCourses = () => {
-    const allCourseIds = activeCourses.map(c => c.id);
+    const allCourseIds = cohortCourses.map(c => c.id);
     updateField('targetCourses', allCourseIds);
     updateField('allowedCourses', allCourseIds);
   };
@@ -117,34 +199,54 @@ export default function Step3Participants({ data, onUpdate, isOfficer }: Step3Pr
   };
 
   const selectAllYears = () => {
-    updateField('targetYearLevels', [...YEAR_LEVELS]);
+    updateField('targetYearLevels', [...availableYearLevels]);
   };
 
   const clearAllYears = () => {
     updateField('targetYearLevels', []);
   };
 
-  // Cascading Sections Filter based on selected courses and year levels
+  // Cascading Sections Filter based on selected courses and year levels within active cohort
   const availableSections = useMemo(() => {
-    return activeSections.filter(sec => {
-      // Filter by Course if any courses are selected
+    return cohortSections.filter(sec => {
+      // 1. Filter by Course if any courses are selected
       if (selectedCourses.length > 0) {
-        const matchesCourse = selectedCourses.includes(sec.courseId) || selectedCourses.some(cId => {
-          const c = activeCourses.find(item => item.id === cId);
-          return c && (sec.name.startsWith(c.code) || sec.name.includes(c.code));
-        });
+        const matchesCourse =
+          selectedCourses.includes(sec.courseId) ||
+          selectedCourses.some(cId => {
+            const c = cohortCourses.find(item => item.id === cId);
+            if (!c) return false;
+            return (
+              sec.courseId === c.id ||
+              sec.name.toUpperCase().startsWith(c.code.toUpperCase()) ||
+              sec.name.toUpperCase().includes(c.code.toUpperCase())
+            );
+          });
         if (!matchesCourse) return false;
       }
 
-      // Filter by Year Level if any year levels are selected
+      // 2. Filter by Year Level if any year levels are selected
       if (selectedYears.length > 0) {
         const matchesYear = selectedYears.some(yearStr => {
-          if (yearStr === '1st Year') return sec.yearLevel === 1 || sec.name.includes('-1') || sec.name.includes('101');
-          if (yearStr === '2nd Year') return sec.yearLevel === 2 || sec.name.includes('-2') || sec.name.includes('201');
-          if (yearStr === '3rd Year') return sec.yearLevel === 3 || sec.name.includes('-3') || sec.name.includes('301');
-          if (yearStr === '4th Year') return sec.yearLevel === 4 || sec.name.includes('-4') || sec.name.includes('401');
-          if (yearStr === 'G11') return sec.yearLevel === 11 || sec.name.includes('11');
-          if (yearStr === 'G12') return sec.yearLevel === 12 || sec.name.includes('12');
+          const yNum = Number(sec.yearLevel);
+          if (yearStr === '1st Year') {
+            return yNum === 1 || sec.name.includes('-1') || sec.name.includes(' 1') || sec.name.includes('101') || sec.name.includes('102');
+          }
+          if (yearStr === '2nd Year') {
+            return yNum === 2 || sec.name.includes('-2') || sec.name.includes(' 2') || sec.name.includes('201') || sec.name.includes('202');
+          }
+          if (yearStr === '3rd Year') {
+            return yNum === 3 || sec.name.includes('-3') || sec.name.includes(' 3') || sec.name.includes('301') || sec.name.includes('302');
+          }
+          if (yearStr === '4th Year') {
+            return yNum === 4 || sec.name.includes('-4') || sec.name.includes(' 4') || sec.name.includes('401') || sec.name.includes('402');
+          }
+          if (yearStr === 'G11') {
+            return yNum === 11 || sec.name.toUpperCase().includes('G11') || sec.name.toUpperCase().includes('11-') || sec.name.toUpperCase().includes('11A');
+          }
+          if (yearStr === 'G12') {
+            return yNum === 12 || sec.name.toUpperCase().includes('G12') || sec.name.toUpperCase().includes('12-') || sec.name.toUpperCase().includes('12A');
+          }
           return false;
         });
         if (!matchesYear) return false;
@@ -152,7 +254,7 @@ export default function Step3Participants({ data, onUpdate, isOfficer }: Step3Pr
 
       return true;
     });
-  }, [activeSections, selectedCourses, selectedYears, activeCourses]);
+  }, [cohortSections, selectedCourses, selectedYears, cohortCourses]);
 
   // Section Toggles & Select All
   const toggleSection = (secNameOrId: string) => {
@@ -197,10 +299,29 @@ export default function Step3Participants({ data, onUpdate, isOfficer }: Step3Pr
         if (!isOrgMember) return false;
       }
 
+      // Cohort Academic Level Constraint
+      if (cohortLevel === 'SHS') {
+        const isShsStudent =
+          s.academicLevel === 'SHS' ||
+          s.yearLevel === 'G11' ||
+          s.yearLevel === 'G12' ||
+          s.yearLevel === 11 ||
+          s.yearLevel === 12;
+        if (!isShsStudent) return false;
+      } else if (cohortLevel === 'COLLEGE') {
+        const isShsStudent =
+          s.academicLevel === 'SHS' ||
+          s.yearLevel === 'G11' ||
+          s.yearLevel === 'G12' ||
+          s.yearLevel === 11 ||
+          s.yearLevel === 12;
+        if (isShsStudent) return false;
+      }
+
       // Course Filter
       if (selectedCourses.length > 0) {
         const matchesCourse = selectedCourses.includes(s.courseId) || selectedCourses.some(cId => {
-          const c = activeCourses.find(item => item.id === cId);
+          const c = cohortCourses.find(item => item.id === cId);
           return c && (s.courseName === c.name || s.courseCode === c.code || s.courseId === c.id);
         });
         if (!matchesCourse) return false;
@@ -220,7 +341,7 @@ export default function Step3Participants({ data, onUpdate, isOfficer }: Step3Pr
 
       return true;
     });
-  }, [students, isOfficer, selectedScope, selectedCourses, selectedYears, selectedSections, activeCourses, memberStudentIds]);
+  }, [students, isOfficer, selectedScope, selectedCourses, selectedYears, selectedSections, cohortCourses, memberStudentIds, cohortLevel]);
 
   // Sync expectedParticipantCount to data
   useEffect(() => {
@@ -244,6 +365,38 @@ export default function Step3Participants({ data, onUpdate, isOfficer }: Step3Pr
             <h3 className="text-[#001A4D] font-bold text-base">
               {isOfficer ? 'Target Audience Scope' : 'Target Audience & Academic Filter'}
             </h3>
+          </div>
+
+          {/* Academic Cohort Context Banner */}
+          <div className={`p-3.5 mb-4 rounded-xl border flex items-center justify-between shadow-xs ${
+            cohortLevel === 'SHS'
+              ? 'bg-amber-50/70 border-amber-200 text-amber-900'
+              : cohortLevel === 'COLLEGE'
+              ? 'bg-blue-50/70 border-blue-200 text-blue-900'
+              : 'bg-purple-50/70 border-purple-200 text-purple-900'
+          }`}>
+            <div className="flex items-center gap-2.5">
+              <GraduationCap className={`w-5 h-5 ${cohortLevel === 'SHS' ? 'text-amber-600' : cohortLevel === 'COLLEGE' ? 'text-[#0E4EBD]' : 'text-purple-600'}`} />
+              <div>
+                <div className="font-bold text-xs">
+                  {cohortLevel === 'SHS' && 'Senior High School Cohort (G11 – G12)'}
+                  {cohortLevel === 'COLLEGE' && 'College Undergraduate Cohort (1st – 4th Year)'}
+                  {cohortLevel === 'BOTH' && 'Institution-Wide Cohort (All Levels)'}
+                </div>
+                <div className="text-[11px] opacity-80 mt-0.5">
+                  {selectedSemester ? `Filtered by active semester: ${selectedSemester.label}` : 'No active semester constraint selected'}
+                </div>
+              </div>
+            </div>
+            <span className={`px-2.5 py-1 text-[10px] font-bold uppercase rounded-md ${
+              cohortLevel === 'SHS'
+                ? 'bg-amber-200 text-amber-800'
+                : cohortLevel === 'COLLEGE'
+                ? 'bg-blue-200 text-blue-800'
+                : 'bg-purple-200 text-purple-800'
+            }`}>
+              {cohortLevel === 'BOTH' ? 'ALL PARTICIPANTS' : `${cohortLevel} ONLY`}
+            </span>
           </div>
 
           {/* Scope Selector Cards — ONLY for Officers */}
@@ -293,6 +446,13 @@ export default function Step3Participants({ data, onUpdate, isOfficer }: Step3Pr
             </div>
           )}
 
+          {errors.targetAudienceScope && (
+            <div className="p-3.5 bg-red-50 border border-red-300 rounded-xl text-xs text-red-700 font-semibold flex items-center gap-2 mb-2 shadow-2xs">
+              <ShieldAlert className="w-4 h-4 text-red-600 shrink-0" />
+              <span>{errors.targetAudienceScope}</span>
+            </div>
+          )}
+
           <div className="space-y-5">
             {/* 1. Courses Filter */}
             <div className="p-4 border border-gray-200 rounded-xl bg-white space-y-3">
@@ -309,7 +469,7 @@ export default function Step3Participants({ data, onUpdate, isOfficer }: Step3Pr
                     onClick={selectAllCourses}
                     className={`text-xs ${accentText} hover:underline font-semibold flex items-center gap-1 cursor-pointer`}
                   >
-                    <CheckSquare className="w-3.5 h-3.5" /> Select All ({activeCourses.length})
+                    <CheckSquare className="w-3.5 h-3.5" /> Select All ({cohortCourses.length})
                   </button>
                   <span className="text-gray-300">|</span>
                   <button
@@ -324,9 +484,11 @@ export default function Step3Participants({ data, onUpdate, isOfficer }: Step3Pr
 
               {coursesLoading ? (
                 <div className="text-xs text-gray-400 py-2">Loading courses...</div>
+              ) : cohortCourses.length === 0 ? (
+                <div className="text-xs text-gray-400 py-2">No courses registered for this academic cohort.</div>
               ) : (
                 <div className="flex flex-wrap gap-2">
-                  {activeCourses.map(course => {
+                  {cohortCourses.map(course => {
                     const isSelected = selectedCourses.includes(course.id);
                     return (
                       <button
@@ -362,7 +524,7 @@ export default function Step3Participants({ data, onUpdate, isOfficer }: Step3Pr
                     onClick={selectAllYears}
                     className={`text-xs ${accentText} hover:underline font-semibold flex items-center gap-1 cursor-pointer`}
                   >
-                    <CheckSquare className="w-3.5 h-3.5" /> Select All ({YEAR_LEVELS.length})
+                    <CheckSquare className="w-3.5 h-3.5" /> Select All ({availableYearLevels.length})
                   </button>
                   <span className="text-gray-300">|</span>
                   <button
@@ -376,7 +538,7 @@ export default function Step3Participants({ data, onUpdate, isOfficer }: Step3Pr
               </div>
 
               <div className="flex flex-wrap gap-2">
-                {YEAR_LEVELS.map(year => {
+                {availableYearLevels.map(year => {
                   const isSelected = selectedYears.includes(year);
                   return (
                     <button

@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="app.diagrams.net" modified="2026-08-26T02:00:00.000Z" agent="STI Sync Generator" version="24.7.5">
+  <diagram id="diag_student_non_scanner" name="Student User (Non-Scanner)">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1200" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Title -->
+        <mxCell id="title_node" value="STI Sync - Student (Non-Scanner) Use Case Diagram" style="text;html=1;align=center;verticalAlign=middle;fontStyle=1;fontSize=16;fontColor=#000000;" vertex="1" parent="1">
+          <mxGeometry x="400" y="15" width="450" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- System Boundary Box -->
+        <mxCell id="sys_box" value="STI Sync Mobile - Student Subsystem Boundary" style="shape=umlFrame;whiteSpace=wrap;html=1;width=350;height=30;boundedLbl=1;verticalAlign=top;align=left;spacingLeft=10;fillColor=none;strokeColor=#000000;strokeWidth=1.5;" vertex="1" parent="1">
+          <mxGeometry x="190" y="50" width="940" height="780" as="geometry" />
+        </mxCell>
+
+        <!-- Actor (Bottom Left) -->
+        <mxCell id="act_student" value="Student User&lt;br&gt;&lt;b&gt;(Mobile App)&lt;/b&gt;" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;fillColor=#FFE6CC;strokeColor=#D79B00;strokeWidth=1.5;" vertex="1" parent="1">
+          <mxGeometry x="60" y="660" width="50" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- Base Use Cases (Blue Ovals) -->
+        <mxCell id="uc_reg" value="Complete 6-Step Registration" style="ellipse;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;strokeWidth=1.5;fontStyle=1;fontColor=#001A4D;" vertex="1" parent="1">
+          <mxGeometry x="230" y="90" width="220" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_login" value="Log In to Mobile App" style="ellipse;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;strokeWidth=1.5;fontStyle=1;fontColor=#001A4D;" vertex="1" parent="1">
+          <mxGeometry x="540" y="165" width="220" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_reenroll" value="Complete Semester&lt;br&gt;Re-Enrollment" style="ellipse;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;strokeWidth=1.5;fontStyle=1;fontColor=#001A4D;" vertex="1" parent="1">
+          <mxGeometry x="540" y="240" width="220" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_ticket" value="Access Dynamic QR&lt;br&gt;Entry Ticket" style="ellipse;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;strokeWidth=1.5;fontStyle=1;fontColor=#001A4D;" vertex="1" parent="1">
+          <mxGeometry x="540" y="390" width="220" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_pay" value="View Payables &amp;amp; Fines" style="ellipse;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;strokeWidth=1.5;fontStyle=1;fontColor=#001A4D;" vertex="1" parent="1">
+          <mxGeometry x="540" y="530" width="220" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_certs" value="View &amp;amp; Download&lt;br&gt;Certificates" style="ellipse;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;strokeWidth=1.5;fontStyle=1;fontColor=#001A4D;" vertex="1" parent="1">
+          <mxGeometry x="540" y="635" width="220" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_browse" value="Browse &amp;amp; Filter Events" style="ellipse;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;strokeWidth=1.5;fontStyle=1;fontColor=#001A4D;" vertex="1" parent="1">
+          <mxGeometry x="230" y="690" width="220" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_viewevent" value="View Event Details &amp;amp; Sessions" style="ellipse;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;strokeWidth=1.5;fontStyle=1;fontColor=#001A4D;" vertex="1" parent="1">
+          <mxGeometry x="230" y="755" width="220" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_profile" value="Manage Student Profile" style="ellipse;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;strokeWidth=1.5;fontStyle=1;fontColor=#001A4D;" vertex="1" parent="1">
+          <mxGeometry x="540" y="740" width="220" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Included Use Cases (Pink Ovals - Right Column) -->
+        <mxCell id="uc_inc_upload" value="&amp;laquo;include&amp;raquo;&lt;br&gt;Upload 2x2 Photo &amp;amp;&lt;br&gt;School ID Card" style="ellipse;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;strokeWidth=1.5;fontColor=#900C3F;" vertex="1" parent="1">
+          <mxGeometry x="870" y="90" width="210" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_inc_term" value="&amp;laquo;include&amp;raquo;&lt;br&gt;Validate Track Active&lt;br&gt;Academic Term" style="ellipse;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;strokeWidth=1.5;fontColor=#900C3F;" vertex="1" parent="1">
+          <mxGeometry x="870" y="240" width="210" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_inc_qr" value="&amp;laquo;include&amp;raquo;&lt;br&gt;Generate Signed QR&lt;br&gt;Ticket Payload" style="ellipse;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;strokeWidth=1.5;fontColor=#900C3F;" vertex="1" parent="1">
+          <mxGeometry x="870" y="392" width="210" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_inc_debt" value="&amp;laquo;include&amp;raquo;&lt;br&gt;Itemize Billed Amount,&lt;br&gt;Paid &amp;amp; Balance" style="ellipse;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;strokeWidth=1.5;fontColor=#900C3F;" vertex="1" parent="1">
+          <mxGeometry x="870" y="530" width="210" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_inc_cert" value="&amp;laquo;include&amp;raquo;&lt;br&gt;Verify Certificate QR&lt;br&gt;Code Authenticity" style="ellipse;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;strokeWidth=1.5;fontColor=#900C3F;" vertex="1" parent="1">
+          <mxGeometry x="870" y="635" width="210" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- Extended Use Cases (Yellow Ovals - Left Column) -->
+        <mxCell id="uc_ext_pending" value="&amp;laquo;extend&amp;raquo;&lt;br&gt;Show Pending Verification&lt;br&gt;Status Screen" style="ellipse;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;strokeWidth=1.5;fontColor=#856404;" vertex="1" parent="1">
+          <mxGeometry x="230" y="165" width="220" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_ext_redqr" value="&amp;laquo;extend&amp;raquo;&lt;br&gt;Display Red Locked QR&lt;br&gt;Ticket Screen" style="ellipse;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;strokeWidth=1.5;fontColor=#856404;" vertex="1" parent="1">
+          <mxGeometry x="230" y="355" width="220" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_ext_att" value="&amp;laquo;extend&amp;raquo;&lt;br&gt;View Live In/Out&lt;br&gt;Attendance Status" style="ellipse;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;strokeWidth=1.5;fontColor=#856404;" vertex="1" parent="1">
+          <mxGeometry x="230" y="425" width="220" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_ext_payinst" value="&amp;laquo;extend&amp;raquo;&lt;br&gt;Show Cash Payment&lt;br&gt;Remittance Instructions" style="ellipse;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;strokeWidth=1.5;fontColor=#856404;" vertex="1" parent="1">
+          <mxGeometry x="230" y="530" width="220" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- Solid Connector Lines (Actor -> Base Use Cases) -->
+        <mxCell id="edge_reg" style="endArrow=classic;html=1;strokeColor=#000000;strokeWidth=1.2;curved=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="act_student" target="uc_reg">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_login" style="endArrow=classic;html=1;strokeColor=#000000;strokeWidth=1.2;curved=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="act_student" target="uc_login">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_reenroll" style="endArrow=classic;html=1;strokeColor=#000000;strokeWidth=1.2;curved=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="act_student" target="uc_reenroll">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_browse" style="endArrow=classic;html=1;strokeColor=#000000;strokeWidth=1.2;curved=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="act_student" target="uc_browse">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_viewevent" style="endArrow=classic;html=1;strokeColor=#000000;strokeWidth=1.2;curved=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="act_student" target="uc_viewevent">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_ticket" style="endArrow=classic;html=1;strokeColor=#000000;strokeWidth=1.2;curved=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="act_student" target="uc_ticket">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_pay" style="endArrow=classic;html=1;strokeColor=#000000;strokeWidth=1.2;curved=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="act_student" target="uc_pay">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_certs" style="endArrow=classic;html=1;strokeColor=#000000;strokeWidth=1.2;curved=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="act_student" target="uc_certs">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_profile" style="endArrow=classic;html=1;strokeColor=#000000;strokeWidth=1.2;curved=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="act_student" target="uc_profile">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Include Relationships (Dashed -> Include) -->
+        <mxCell id="inc_reg" value="&amp;laquo;include&amp;raquo;" style="html=1;verticalAlign=bottom;endArrow=open;dashed=1;endSize=8;strokeColor=#333333;strokeWidth=1.2;fontColor=#333333;" edge="1" parent="1" source="uc_reg" target="uc_inc_upload">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="inc_reenroll" value="&amp;laquo;include&amp;raquo;" style="html=1;verticalAlign=bottom;endArrow=open;dashed=1;endSize=8;strokeColor=#333333;strokeWidth=1.2;fontColor=#333333;" edge="1" parent="1" source="uc_reenroll" target="uc_inc_term">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="inc_ticket" value="&amp;laquo;include&amp;raquo;" style="html=1;verticalAlign=bottom;endArrow=open;dashed=1;endSize=8;strokeColor=#333333;strokeWidth=1.2;fontColor=#333333;" edge="1" parent="1" source="uc_ticket" target="uc_inc_qr">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="inc_pay" value="&amp;laquo;include&amp;raquo;" style="html=1;verticalAlign=bottom;endArrow=open;dashed=1;endSize=8;strokeColor=#333333;strokeWidth=1.2;fontColor=#333333;" edge="1" parent="1" source="uc_pay" target="uc_inc_debt">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="inc_certs" value="&amp;laquo;include&amp;raquo;" style="html=1;verticalAlign=bottom;endArrow=open;dashed=1;endSize=8;strokeColor=#333333;strokeWidth=1.2;fontColor=#333333;" edge="1" parent="1" source="uc_certs" target="uc_inc_cert">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Extend Relationships (Extend -> Base) -->
+        <mxCell id="ext_pending" value="&amp;laquo;extend&amp;raquo;" style="html=1;verticalAlign=bottom;endArrow=open;dashed=1;endSize=8;strokeColor=#333333;strokeWidth=1.2;fontColor=#333333;" edge="1" parent="1" source="uc_ext_pending" target="uc_login">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ext_redqr" value="&amp;laquo;extend&amp;raquo;" style="html=1;verticalAlign=bottom;endArrow=open;dashed=1;endSize=8;strokeColor=#333333;strokeWidth=1.2;fontColor=#333333;" edge="1" parent="1" source="uc_ext_redqr" target="uc_ticket">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ext_att" value="&amp;laquo;extend&amp;raquo;" style="html=1;verticalAlign=bottom;endArrow=open;dashed=1;endSize=8;strokeColor=#333333;strokeWidth=1.2;fontColor=#333333;" edge="1" parent="1" source="uc_ext_att" target="uc_ticket">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ext_payinst" value="&amp;laquo;extend&amp;raquo;" style="html=1;verticalAlign=bottom;endArrow=open;dashed=1;endSize=8;strokeColor=#333333;strokeWidth=1.2;fontColor=#333333;" edge="1" parent="1" source="uc_ext_payinst" target="uc_pay">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

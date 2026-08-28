@@ -3,14 +3,16 @@ import { Upload, FileText, Shield, CheckCircle, X, AlertCircle, Plus, Trash2 } f
 import type { EventFormData, EventDocumentFile } from '../../types/event.types';
 import { uploadToCloudinary } from '../../../../../services/cloudinary';
 import { formatAppDate } from '../../../../utils/date';
+import { toast } from 'sonner';
 
 interface Step6Props {
   data: EventFormData;
   onUpdate: (data: Partial<EventFormData>) => void;
   isOfficer?: boolean;
+  errors?: Record<string, string>;
 }
 
-export default function Step6Documents({ data, onUpdate, isOfficer }: Step6Props) {
+export default function Step6Documents({ data, onUpdate, isOfficer, errors = {} }: Step6Props) {
   // Dynamic Theme Styling based on Officer vs Admin
   const accentBorder = 'border-[#0E4EBD]';
   const accentText = 'text-[#0E4EBD]';
@@ -104,14 +106,37 @@ export default function Step6Documents({ data, onUpdate, isOfficer }: Step6Props
   const handleDocumentUpload = async (id: string, file: File) => {
     setUploadingDocId(id);
     try {
-      const result = await uploadToCloudinary(file, { folder: 'events/documents' });
+      const result = await uploadToCloudinary(file, {
+        folder: 'events/documents',
+        acceptedTypes: [
+          'application/pdf',
+          'image/jpeg',
+          'image/png',
+          'image/webp',
+          'application/msword',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'application/vnd.ms-excel',
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'text/plain',
+          '.pdf',
+          '.doc',
+          '.docx',
+          '.png',
+          '.jpg',
+          '.jpeg'
+        ],
+        maxBytes: 25 * 1024 * 1024, // 25 MB
+      });
       updateField(
         'documents',
         documents.map((d) => (d.id === id ? { ...d, fileUrl: result.secureUrl } : d))
       );
-    } catch (error) {
+      toast.success('Document uploaded successfully!');
+    } catch (error: any) {
       console.error('Failed to upload document', error);
-      alert('Failed to upload document.');
+      toast.error('Failed to upload document', {
+        description: error.message || 'Please ensure file is under 25MB (PDF, DOC, DOCX, PNG, JPG).',
+      });
     } finally {
       setUploadingDocId(null);
     }
@@ -244,8 +269,12 @@ export default function Step6Documents({ data, onUpdate, isOfficer }: Step6Props
               </div>
 
               <div
-                className={`relative border-2 border-dashed border-gray-300 rounded-xl p-4 text-center hover:${accentBorder} cursor-pointer transition-colors overflow-hidden ${
-                  requiredDocItem?.fileUrl ? 'bg-green-50 border-green-300' : ''
+                className={`relative border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition-colors overflow-hidden ${
+                  errors.activityProposal
+                    ? 'border-red-500 bg-red-50/40 ring-2 ring-red-200'
+                    : requiredDocItem?.fileUrl
+                    ? 'bg-green-50 border-green-300'
+                    : `border-gray-300 hover:${accentBorder}`
                 }`}
               >
                 <input
@@ -272,12 +301,20 @@ export default function Step6Documents({ data, onUpdate, isOfficer }: Step6Props
                   </>
                 ) : (
                   <>
-                    <Upload className="w-6 h-6 text-gray-400 mx-auto mb-1" />
-                    <p className="text-xs text-gray-700 font-bold">Click to upload Activity Proposal</p>
+                    <Upload className={`w-6 h-6 ${errors.activityProposal ? 'text-red-500' : 'text-gray-400'} mx-auto mb-1`} />
+                    <p className={`text-xs font-bold ${errors.activityProposal ? 'text-red-700' : 'text-gray-700'}`}>
+                      {errors.activityProposal ? 'Official Activity Proposal is Required — Click to upload' : 'Click to upload Activity Proposal'}
+                    </p>
                     <p className="text-[11px] text-gray-400">PDF, DOC, DOCX, PNG, or JPG formats</p>
                   </>
                 )}
               </div>
+              {errors.activityProposal && (
+                <p className="text-xs text-red-600 mt-1.5 font-medium flex items-center gap-1.5">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  <span>{errors.activityProposal}</span>
+                </p>
+              )}
             </div>
 
             {/* Optional Additional Documents */}

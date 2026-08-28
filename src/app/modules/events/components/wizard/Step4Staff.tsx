@@ -10,9 +10,10 @@ interface Step4Props {
   data: EventFormData;
   onUpdate: (data: Partial<EventFormData>) => void;
   isOfficer?: boolean;
+  errors?: Record<string, string>;
 }
 
-export default function Step4Staff({ data, onUpdate, isOfficer }: Step4Props) {
+export default function Step4Staff({ data, onUpdate, isOfficer, errors = {} }: Step4Props) {
   const { profile: officerProfile } = useOfficerProfile();
   const showOfficerMode = isOfficer !== undefined ? isOfficer : !!officerProfile;
 
@@ -302,7 +303,11 @@ export default function Step4Staff({ data, onUpdate, isOfficer }: Step4Props) {
                           });
                         }}
                         disabled={officersLoading}
-                        className={`w-full px-3 py-2 border border-gray-300 rounded-lg text-xs font-medium focus:ring-2 ${accentFocusRing} focus:border-transparent disabled:opacity-50`}
+                        className={`w-full px-3 py-2 border rounded-lg text-xs font-medium focus:ring-2 focus:border-transparent disabled:opacity-50 transition-colors ${
+                          errors[`scanner_${index}`]
+                            ? 'border-red-500 ring-2 ring-red-200 focus:ring-red-500'
+                            : `border-gray-300 ${accentFocusRing}`
+                        }`}
                       >
                         <option value="">
                           {officersLoading
@@ -325,6 +330,11 @@ export default function Step4Staff({ data, onUpdate, isOfficer }: Step4Props) {
                           );
                         })}
                       </select>
+                      {errors[`scanner_${index}`] && (
+                        <p className="text-xs text-red-600 mt-1.5 font-medium flex items-center gap-1.5">
+                          <span>{errors[`scanner_${index}`]}</span>
+                        </p>
+                      )}
                     </div>
 
                     {/* Grant Full Admin Scanner Access */}

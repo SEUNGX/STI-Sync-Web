@@ -1,0 +1,80 @@
+@startuml Scanner_Use_Case_Diagram
+title STI Sync - Student Scanner Officer Use Case Diagram
+left to right direction
+
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam actorStyle awesome
+
+skinparam actor {
+    BackgroundColor #FFE6CC
+    BorderColor #D79B00
+}
+
+skinparam usecase {
+    BackgroundColor #DAE8FC
+    BorderColor #6C8EBF
+    FontColor #001A4D
+    FontStyle bold
+}
+
+skinparam usecase<<include>> {
+    BackgroundColor #F8CECC
+    BorderColor #B85450
+    FontColor #900C3F
+    FontStyle normal
+}
+
+skinparam usecase<<extend>> {
+    BackgroundColor #FFF2CC
+    BorderColor #D6B656
+    FontColor #856404
+    FontStyle normal
+}
+
+actor "Student Scanner\nOfficer (Mobile)" as Scanner
+
+rectangle "STI Sync Mobile - Scanner Subsystem Boundary" {
+    usecase "Authenticate & Open\nScanner Mode" as UC_ScanAuth
+    usecase "Pre-Cache Event Roster\nto SQLite (Drift)" as UC_DownloadRoster
+    usecase "Scan QR Ticket via Camera" as UC_CameraScan
+    usecase "Record Manual / Flagged\nAttendance Entry" as UC_ManualEntry
+    usecase "View Real-Time Gate\nAttendance Logs" as UC_ViewLogs
+    usecase "Synchronize Data\nwith Cloud Firestore" as UC_SyncCloud
+
+    ' Included Use Cases
+    usecase "«include»\nValidate Scanner Role\n& Session Permissions" as UC_Inc_CheckRole <<include>>
+    usecase "«include»\nExecute 6-Step Validation\nPipeline" as UC_Inc_ValPipeline <<include>>
+    usecase "«include»\nEvaluate Grace Period\n& Late Status" as UC_Inc_EvalGrace <<include>>
+    usecase "«include»\nSave Offline Attendance\nRecord to SQLite" as UC_Inc_SaveDrift <<include>>
+    usecase "«include»\nBatch Upload Unsynced\nSQLite Records" as UC_Inc_BatchSync <<include>>
+
+    ' Extended Use Cases
+    usecase "«extend»\nDisplay Visual Result Overlay\n(Present/Late/Duplicate/Closed)" as UC_Ext_StatusOverlay <<extend>>
+    usecase "«extend»\nAdd Walk-in / Unknown\nAttendee to Session" as UC_Ext_WalkIn <<extend>>
+    usecase "«extend»\nInspect & Resolve\nSync Timestamp Conflicts" as UC_Ext_ResolveConflict <<extend>>
+}
+
+' Actor Solid Line Associations (NO ARROWS)
+Scanner -- UC_ScanAuth
+Scanner -- UC_DownloadRoster
+Scanner -- UC_CameraScan
+Scanner -- UC_ManualEntry
+Scanner -- UC_ViewLogs
+Scanner -- UC_SyncCloud
+
+' Include Relationships (Dashed with arrow)
+UC_ScanAuth ..> UC_Inc_CheckRole : «include»
+UC_CameraScan ..> UC_Inc_ValPipeline : «include»
+UC_CameraScan ..> UC_Inc_EvalGrace : «include»
+UC_CameraScan ..> UC_Inc_SaveDrift : «include»
+UC_SyncCloud ..> UC_Inc_BatchSync : «include»
+
+' Extend Relationships (Dashed with arrow)
+UC_Ext_StatusOverlay ..> UC_CameraScan : «extend»
+UC_Ext_WalkIn ..> UC_ManualEntry : «extend»
+UC_Ext_ResolveConflict ..> UC_SyncCloud : «extend»
+
+@enduml

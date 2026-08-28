@@ -13,6 +13,7 @@ import { useAdviserProfile } from '../../modules/auth/hooks/useAdviserProfile';
 import { useOrganizationStream } from '../../modules/organizations/hooks/useOrganizationStream';
 import { useEventTypesStream, useVenuesStream } from '../../modules/events/hooks/useEventConfigStream';
 import { EventPayablesQRControl } from '../../modules/finance/components/EventPayablesQRControl';
+import { exportEventProposalPDF } from '../../modules/events/utils/event-proposal-pdf';
 import { formatCurrency } from '../../utils/currency';
 import { formatAppDate, formatAppDateTime, formatSessionDateTime } from '../../utils/date';
 
@@ -249,13 +250,36 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
     }
   };
 
-  const orgName = orgs.find(o => o.id === event.hostingOrgId)?.name || event.hostingOrgId;
-  const orgAcronym = orgs.find(o => o.id === event.hostingOrgId)?.acronym || 'ORG';
-  const eventTypeName = eventTypes.find(t => t.id === event.eventTypeId)?.name || 'Unknown Type';
-  const venueName = venues.find(v => v.id === event.venueId)?.name || 'Unknown Venue';
+  const isSas = !event.hostingOrgId || event.hostingOrgId === 'sas';
+  const orgObj = orgs.find(o => o.id === event.hostingOrgId);
+  const orgName = isSas ? 'Student Affairs & Services (SAS)' : (orgObj?.name || event.hostingOrgId || 'Student Organization');
+  const orgAcronym = isSas ? 'SAS' : (orgObj?.acronym || 'ORG');
+  const orgLogo = isSas ? null : (orgObj?.logoUrl || orgObj?.logo || null);
+  const eventTypeName = eventTypes.find(t => t.id === event.eventTypeId)?.name || 'General Event';
+  const venueName = venues.find(v => v.id === event.venueId)?.name || event.customVenueName || 'On-Campus Venue';
   
   const createdDate = formatAppDate(event.createdAt, 'N/A');
   const firstSession = event.sessions && event.sessions.length > 0 ? formatAppDate(event.sessions[0].date, 'TBD') : 'TBD';
+
+  const [exportingPdf, setExportingPdf] = useState(false);
+
+  const handleExportPDF = async () => {
+    setExportingPdf(true);
+    try {
+      await exportEventProposalPDF(event, {
+        org: orgObj,
+        eventTypeName,
+        venueName,
+        approverName: profile?.displayName || 'SAO Head',
+      });
+      toast.success('Event proposal PDF exported successfully!');
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Failed to export PDF proposal.');
+    } finally {
+      setExportingPdf(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 bg-white flex flex-col">
@@ -263,44 +287,48 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
       <div className="flex-shrink-0 h-16 bg-white border-b border-[#E0E0E0] flex items-center justify-between px-6">
         <div className="flex items-center gap-4">
           <button onClick={onClose}
-            className="flex items-center gap-2 text-[#001A4D] hover:bg-gray-100 px-3 py-2 rounded-lg transition-colors text-sm font-medium">
+            className="flex items-center gap-2 text-[#001A4D] hover:bg-gray-100 px-3 py-2 rounded-lg transition-colors text-sm font-medium cursor-pointer">
             <ArrowLeft className="w-4 h-4" />
             Back to Event Approvals
           </button>
           <div className="h-5 w-px bg-[#E0E0E0]" />
-          <span className="text-xs text-gray-400">Dashboard &gt; Event Approvals &gt; <span className="text-gray-600">{event.title?.slice(0, 40) || 'Review'}</span></span>
+          <span className="text-xs text-gray-400">Dashboard &gt; Event Approvals &gt; <span className="text-gray-600 font-semibold">{event.title?.slice(0, 40) || 'Review'}</span></span>
         </div>
         <div className="flex items-center gap-4">
           <span className="px-3 py-1.5 bg-[#FFD41C] text-[#001A4D] font-mono font-bold text-xs rounded-full">{event.referenceId || 'N/A'}</span>
           {decision === 'none' ? (
-            <span className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-amber-400 to-amber-500 text-white font-bold text-sm rounded-full">
+            <span className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-amber-400 to-amber-500 text-white font-bold text-sm rounded-full shadow-2xs">
               <Clock className="w-4 h-4" /> Pending Review
             </span>
           ) : decision === 'approved' ? (
-            <span className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white font-bold text-sm rounded-full">
+            <span className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white font-bold text-sm rounded-full shadow-2xs">
               <CheckCircle className="w-4 h-4" /> Approved
             </span>
           ) : decision === 'returned' ? (
-            <span className="flex items-center gap-1.5 px-4 py-2 bg-[#1E70E8] text-white font-bold text-sm rounded-full">
+            <span className="flex items-center gap-1.5 px-4 py-2 bg-[#1E70E8] text-white font-bold text-sm rounded-full shadow-2xs">
               <RotateCcw className="w-4 h-4" /> Returned
             </span>
           ) : (
-            <span className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-red-500 to-orange-600 text-white font-bold text-sm rounded-full">
+            <span className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-red-500 to-orange-600 text-white font-bold text-sm rounded-full shadow-2xs">
               <XCircle className="w-4 h-4" /> Rejected
             </span>
           )}
-          <button className="flex items-center gap-2 px-3 py-2 border border-[#001A4D] text-[#001A4D] rounded-lg text-sm hover:bg-gray-50 transition-colors">
-            <Download className="w-4 h-4" /> Export PDF
+          <button
+            onClick={handleExportPDF}
+            disabled={exportingPdf}
+            className="flex items-center gap-2 px-3.5 py-2 border-2 border-[#001A4D] text-[#001A4D] hover:bg-[#001A4D] hover:text-white rounded-lg text-sm font-bold transition-all cursor-pointer shadow-xs disabled:opacity-50"
+          >
+            <Download className="w-4 h-4" />
+            <span>{exportingPdf ? 'Exporting...' : 'Export PDF'}</span>
           </button>
         </div>
       </div>
 
       {/* THREE-COLUMN BODY */}
       <div className="flex flex-1 min-h-0">
-        {/* LEFT COLUMN — Navigator (380px) */}
+        {/* LEFT COLUMN — Navigator (320px) */}
         <div className="w-[320px] flex-shrink-0 border-r border-[#E0E0E0] flex flex-col overflow-y-auto">
           <div className="p-5 space-y-5">
-            {/* Nav list */}
             {/* Nav list */}
             <div>
               <div className="flex items-center justify-between mb-3">
@@ -318,7 +346,7 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
                   const isVisited = visitedSections.has(s.id);
                   return (
                     <button key={s.id} onClick={() => scrollTo(s.id)}
-                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors relative ${isActive ? 'bg-blue-50 text-[#0E4EBD] font-bold' : 'text-[#001A4D] hover:bg-gray-50'}`}>
+                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors relative cursor-pointer ${isActive ? 'bg-blue-50 text-[#0E4EBD] font-bold' : 'text-[#001A4D] hover:bg-gray-50'}`}>
                       {isActive && <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-[#0E4EBD] rounded-l-lg" />}
                       <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-[#0E4EBD]' : 'text-gray-400'}`} />
                       <span className="flex-1 text-left">{s.label}</span>
@@ -355,14 +383,36 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
               </div>
             </div>
 
-            {/* Officer Contact */}
-            <div className="bg-white border border-[#E0E0E0] rounded-xl p-4">
-              <p className="text-[#001A4D] font-bold text-sm mb-3">Submitting Officer</p>
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 bg-gradient-to-br from-[#001A4D] to-[#0E4EBD] rounded-full flex items-center justify-center text-white font-bold text-sm">{(event.createdBy || "O").charAt(0).toUpperCase()}</div>
-                <div>
-                  <p className="font-bold text-[#001A4D] text-sm">UID: {event.createdBy || 'Unknown'}</p>
-                  <p className="text-gray-400 text-xs">{orgAcronym}</p>
+            {/* Officer Contact / Issuer */}
+            <div className="bg-white border border-[#E0E0E0] rounded-xl p-4 shadow-2xs">
+              <p className="text-[#001A4D] font-bold text-sm mb-3">
+                {isSas ? 'Proposal Issuer' : 'Submitting Officer'}
+              </p>
+              <div className="flex items-center gap-3">
+                {isSas ? (
+                  <div className="w-10 h-10 bg-gradient-to-br from-[#001A4D] to-[#0E4EBD] rounded-full flex items-center justify-center text-[#FFD41C] font-bold text-sm shadow-xs">
+                    SAS
+                  </div>
+                ) : orgLogo ? (
+                  <img
+                    src={orgLogo}
+                    alt={orgAcronym}
+                    className="w-10 h-10 rounded-full object-cover border border-blue-200 shadow-xs"
+                  />
+                ) : (
+                  <div className="w-10 h-10 bg-gradient-to-br from-[#001A4D] to-[#0E4EBD] rounded-full flex items-center justify-center text-white font-bold text-sm shadow-xs">
+                    {orgAcronym.charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-[#001A4D] text-sm truncate">
+                    {isSas
+                      ? 'Student Affairs & Services (SAS)'
+                      : event.createdByName || 'Student Officer'}
+                  </p>
+                  <p className="text-gray-500 text-xs truncate">
+                    {isSas ? 'Institutional Admin Creation' : `${orgAcronym} Officer`}
+                  </p>
                 </div>
               </div>
             </div>
@@ -388,7 +438,7 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
               onMouseEnter={() => { setActiveSection('overview'); setVisitedSections(p => new Set([...p, 'overview'])); }}>
               <SectionHeader title="Event Overview" status="complete" subtitle="Event identity, classification, and media assets submitted by the officer" />
               
-              <div className="bg-white border border-[#E0E0E0] rounded-xl overflow-hidden mb-4">
+              <div className="bg-white border border-[#E0E0E0] rounded-xl overflow-hidden mb-4 shadow-sm">
                 {event.bannerImageUrl ? (
                   <div className="h-56 sm:h-72 w-full overflow-hidden bg-slate-900 relative">
                     <img
@@ -397,9 +447,12 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
                       className="w-full h-full object-cover"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/10" />
-                    <div className="absolute bottom-3 left-3 text-white">
+                    <div className="absolute bottom-3 left-3 text-white flex items-center gap-2">
                       <span className="px-3 py-1 bg-black/60 backdrop-blur-md rounded-full text-xs font-bold border border-white/20">
                         Event Banner
+                      </span>
+                      <span className="px-3 py-1 bg-[#0E4EBD]/80 backdrop-blur-md rounded-full text-xs font-bold border border-white/20">
+                        {eventTypeName}
                       </span>
                     </div>
                   </div>
@@ -411,37 +464,83 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
                     </div>
                   </div>
                 )}
-                <div className="p-5">
-                  <div className="grid grid-cols-2 gap-6">
+                <div className="p-6">
+                  {/* Highlighted Event Title Banner */}
+                  <div className="mb-6 p-4 bg-gradient-to-r from-blue-50/80 via-white to-amber-50/40 rounded-xl border-l-4 border-[#0E4EBD] shadow-2xs">
+                    <div className="flex items-center justify-between gap-3 mb-1">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-[#0E4EBD]">
+                        Official Event Title
+                      </span>
+                      <span className="text-xs font-mono font-bold px-2.5 py-0.5 bg-[#FFD41C] text-[#001A4D] rounded-md">
+                        {event.referenceId || 'EVT-REF'}
+                      </span>
+                    </div>
+                    <h1 className="text-2xl font-extrabold text-[#001A4D] tracking-tight">
+                      {event.title}
+                    </h1>
+                    {event.tagline && (
+                      <p className="text-sm font-semibold text-[#0E4EBD] mt-1 italic">
+                        "{event.tagline}"
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-4">
                       <div>
-                        <p className="text-xs uppercase text-gray-400 font-semibold mb-1">Event Title</p>
-                        <p className="text-[#001A4D] font-bold text-xl">{event.title}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs uppercase text-gray-400 font-semibold mb-1">Description</p>
-                        <p className="text-[#001A4D] text-sm leading-relaxed">{event.description}</p>
+                        <p className="text-xs uppercase text-gray-400 font-bold mb-1.5">Description</p>
+                        <p className="text-gray-800 text-sm leading-relaxed whitespace-pre-wrap bg-gray-50/80 p-3.5 rounded-xl border border-gray-100">
+                          {event.description || 'No description provided.'}
+                        </p>
                       </div>
                     </div>
-                    <div className="space-y-3">
-                      {[
-                        { label: 'Event Type', value: eventTypeName, pill: true, color: '#0E4EBD' },
-                        { label: 'Organization', value: orgName, pill: false },
-                        { label: 'Event Format', value: event.eventFormat || 'N/A', pill: true, color: '#22C55E' },
-                        { label: 'QR Tickets', value: event.enableQRTickets ? 'Enabled' : 'Disabled', pill: true, color: '#1E70E8' },
-                      ].map(row => (
-                        <div key={row.label} className="flex items-center justify-between py-2.5 border-b border-[#F0F0F0] last:border-0">
-                          <span className="text-gray-400 text-xs">{row.label}</span>
-                          {row.pill ? (
-                            <span className="px-2.5 py-1 rounded-full text-xs font-medium" style={{ backgroundColor: row.color + '20', color: row.color }}>{row.value}</span>
+                    <div className="space-y-3 bg-gray-50/60 p-4 rounded-xl border border-gray-200/70">
+                      {/* Host */}
+                      <div className="flex items-center justify-between py-2 border-b border-gray-200">
+                        <span className="text-gray-500 text-xs font-medium">
+                          {isSas ? 'Issuer / Host' : 'Host Organization'}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          {isSas ? (
+                            <div className="w-5 h-5 bg-[#001A4D] text-[#FFD41C] rounded-full flex items-center justify-center text-[9px] font-bold">
+                              SAS
+                            </div>
+                          ) : orgLogo ? (
+                            <img src={orgLogo} alt={orgAcronym} className="w-5 h-5 rounded-full object-cover border" />
                           ) : (
-                            <div className="flex items-center gap-2">
-                              <div className="w-5 h-5 bg-[#001A4D] rounded-full flex items-center justify-center text-white text-xs font-bold">{(row.value as string)[0]}</div>
-                              <span className="text-[#001A4D] font-bold text-sm">{row.value}</span>
+                            <div className="w-5 h-5 bg-[#001A4D] rounded-full flex items-center justify-center text-white text-[9px] font-bold">
+                              {orgAcronym.charAt(0)}
                             </div>
                           )}
+                          <span className="text-[#001A4D] font-bold text-xs">{orgName}</span>
                         </div>
-                      ))}
+                      </div>
+
+                      {/* Event Type */}
+                      <div className="flex items-center justify-between py-2 border-b border-gray-200">
+                        <span className="text-gray-500 text-xs font-medium">Event Type</span>
+                        <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-[#0E4EBD]">
+                          {eventTypeName}
+                        </span>
+                      </div>
+
+                      {/* QR Tickets */}
+                      <div className="flex items-center justify-between py-2 border-b border-gray-200">
+                        <span className="text-gray-500 text-xs font-medium">QR Gate Tickets</span>
+                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                          event.enableQRTickets !== false ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'
+                        }`}>
+                          {event.enableQRTickets !== false ? 'Enabled (Option A)' : 'Disabled'}
+                        </span>
+                      </div>
+
+                      {/* Feed Visibility */}
+                      <div className="flex items-center justify-between py-2">
+                        <span className="text-gray-500 text-xs font-medium">Feed Visibility</span>
+                        <span className="font-bold text-xs text-gray-800">
+                          {event.isVisible !== false ? 'Visible in Student App' : 'Hidden'}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -504,16 +603,18 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
                   </div>
                 </div>
 
-                {/* Venue */}
-                <div className="bg-white border border-[#E0E0E0] rounded-xl p-4">
+                {/* Venue & Academic Period */}
+                <div className="bg-white border border-[#E0E0E0] rounded-xl p-4 shadow-2xs">
                   <div className="grid grid-cols-2 gap-6">
                     <div>
-                      <p className="text-xs uppercase text-gray-400 font-semibold mb-2">Requested Venue</p>
+                      <p className="text-xs uppercase text-gray-400 font-bold mb-1">Requested Venue</p>
                       <p className="text-[#001A4D] font-bold text-base">{venueName}</p>
                     </div>
                     <div>
-                      <p className="text-xs uppercase text-gray-400 font-semibold mb-2">Event Format</p>
-                      <span className="px-3 py-1 bg-blue-50 text-[#0E4EBD] border border-blue-100 rounded-full text-sm font-semibold">{event.eventFormat}</span>
+                      <p className="text-xs uppercase text-gray-400 font-bold mb-1">Academic Period</p>
+                      <p className="text-[#0E4EBD] font-bold text-sm">
+                        {event.schoolYear || 'SY 2025–2026'} · {event.semester || 'Active Semester'}
+                      </p>
                     </div>
                   </div>
                 </div>

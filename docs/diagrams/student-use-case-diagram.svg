@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 880" width="100%" height="100%" style="background-color: #ffffff; font-family: Arial, Helvetica, sans-serif;">
+  <defs>
+    <marker id="arr-open" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 1 L 9 5 L 0 9" fill="none" stroke="#333333" stroke-width="1.8" />
+    </marker>
+  </defs>
+
+  <text x="600" y="32" text-anchor="middle" font-size="16" font-weight="bold" fill="#000000">STI Sync - Student (Non-Scanner) Use Case Diagram</text>
+
+  <!-- Boundary Box -->
+  <rect x="180" y="48" width="980" height="810" rx="0" ry="0" fill="none" stroke="#000000" stroke-width="1.5" />
+  <text x="600" y="68" text-anchor="middle" font-size="13" font-weight="bold" fill="#000000">STI Sync Mobile - Student Subsystem Boundary</text>
+
+  <!-- Actor (Bottom Left) -->
+  <g id="act_student" transform="translate(45, 640)">
+    <circle cx="35" cy="22" r="16" fill="#FFE6CC" stroke="#D79B00" stroke-width="1.5" />
+    <line x1="35" y1="38" x2="35" y2="76" stroke="#333333" stroke-width="1.8" />
+    <line x1="14" y1="50" x2="56" y2="50" stroke="#333333" stroke-width="1.8" />
+    <line x1="35" y1="76" x2="18" y2="108" stroke="#333333" stroke-width="1.8" />
+    <line x1="35" y1="76" x2="52" y2="108" stroke="#333333" stroke-width="1.8" />
+    <text x="35" y="125" text-anchor="middle" font-size="11.5" font-weight="bold" fill="#000000">Student User</text>
+    <text x="35" y="140" text-anchor="middle" font-size="11" fill="#333333">(Mobile App)</text>
+  </g>
+
+  <!-- EXTENDED USE CASES (Yellow Ovals - Left Column) -->
+  <g transform="translate(210, 165)">
+    <ellipse cx="110" cy="26" rx="105" ry="24" fill="#FFF2CC" stroke="#D6B656" stroke-width="1.5" />
+    <text x="110" y="16" text-anchor="middle" font-size="10.5" fill="#856404">«extend»</text>
+    <text x="110" y="30" text-anchor="middle" font-size="11" fill="#000000">Show Pending Verification</text>
+    <text x="110" y="42" text-anchor="middle" font-size="10" fill="#000000">Status Screen</text>
+  </g>
+  <g transform="translate(210, 360)">
+    <ellipse cx="110" cy="26" rx="105" ry="24" fill="#FFF2CC" stroke="#D6B656" stroke-width="1.5" />
+    <text x="110" y="16" text-anchor="middle" font-size="10.5" fill="#856404">«extend»</text>
+    <text x="110" y="30" text-anchor="middle" font-size="11" fill="#000000">Display Red Locked QR</text>
+    <text x="110" y="42" text-anchor="middle" font-size="10" fill="#000000">Ticket Screen</text>
+  </g>
+  <g transform="translate(210, 430)">
+    <ellipse cx="110" cy="26" rx="105" ry="24" fill="#FFF2CC" stroke="#D6B656" stroke-width="1.5" />
+    <text x="110" y="16" text-anchor="middle" font-size="10.5" fill="#856404">«extend»</text>
+    <text x="110" y="30" text-anchor="middle" font-size="11" fill="#000000">View Live In/Out</text>
+    <text x="110" y="42" text-anchor="middle" font-size="10" fill="#000000">Attendance Status</text>
+  </g>
+  <g transform="translate(210, 540)">
+    <ellipse cx="110" cy="26" rx="105" ry="24" fill="#FFF2CC" stroke="#D6B656" stroke-width="1.5" />
+    <text x="110" y="16" text-anchor="middle" font-size="10.5" fill="#856404">«extend»</text>
+    <text x="110" y="30" text-anchor="middle" font-size="11" fill="#000000">Show Cash Payment</text>
+    <text x="110" y="42" text-anchor="middle" font-size="10" fill="#000000">Remittance Instructions</text>
+  </g>
+
+  <!-- BASE USE CASES (Blue Ovals) -->
+  <g transform="translate(210, 90)"><ellipse cx="110" cy="26" rx="105" ry="24" fill="#DAE8FC" stroke="#6C8EBF" stroke-width="1.5" /><text x="110" y="31" text-anchor="middle" font-size="11.5" font-weight="bold" fill="#001A4D">Complete 6-Step Registration</text></g>
+  <g transform="translate(545, 165)"><ellipse cx="110" cy="26" rx="105" ry="24" fill="#DAE8FC" stroke="#6C8EBF" stroke-width="1.5" /><text x="110" y="31" text-anchor="middle" font-size="12" font-weight="bold" fill="#001A4D">Log In to Mobile App</text></g>
+  <g transform="translate(545, 240)"><ellipse cx="110" cy="26" rx="105" ry="24" fill="#DAE8FC" stroke="#6C8EBF" stroke-width="1.5" /><text x="110" y="24" text-anchor="middle" font-size="11.5" font-weight="bold" fill="#001A4D">Complete Semester</text><text x="110" y="38" text-anchor="middle" font-size="11.5" font-weight="bold" fill="#001A4D">Re-Enrollment</text></g>
+  <g transform="translate(210, 690)"><ellipse cx="110" cy="24" rx="105" ry="22" fill="#DAE8FC" stroke="#6C8EBF" stroke-width="1.5" /><text x="110" y="29" text-anchor="middle" font-size="11.5" font-weight="bold" fill="#001A4D">Browse &amp; Filter Events</text></g>
+  <g transform="translate(210, 765)"><ellipse cx="110" cy="24" rx="105" ry="22" fill="#DAE8FC" stroke="#6C8EBF" stroke-width="1.5" /><text x="110" y="29" text-anchor="middle" font-size="11.5" font-weight="bold" fill="#001A4D">View Event Details &amp; Sessions</text></g>
+  <g transform="translate(545, 395)"><ellipse cx="110" cy="28" rx="105" ry="26" fill="#DAE8FC" stroke="#6C8EBF" stroke-width="1.5" /><text x="110" y="25" text-anchor="middle" font-size="11.5" font-weight="bold" fill="#001A4D">Access Dynamic QR</text><text x="110" y="39" text-anchor="middle" font-size="11.5" font-weight="bold" fill="#001A4D">Entry Ticket</text></g>
+  <g transform="translate(545, 540)"><ellipse cx="110" cy="26" rx="105" ry="24" fill="#DAE8FC" stroke="#6C8EBF" stroke-width="1.5" /><text x="110" y="31" text-anchor="middle" font-size="12" font-weight="bold" fill="#001A4D">View Payables &amp; Fines</text></g>
+  <g transform="translate(545, 640)"><ellipse cx="110" cy="26" rx="105" ry="24" fill="#DAE8FC" stroke="#6C8EBF" stroke-width="1.5" /><text x="110" y="24" text-anchor="middle" font-size="11.5" font-weight="bold" fill="#001A4D">View &amp; Download</text><text x="110" y="38" text-anchor="middle" font-size="11.5" font-weight="bold" fill="#001A4D">Certificates</text></g>
+  <g transform="translate(545, 755)"><ellipse cx="110" cy="24" rx="105" ry="22" fill="#DAE8FC" stroke="#6C8EBF" stroke-width="1.5" /><text x="110" y="29" text-anchor="middle" font-size="11.5" font-weight="bold" fill="#001A4D">Manage Student Profile</text></g>
+
+  <!-- INCLUDED USE CASES (Pink Ovals - Right Column) -->
+  <g transform="translate(885, 90)"><ellipse cx="110" cy="26" rx="105" ry="24" fill="#F8CECC" stroke="#B85450" stroke-width="1.5" /><text x="110" y="16" text-anchor="middle" font-size="10.5" fill="#900C3F">«include»</text><text x="110" y="30" text-anchor="middle" font-size="11" fill="#000000">Upload 2x2 Photo &amp;</text><text x="110" y="42" text-anchor="middle" font-size="10" fill="#000000">School ID Card</text></g>
+  <g transform="translate(885, 240)"><ellipse cx="110" cy="26" rx="105" ry="24" fill="#F8CECC" stroke="#B85450" stroke-width="1.5" /><text x="110" y="16" text-anchor="middle" font-size="10.5" fill="#900C3F">«include»</text><text x="110" y="30" text-anchor="middle" font-size="11" fill="#000000">Validate Track Active</text><text x="110" y="42" text-anchor="middle" font-size="10" fill="#000000">Academic Term</text></g>
+  <g transform="translate(885, 395)"><ellipse cx="110" cy="28" rx="105" ry="26" fill="#F8CECC" stroke="#B85450" stroke-width="1.5" /><text x="110" y="17" text-anchor="middle" font-size="10.5" fill="#900C3F">«include»</text><text x="110" y="31" text-anchor="middle" font-size="11" fill="#000000">Generate Signed QR</text><text x="110" y="43" text-anchor="middle" font-size="10" fill="#000000">Ticket Payload</text></g>
+  <g transform="translate(885, 540)"><ellipse cx="110" cy="26" rx="105" ry="24" fill="#F8CECC" stroke="#B85450" stroke-width="1.5" /><text x="110" y="16" text-anchor="middle" font-size="10.5" fill="#900C3F">«include»</text><text x="110" y="30" text-anchor="middle" font-size="11" fill="#000000">Itemize Billed Amount,</text><text x="110" y="42" text-anchor="middle" font-size="10" fill="#000000">Paid &amp; Balance</text></g>
+  <g transform="translate(885, 640)"><ellipse cx="110" cy="26" rx="105" ry="24" fill="#F8CECC" stroke="#B85450" stroke-width="1.5" /><text x="110" y="16" text-anchor="middle" font-size="10.5" fill="#900C3F">«include»</text><text x="110" y="30" text-anchor="middle" font-size="11" fill="#000000">Verify Certificate QR</text><text x="110" y="42" text-anchor="middle" font-size="10" fill="#000000">Code Authenticity</text></g>
+
+  <!-- PURE SOLID LINES FROM ACTOR TO BASE USE CASES (NO ARROWS) -->
+  <path d="M 85 660 C 95 250, 115 120, 210 116" fill="none" stroke="#222222" stroke-width="1.4" />
+  <path d="M 85 670 C 130 360, 310 195, 545 191" fill="none" stroke="#222222" stroke-width="1.4" />
+  <path d="M 85 675 C 145 410, 330 270, 545 266" fill="none" stroke="#222222" stroke-width="1.4" />
+  <path d="M 85 685 C 200 580, 360 435, 545 423" fill="none" stroke="#222222" stroke-width="1.4" />
+  <path d="M 85 695 C 230 670, 370 580, 545 566" fill="none" stroke="#222222" stroke-width="1.4" />
+  <path d="M 85 710 C 230 730, 380 675, 545 666" fill="none" stroke="#222222" stroke-width="1.4" />
+  <path d="M 85 715 C 125 715, 160 714, 210 714" fill="none" stroke="#222222" stroke-width="1.4" />
+  <path d="M 85 730 C 125 750, 160 775, 210 789" fill="none" stroke="#222222" stroke-width="1.4" />
+  <path d="M 85 740 C 230 810, 390 785, 545 779" fill="none" stroke="#222222" stroke-width="1.4" />
+
+  <!-- DASHED INCLUDE ARROWS -->
+  <path d="M 420 116 L 885 116" fill="none" stroke="#333333" stroke-width="1.3" stroke-dasharray="5,4" marker-end="url(#arr-open)" />
+  <rect x="625" y="106" width="65" height="18" fill="#ffffff" />
+  <text x="657" y="119" text-anchor="middle" font-size="11" fill="#333333">«include»</text>
+  <path d="M 755 266 L 885 266" fill="none" stroke="#333333" stroke-width="1.3" stroke-dasharray="5,4" marker-end="url(#arr-open)" />
+  <rect x="795" y="256" width="65" height="18" fill="#ffffff" />
+  <text x="827" y="269" text-anchor="middle" font-size="11" fill="#333333">«include»</text>
+  <path d="M 755 423 L 885 423" fill="none" stroke="#333333" stroke-width="1.3" stroke-dasharray="5,4" marker-end="url(#arr-open)" />
+  <rect x="795" y="413" width="65" height="18" fill="#ffffff" />
+  <text x="827" y="426" text-anchor="middle" font-size="11" fill="#333333">«include»</text>
+  <path d="M 755 566 L 885 566" fill="none" stroke="#333333" stroke-width="1.3" stroke-dasharray="5,4" marker-end="url(#arr-open)" />
+  <rect x="795" y="556" width="65" height="18" fill="#ffffff" />
+  <text x="827" y="569" text-anchor="middle" font-size="11" fill="#333333">«include»</text>
+  <path d="M 755 666 L 885 666" fill="none" stroke="#333333" stroke-width="1.3" stroke-dasharray="5,4" marker-end="url(#arr-open)" />
+  <rect x="795" y="656" width="65" height="18" fill="#ffffff" />
+  <text x="827" y="669" text-anchor="middle" font-size="11" fill="#333333">«include»</text>
+
+  <!-- DASHED EXTEND ARROWS -->
+  <path d="M 420 191 L 545 191" fill="none" stroke="#333333" stroke-width="1.3" stroke-dasharray="5,4" marker-end="url(#arr-open)" />
+  <rect x="460" y="181" width="65" height="18" fill="#ffffff" />
+  <text x="492" y="194" text-anchor="middle" font-size="11" fill="#333333">«extend»</text>
+  <path d="M 420 395 L 545 415" fill="none" stroke="#333333" stroke-width="1.3" stroke-dasharray="5,4" marker-end="url(#arr-open)" />
+  <rect x="460" y="394" width="65" height="18" fill="#ffffff" />
+  <text x="492" y="407" text-anchor="middle" font-size="11" fill="#333333">«extend»</text>
+  <path d="M 420 450 L 545 430" fill="none" stroke="#333333" stroke-width="1.3" stroke-dasharray="5,4" marker-end="url(#arr-open)" />
+  <rect x="460" y="430" width="65" height="18" fill="#ffffff" />
+  <text x="492" y="443" text-anchor="middle" font-size="11" fill="#333333">«extend»</text>
+  <path d="M 420 566 L 545 566" fill="none" stroke="#333333" stroke-width="1.3" stroke-dasharray="5,4" marker-end="url(#arr-open)" />
+  <rect x="460" y="556" width="65" height="18" fill="#ffffff" />
+  <text x="492" y="569" text-anchor="middle" font-size="11" fill="#333333">«extend»</text>
+</svg>

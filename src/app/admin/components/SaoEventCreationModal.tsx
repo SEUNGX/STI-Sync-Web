@@ -10,6 +10,8 @@ import Step6Documents from '../../modules/events/components/wizard/Step6Document
 import Step7Publish from '../../modules/events/components/wizard/Step7Publish';
 import type { EventDocument, EventFormData } from '../../modules/events/types/event.types';
 import { useEventCreation } from '../../modules/events/hooks/useEventCreation';
+import { useAllEvents } from '../../modules/events/hooks/useEventStream';
+import { validateWizardStep } from '../../modules/events/utils/event-validation';
 
 interface SaoEventCreationModalProps {
   isOpen: boolean;
@@ -61,16 +63,18 @@ export default function SaoEventCreationModal({
   );
   const [activeDraftId, setActiveDraftId] = useState<string | undefined>(draftId);
   const [saving, setSaving] = useState(false);
+  const [stepErrors, setStepErrors] = useState<Record<string, string>>({});
 
   const { createEvent, saveDraft, loading } = useEventCreation();
+  const { events: allEvents } = useAllEvents();
 
   if (!isOpen) return null;
 
   const updateFormData = (stepData: any) => {
-    setFormData({ ...formData, ...stepData });
+    setFormData(prev => ({ ...prev, ...stepData }));
   };
 
-  const isQREnabled = formData.enableQRTickets !== false;
+  const isQREnabled = Boolean(formData.enableQRTickets === true || (formData as any).enableQR === true);
   const steps = isQREnabled
     ? ['Event Details', 'Schedule', 'Participants', 'Staff', 'Budget', 'Documents', 'Publish']
     : ['Event Details', 'Schedule', 'Participants', 'Budget', 'Documents', 'Publish'];
@@ -78,76 +82,140 @@ export default function SaoEventCreationModal({
   const currentStepName = steps[currentStep] || steps[0];
 
   const nextStep = () => {
+    const valResult = validateWizardStep(
+      currentStep,
+      currentStepName,
+      formData,
+      false,
+      allEvents,
+      activeDraftId
+    );
+
+    if (!valResult.isValid) {
+      setStepErrors(valResult.fieldErrors || {});
+      toast.error(`Incomplete: ${currentStepName}`, {
+        description: valResult.errors[0] || 'Please complete all required fields before proceeding.',
+        duration: 5000,
+      });
+      return;
+    }
+
+    setStepErrors({});
     if (currentStep < steps.length - 1) {
       setCurrentStep(currentStep + 1);
     }
   };
 
   const prevStep = () => {
+    setStepErrors({});
     if (currentStep > 0) {
       setCurrentStep(currentStep - 1);
     }
   };
 
   const goToStep = (step: number) => {
-    if (step <= currentStep) {
+    if (step < currentStep) {
+      setStepErrors({});
       setCurrentStep(step);
+      return;
     }
+
+    // Check validation for all preceding steps
+    for (let sIdx = 0; sIdx < step; sIdx++) {
+      const sName = steps[sIdx];
+      const res = validateWizardStep(sIdx, sName, formData, false, allEvents, activeDraftId);
+      if (!res.isValid) {
+        setStepErrors(res.fieldErrors || {});
+        toast.error(`Please complete ${sName}`, {
+          description: res.errors[0] || `Please resolve errors in ${sName} before advancing.`,
+          duration: 5000,
+        });
+        setCurrentStep(sIdx);
+        return;
+      }
+    }
+    setStepErrors({});
+    setCurrentStep(step);
   };
 
   const handleSubmit = async () => {
-    const payload = { hostingOrgId: 'sas', ...formData };
-    const id = await createEvent(payload, activeDraftId, false);
-    if (id) {
-      toast.success('Event Published!', {
-        description: 'The event has been successfully published and activated.',
-        duration: 4000,
-      });
-      onClose();
+    // Validate all wizard steps
+    for (let sIdx = 0; sIdx < steps.length - 1; sIdx++) {
+      const sName = steps[sIdx];
+      const res = validateWizardStep(sIdx, sName, formData, false, allEvents, activeDraftId);
+      if (!res.isValid) {
+        setStepErrors(res.fieldErrors || {});
+        toast.error(`Cannot Publish: Incomplete ${sName}`, {
+          description: res.errors[0] || `Please review and complete ${sName} before publishing.`,
+          duration: 6000,
+        });
+        setCurrentStep(sIdx);
+        return;
+      }
+    }
+
+    setSaving(true);
+    try {
+      const id = await createEvent(formData, activeDraftId, false);
+      if (id) {
+        toast.success('Institutional Event Created & Published!', {
+          description: 'Event is live on the system and visible in student portals.',
+          duration: 5000,
+        });
+        onClose();
+      } else {
+        toast.error('Failed to create event. Please try again.');
+      }
+    } catch {
+      toast.error('An error occurred while creating the event.');
+    } finally {
+      setSaving(false);
     }
   };
 
   const handleSaveDraft = async () => {
     setSaving(true);
     try {
-      const payload = { hostingOrgId: 'sas', ...formData };
-      const id = await saveDraft(payload, activeDraftId);
+      const id = await saveDraft(formData, activeDraftId, false);
       if (id) {
         setActiveDraftId(id);
-        toast.success('Draft saved!', {
-          description: 'Your progress has been saved. You can resume any time from the Drafts tab.',
+        toast.success('Draft Saved Successfully', {
+          description: 'You can resume this event anytime from the Event Management tab.',
           duration: 4000,
         });
       } else {
-        toast.error('Failed to save draft', {
-          description: 'Something went wrong. Please try again.',
-        });
+        toast.error('Failed to save draft');
       }
     } catch {
-      toast.error('Failed to save draft', {
-        description: 'An unexpected error occurred. Please try again.',
-      });
+      toast.error('An error occurred while saving draft.');
     } finally {
       setSaving(false);
     }
   };
 
   const renderStep = () => {
+    const stepProps = {
+      data: formData,
+      onUpdate: updateFormData,
+      isOfficer: false,
+      errors: stepErrors,
+    };
+
     switch (currentStepName) {
       case 'Event Details':
-        return <Step1EventDetails data={formData} onUpdate={updateFormData} isOfficer={false} />;
+        return <Step1EventDetails {...stepProps} />;
       case 'Schedule':
-        return <Step2Schedule data={formData} onUpdate={updateFormData} isOfficer={false} />;
+        return <Step2Schedule {...stepProps} />;
       case 'Participants':
-        return <Step3Participants data={formData} onUpdate={updateFormData} isOfficer={false} />;
+        return <Step3Participants {...stepProps} />;
       case 'Staff':
-        return <Step4Staff data={formData} onUpdate={updateFormData} isOfficer={false} />;
+        return <Step4Staff {...stepProps} />;
       case 'Budget':
-        return <Step5Budget data={formData} onUpdate={updateFormData} isOfficer={false} />;
+        return <Step5Budget {...stepProps} />;
       case 'Documents':
-        return <Step6Documents data={formData} onUpdate={updateFormData} isOfficer={false} />;
+        return <Step6Documents {...stepProps} />;
       case 'Publish':
-        return <Step7Publish data={formData} onUpdate={updateFormData} onPublish={handleSubmit} isPublishing={saving || loading} isOfficer={false} />;
+        return <Step7Publish {...stepProps} onPublish={handleSubmit} isPublishing={saving || loading} />;
       default:
         return null;
     }

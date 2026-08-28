@@ -1,0 +1,88 @@
+@startuml Officer_Use_Case_Diagram
+title STI Sync - Student Organization Officer Use Case Diagram
+left to right direction
+
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam actorStyle awesome
+
+skinparam actor {
+    BackgroundColor #E1D5E7
+    BorderColor #9673A6
+}
+
+skinparam usecase {
+    BackgroundColor #DAE8FC
+    BorderColor #6C8EBF
+    FontColor #001A4D
+    FontStyle bold
+}
+
+skinparam usecase<<include>> {
+    BackgroundColor #F8CECC
+    BorderColor #B85450
+    FontColor #900C3F
+    FontStyle normal
+}
+
+skinparam usecase<<extend>> {
+    BackgroundColor #FFF2CC
+    BorderColor #D6B656
+    FontColor #856404
+    FontStyle normal
+}
+
+actor "Organization Officer\n(Web Portal)" as Officer
+
+rectangle "STI Sync Web - Officer Subsystem Boundary" {
+    usecase "Log In to Officer Portal" as UC_OffLogin
+    usecase "Create Event Proposal" as UC_Proposal
+    usecase "Manage Member Directory" as UC_Members
+    usecase "Generate Member Dues\n& Payables" as UC_Dues
+    usecase "Record Cash Payment" as UC_Payment
+    usecase "Control QR Ticket\nGate Status" as UC_QRControl
+    usecase "Submit Financial Liquidation" as UC_LiqSubmit
+    usecase "Request & Generate\nCertificates" as UC_CertReq
+    usecase "Post Announcements\n& Live Feeds" as UC_Announce
+
+    ' Included Use Cases
+    usecase "«include»\nAuto-Bind Active\nHosting Organization" as UC_Inc_AutoOrg <<include>>
+    usecase "«include»\nAssign Scanners from\nClub Officer Roster" as UC_Inc_ClubScan <<include>>
+    usecase "«include»\nUpload Expense Receipts\nto Cloudinary" as UC_Inc_ReceiptUpload <<include>>
+    usecase "«include»\nUnlock Student Mobile\nQR Gate Ticket" as UC_Inc_UnlockQR <<include>>
+    usecase "«include»\nBatch Generate\nPayable Documents" as UC_Inc_BatchPay <<include>>
+    usecase "«include»\nFilter Verified Present\nAttendees Only" as UC_Inc_AttendeeList <<include>>
+
+    ' Extended Use Cases
+    usecase "«extend»\nAppoint / Promote Member\nto Officer Position" as UC_Ext_AppointOfficer <<extend>>
+    usecase "«extend»\nManual Gate Ticket\nOverride Unlock" as UC_Ext_ManualQRUnlock <<extend>>
+    usecase "«extend»\nResubmit Revised\nLiquidation Report" as UC_Ext_RevisionFix <<extend>>
+}
+
+' Actor Solid Line Associations (NO ARROWS)
+Officer -- UC_OffLogin
+Officer -- UC_Proposal
+Officer -- UC_Members
+Officer -- UC_Dues
+Officer -- UC_Payment
+Officer -- UC_QRControl
+Officer -- UC_LiqSubmit
+Officer -- UC_CertReq
+Officer -- UC_Announce
+
+' Include Relationships (Dashed with arrow)
+UC_Proposal ..> UC_Inc_AutoOrg : «include»
+UC_Proposal ..> UC_Inc_ClubScan : «include»
+UC_Dues ..> UC_Inc_BatchPay : «include»
+UC_Payment ..> UC_Inc_UnlockQR : «include»
+UC_LiqSubmit ..> UC_Inc_ReceiptUpload : «include»
+UC_CertReq ..> UC_Inc_AttendeeList : «include»
+
+' Extend Relationships (Dashed with arrow)
+UC_Ext_AppointOfficer ..> UC_Members : «extend»
+UC_Ext_ManualQRUnlock ..> UC_QRControl : «extend»
+UC_Ext_RevisionFix ..> UC_LiqSubmit : «extend»
+
+@enduml

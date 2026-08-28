@@ -2,6 +2,15 @@ import { CheckCircle, Calendar, Users, DollarSign, Shield, Rocket, Clock, MapPin
 import type { EventFormData } from '../../types/event.types';
 import { useOfficerProfile } from '../../../../auth/hooks/useOfficerProfile';
 import { useAdviserProfile } from '../../../auth/hooks/useAdviserProfile';
+import { useAllEvents } from '../../hooks/useEventStream';
+import {
+  validateStep1,
+  validateStep2,
+  validateStep3,
+  validateStep4,
+  validateStep5,
+  validateStep6,
+} from '../../utils/event-validation';
 import { formatCurrency } from '../../../../utils/currency';
 
 interface Step7Props {
@@ -15,6 +24,7 @@ interface Step7Props {
 export default function Step7Publish({ data, onUpdate, onPublish, isPublishing, isOfficer }: Step7Props) {
   const { profile: officerProfile } = useOfficerProfile();
   const { profile: adviserProfile } = useAdviserProfile();
+  const { events: allEvents } = useAllEvents();
 
   const showOfficerMode = isOfficer !== undefined ? isOfficer : !!officerProfile;
   const creatorName = showOfficerMode
@@ -27,33 +37,23 @@ export default function Step7Publish({ data, onUpdate, onPublish, isPublishing, 
   const accentBg = 'bg-[#0E4EBD]';
   const accentGradient = 'from-[#001A4D] to-[#0E4EBD]';
 
-  // Validate steps based on real proposal data
-  const isDetailsComplete = showOfficerMode
-    ? Boolean(data.title && data.eventTypeId && data.hostingOrgId)
-    : Boolean(data.title && data.eventTypeId);
-
-  const isScheduleComplete = Boolean(
-    (data.venueId || data.customVenueName || data.eventFormat) && (data.sessions?.length ?? 0) > 0
-  );
-  const isStaffComplete = Boolean(
-    data.eventHeadUid || data.officerInChargeUid || (data.scanners && data.scanners.length > 0)
-  );
-  const isBudgetValid = (data.totalApprovedBudget ?? data.totalRequestedBudget ?? 0) >= 0;
-
-  const activityPropDoc = (data.documents || []).find(
-    (d) => d.id === 'req_activity_proposal' || (d.name || '').toLowerCase().includes('activity proposal')
-  );
-  const isDocumentUploaded = Boolean(activityPropDoc?.fileUrl);
+  // Validate steps using centralized validation rules
+  const s1Res = validateStep1(data, showOfficerMode);
+  const s2Res = validateStep2(data, allEvents, (data as any).id);
+  const s3Res = validateStep3(data);
+  const s4Res = validateStep4(data);
+  const s5Res = validateStep5(data);
+  const s6Res = validateStep6(data, showOfficerMode);
   const isCertified = Boolean(data.isCertified || data.officerAcknowledgement);
 
   const validationItems = [
-    { id: 1, label: 'Event details complete', desc: 'Title, description, type, and hosting organization', status: isDetailsComplete ? 'valid' : 'invalid' },
-    { id: 2, label: 'Schedule and venue assigned', desc: 'Session dates, time slots, and venue location', status: isScheduleComplete ? 'valid' : 'invalid' },
-    { id: 3, label: 'Participant settings configured', desc: 'Target audience, limits, and attendance rules', status: 'valid' },
-    { id: 4, label: 'Staff fully assigned', desc: 'Event Head, Officer-in-Charge, and scanners', status: isStaffComplete ? 'valid' : 'invalid' },
-    { id: 5, label: 'Budget requested', desc: 'Source of funds and itemized line items', status: isBudgetValid ? 'valid' : 'invalid' },
-    { id: 6, label: 'Activity Proposal uploaded', desc: 'Official Activity Proposal document attached', status: isDocumentUploaded ? 'valid' : 'invalid' },
-    { id: 7, label: 'Officer Proposal Acknowledgement', desc: 'Proposal certified accurate and ready for SAO review', status: isCertified ? 'valid' : 'invalid' },
+    { id: 1, label: 'Event details complete', desc: s1Res.isValid ? 'Title, banner, type, and category specified' : (s1Res.errors[0] || 'Missing event details'), status: s1Res.isValid ? 'valid' : 'invalid' },
+    { id: 2, label: 'Schedule and venue assigned', desc: s2Res.isValid ? 'Active semester, sessions, and venue configured without conflicts' : (s2Res.errors[0] || 'Schedule incomplete or has conflicts'), status: s2Res.isValid ? 'valid' : 'invalid' },
+    { id: 3, label: 'Participant settings configured', desc: s3Res.isValid ? 'Target audience and academic cohort set' : (s3Res.errors[0] || 'Invalid participant settings'), status: s3Res.isValid ? 'valid' : 'invalid' },
+    { id: 4, label: 'Staff fully assigned', desc: s4Res.isValid ? 'Event Head, Officer-in-Charge, and scanners' : (s4Res.errors[0] || 'Staff assignments incomplete'), status: s4Res.isValid ? 'valid' : 'invalid' },
+    { id: 5, label: 'Budget requested', desc: s5Res.isValid ? 'Itemized budget lines are valid' : (s5Res.errors[0] || 'Invalid budget items'), status: s5Res.isValid ? 'valid' : 'invalid' },
+    { id: 6, label: 'Documents uploaded', desc: s6Res.isValid ? 'Required proposal documents attached' : (s6Res.errors[0] || 'Required documents missing'), status: s6Res.isValid ? 'valid' : 'invalid' },
+    ...(showOfficerMode ? [{ id: 7, label: 'Officer Proposal Acknowledgement', desc: isCertified ? 'Proposal certified accurate and ready for SAO review' : 'Certification checkbox required', status: isCertified ? 'valid' : 'invalid' }] : []),
   ];
 
   const validCount = validationItems.filter(item => item.status === 'valid').length;
@@ -136,7 +136,7 @@ export default function Step7Publish({ data, onUpdate, onPublish, isPublishing, 
                   </div>
                   <div className="flex items-center gap-2">
                     <MapPin className="w-4 h-4 text-gray-500" />
-                    <span className="text-gray-900">{data.customVenueName || data.eventFormat || 'On-Campus'}</span>
+                    <span className="text-gray-900">{data.customVenueName || 'On-Campus Venue'}</span>
                   </div>
                 </div>
               </div>

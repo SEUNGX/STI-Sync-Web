@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 880" width="100%" height="100%" style="background-color: #ffffff; font-family: Arial, Helvetica, sans-serif;">
+  <defs>
+    <marker id="arr-open" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 1 L 9 5 L 0 9" fill="none" stroke="#333333" stroke-width="1.8" />
+    </marker>
+  </defs>
+
+  <text x="600" y="32" text-anchor="middle" font-size="16" font-weight="bold" fill="#000000">STI Sync - Student Scanner Officer Use Case Diagram</text>
+
+  <!-- Boundary Box -->
+  <rect x="180" y="48" width="980" height="810" rx="0" ry="0" fill="none" stroke="#000000" stroke-width="1.5" />
+  <text x="600" y="68" text-anchor="middle" font-size="13" font-weight="bold" fill="#000000">STI Sync Mobile - Scanner Subsystem Boundary</text>
+
+  <!-- Actor (Bottom Left) -->
+  <g id="act_scanner" transform="translate(45, 640)">
+    <circle cx="35" cy="22" r="16" fill="#FFE6CC" stroke="#D79B00" stroke-width="1.5" />
+    <line x1="35" y1="38" x2="35" y2="76" stroke="#333333" stroke-width="1.8" />
+    <line x1="14" y1="50" x2="56" y2="50" stroke="#333333" stroke-width="1.8" />
+    <line x1="35" y1="76" x2="18" y2="108" stroke="#333333" stroke-width="1.8" />
+    <line x1="35" y1="76" x2="52" y2="108" stroke="#333333" stroke-width="1.8" />
+    <text x="35" y="125" text-anchor="middle" font-size="11.5" font-weight="bold" fill="#000000">Student Scanner</text>
+    <text x="35" y="140" text-anchor="middle" font-size="11" fill="#333333">Officer (Mobile)</text>
+  </g>
+
+  <!-- EXTENDED USE CASES (Yellow Ovals - Left Column) -->
+  <g transform="translate(210, 240)">
+    <ellipse cx="110" cy="26" rx="105" ry="24" fill="#FFF2CC" stroke="#D6B656" stroke-width="1.5" />
+    <text x="110" y="16" text-anchor="middle" font-size="10.5" fill="#856404">«extend»</text>
+    <text x="110" y="30" text-anchor="middle" font-size="11" fill="#000000">Display Visual Result Overlay</text>
+    <text x="110" y="42" text-anchor="middle" font-size="10" fill="#000000">(Present/Late/Duplicate/Closed)</text>
+  </g>
+  <g transform="translate(210, 360)">
+    <ellipse cx="110" cy="26" rx="105" ry="24" fill="#FFF2CC" stroke="#D6B656" stroke-width="1.5" />
+    <text x="110" y="16" text-anchor="middle" font-size="10.5" fill="#856404">«extend»</text>
+    <text x="110" y="30" text-anchor="middle" font-size="11" fill="#000000">Add Walk-in / Unknown</text>
+    <text x="110" y="42" text-anchor="middle" font-size="10" fill="#000000">Attendee to Session</text>
+  </g>
+  <g transform="translate(210, 520)">
+    <ellipse cx="110" cy="26" rx="105" ry="24" fill="#FFF2CC" stroke="#D6B656" stroke-width="1.5" />
+    <text x="110" y="16" text-anchor="middle" font-size="10.5" fill="#856404">«extend»</text>
+    <text x="110" y="30" text-anchor="middle" font-size="11" fill="#000000">Inspect &amp; Resolve</text>
+    <text x="110" y="42" text-anchor="middle" font-size="10" fill="#000000">Sync Timestamp Conflicts</text>
+  </g>
+
+  <!-- BASE USE CASES (Blue Ovals) -->
+  <g transform="translate(210, 100)"><ellipse cx="110" cy="26" rx="105" ry="24" fill="#DAE8FC" stroke="#6C8EBF" stroke-width="1.5" /><text x="110" y="24" text-anchor="middle" font-size="11.5" font-weight="bold" fill="#001A4D">Authenticate &amp; Open</text><text x="110" y="38" text-anchor="middle" font-size="11.5" font-weight="bold" fill="#001A4D">Scanner Mode</text></g>
+  <g transform="translate(210, 620)"><ellipse cx="110" cy="26" rx="105" ry="24" fill="#DAE8FC" stroke="#6C8EBF" stroke-width="1.5" /><text x="110" y="24" text-anchor="middle" font-size="11.5" font-weight="bold" fill="#001A4D">Pre-Cache Event Roster</text><text x="110" y="38" text-anchor="middle" font-size="11.5" font-weight="bold" fill="#001A4D">to SQLite (Drift)</text></g>
+  <g transform="translate(210, 715)"><ellipse cx="110" cy="24" rx="105" ry="22" fill="#DAE8FC" stroke="#6C8EBF" stroke-width="1.5" /><text x="110" y="24" text-anchor="middle" font-size="11.5" font-weight="bold" fill="#001A4D">View Real-Time Gate</text><text x="110" y="38" text-anchor="middle" font-size="11.5" font-weight="bold" fill="#001A4D">Attendance Logs</text></g>
+  <g transform="translate(545, 310)"><ellipse cx="110" cy="26" rx="105" ry="24" fill="#DAE8FC" stroke="#6C8EBF" stroke-width="1.5" /><text x="110" y="31" text-anchor="middle" font-size="12" font-weight="bold" fill="#001A4D">Scan QR Ticket via Camera</text></g>
+  <g transform="translate(545, 420)"><ellipse cx="110" cy="26" rx="105" ry="24" fill="#DAE8FC" stroke="#6C8EBF" stroke-width="1.5" /><text x="110" y="24" text-anchor="middle" font-size="11.5" font-weight="bold" fill="#001A4D">Record Manual / Flagged</text><text x="110" y="38" text-anchor="middle" font-size="11.5" font-weight="bold" fill="#001A4D">Attendance Entry</text></g>
+  <g transform="translate(545, 660)"><ellipse cx="110" cy="26" rx="105" ry="24" fill="#DAE8FC" stroke="#6C8EBF" stroke-width="1.5" /><text x="110" y="24" text-anchor="middle" font-size="11.5" font-weight="bold" fill="#001A4D">Synchronize Data</text><text x="110" y="38" text-anchor="middle" font-size="11.5" font-weight="bold" fill="#001A4D">with Cloud Firestore</text></g>
+
+  <!-- INCLUDED USE CASES (Pink Ovals - Right Column) -->
+  <g transform="translate(545, 100)"><ellipse cx="110" cy="26" rx="105" ry="24" fill="#F8CECC" stroke="#B85450" stroke-width="1.5" /><text x="110" y="16" text-anchor="middle" font-size="10.5" fill="#900C3F">«include»</text><text x="110" y="30" text-anchor="middle" font-size="11" fill="#000000">Validate Scanner Role</text><text x="110" y="42" text-anchor="middle" font-size="10" fill="#000000">&amp; Session Permissions</text></g>
+  <g transform="translate(885, 230)"><ellipse cx="110" cy="26" rx="105" ry="24" fill="#F8CECC" stroke="#B85450" stroke-width="1.5" /><text x="110" y="16" text-anchor="middle" font-size="10.5" fill="#900C3F">«include»</text><text x="110" y="30" text-anchor="middle" font-size="11" fill="#000000">Evaluate Grace Period</text><text x="110" y="42" text-anchor="middle" font-size="10" fill="#000000">&amp; Late Status</text></g>
+  <g transform="translate(885, 310)"><ellipse cx="110" cy="26" rx="105" ry="24" fill="#F8CECC" stroke="#B85450" stroke-width="1.5" /><text x="110" y="16" text-anchor="middle" font-size="10.5" fill="#900C3F">«include»</text><text x="110" y="30" text-anchor="middle" font-size="11" fill="#000000">Execute 6-Step Validation</text><text x="110" y="42" text-anchor="middle" font-size="10" fill="#000000">Pipeline</text></g>
+  <g transform="translate(885, 390)"><ellipse cx="110" cy="26" rx="105" ry="24" fill="#F8CECC" stroke="#B85450" stroke-width="1.5" /><text x="110" y="16" text-anchor="middle" font-size="10.5" fill="#900C3F">«include»</text><text x="110" y="30" text-anchor="middle" font-size="11" fill="#000000">Save Offline Attendance</text><text x="110" y="42" text-anchor="middle" font-size="10" fill="#000000">Record to SQLite</text></g>
+  <g transform="translate(885, 660)"><ellipse cx="110" cy="26" rx="105" ry="24" fill="#F8CECC" stroke="#B85450" stroke-width="1.5" /><text x="110" y="16" text-anchor="middle" font-size="10.5" fill="#900C3F">«include»</text><text x="110" y="30" text-anchor="middle" font-size="11" fill="#000000">Batch Upload Unsynced</text><text x="110" y="42" text-anchor="middle" font-size="10" fill="#000000">SQLite Records</text></g>
+
+  <!-- PURE SOLID LINES FROM ACTOR TO BASE USE CASES (NO ARROWS) -->
+  <path d="M 85 650 C 95 240, 115 130, 210 126" fill="none" stroke="#222222" stroke-width="1.4" />
+  <path d="M 85 660 C 130 650, 160 648, 210 646" fill="none" stroke="#222222" stroke-width="1.4" />
+  <path d="M 85 670 C 130 700, 160 720, 210 727" fill="none" stroke="#222222" stroke-width="1.4" />
+  <path d="M 85 655 C 200 480, 360 350, 545 336" fill="none" stroke="#222222" stroke-width="1.4" />
+  <path d="M 85 665 C 200 550, 360 460, 545 446" fill="none" stroke="#222222" stroke-width="1.4" />
+  <path d="M 85 680 C 200 680, 360 680, 545 686" fill="none" stroke="#222222" stroke-width="1.4" />
+
+  <!-- DASHED INCLUDE ARROWS -->
+  <path d="M 420 126 L 545 126" fill="none" stroke="#333333" stroke-width="1.3" stroke-dasharray="5,4" marker-end="url(#arr-open)" />
+  <text x="480" y="121" text-anchor="middle" font-size="11" fill="#333333">«include»</text>
+  <path d="M 755 326 L 885 256" fill="none" stroke="#333333" stroke-width="1.3" stroke-dasharray="5,4" marker-end="url(#arr-open)" />
+  <text x="820" y="280" text-anchor="middle" font-size="11" fill="#333333">«include»</text>
+  <path d="M 755 336 L 885 336" fill="none" stroke="#333333" stroke-width="1.3" stroke-dasharray="5,4" marker-end="url(#arr-open)" />
+  <text x="820" y="331" text-anchor="middle" font-size="11" fill="#333333">«include»</text>
+  <path d="M 755 346 L 885 410" fill="none" stroke="#333333" stroke-width="1.3" stroke-dasharray="5,4" marker-end="url(#arr-open)" />
+  <text x="820" y="390" text-anchor="middle" font-size="11" fill="#333333">«include»</text>
+  <path d="M 755 686 L 885 686" fill="none" stroke="#333333" stroke-width="1.3" stroke-dasharray="5,4" marker-end="url(#arr-open)" />
+  <text x="820" y="681" text-anchor="middle" font-size="11" fill="#333333">«include»</text>
+
+  <!-- DASHED EXTEND ARROWS -->
+  <path d="M 420 266 L 545 320" fill="none" stroke="#333333" stroke-width="1.3" stroke-dasharray="5,4" marker-end="url(#arr-open)" />
+  <text x="480" y="285" text-anchor="middle" font-size="11" fill="#333333">«extend»</text>
+  <path d="M 420 386 L 545 435" fill="none" stroke="#333333" stroke-width="1.3" stroke-dasharray="5,4" marker-end="url(#arr-open)" />
+  <text x="480" y="405" text-anchor="middle" font-size="11" fill="#333333">«extend»</text>
+  <path d="M 420 546 L 545 660" fill="none" stroke="#333333" stroke-width="1.3" stroke-dasharray="5,4" marker-end="url(#arr-open)" />
+  <text x="480" y="590" text-anchor="middle" font-size="11" fill="#333333">«extend»</text>
+</svg>

@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="app.diagrams.net" modified="2026-08-26T02:00:00.000Z" agent="STI Sync Generator" version="24.7.5">
+  <diagram id="diag_scanner" name="Student Scanner Officer">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1200" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- System Boundary -->
+        <mxCell id="sys_scn" value="STI Sync Mobile - Student Scanner Officer Subsystem Boundary" style="shape=umlFrame;whiteSpace=wrap;html=1;width=380;height=30;boundedLbl=1;verticalAlign=top;align=left;spacingLeft=10;fillColor=none;strokeColor=#E67E22;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="190" y="40" width="880" height="740" as="geometry" />
+        </mxCell>
+
+        <!-- Actor -->
+        <mxCell id="act_scn" value="Student Scanner&lt;br&gt;&lt;b&gt;Officer (Mobile)&lt;/b&gt;" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;fillColor=#FFE6CC;strokeColor=#D79B00;strokeWidth=1.5;" vertex="1" parent="1">
+          <mxGeometry x="60" y="320" width="50" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- Base Use Cases -->
+        <mxCell id="uc_scn_1" value="Authenticate &amp;amp; Open&lt;br&gt;Scanner Mode" style="ellipse;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;strokeWidth=1.5;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="250" y="100" width="200" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_scn_2" value="Pre-Cache Event Roster&lt;br&gt;to SQLite (Drift)" style="ellipse;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;strokeWidth=1.5;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="250" y="200" width="200" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_scn_3" value="Scan QR Ticket&lt;br&gt;via Camera" style="ellipse;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;strokeWidth=1.5;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="250" y="310" width="200" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_scn_4" value="Record Manual / Flagged&lt;br&gt;Attendance Entry" style="ellipse;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;strokeWidth=1.5;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="250" y="440" width="200" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_scn_5" value="View Real-Time Gate&lt;br&gt;Attendance Logs" style="ellipse;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;strokeWidth=1.5;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="250" y="550" width="200" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_scn_6" value="Synchronize Data&lt;br&gt;with Cloud Firestore" style="ellipse;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;strokeWidth=1.5;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="250" y="660" width="200" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Included Use Cases -->
+        <mxCell id="uc_inc_scn_1" value="Validate Scanner Role&lt;br&gt;&amp;amp; Session Permissions" style="ellipse;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;strokeWidth=1.5;" vertex="1" parent="1">
+          <mxGeometry x="610" y="100" width="190" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_inc_scn_2" value="Execute 6-Step Validation&lt;br&gt;Pipeline" style="ellipse;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;strokeWidth=1.5;" vertex="1" parent="1">
+          <mxGeometry x="610" y="270" width="190" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_inc_scn_3" value="Evaluate Grace Period&lt;br&gt;&amp;amp; Late Status" style="ellipse;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;strokeWidth=1.5;" vertex="1" parent="1">
+          <mxGeometry x="610" y="330" width="190" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_inc_scn_4" value="Save Offline Attendance&lt;br&gt;Record to SQLite" style="ellipse;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;strokeWidth=1.5;" vertex="1" parent="1">
+          <mxGeometry x="610" y="390" width="190" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_inc_scn_5" value="Batch Upload Unsynced&lt;br&gt;SQLite Records" style="ellipse;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;strokeWidth=1.5;" vertex="1" parent="1">
+          <mxGeometry x="610" y="660" width="190" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Extended Use Cases -->
+        <mxCell id="uc_ext_scn_1" value="Display Visual Result Overlay&lt;br&gt;(Present/Late/Duplicate/Closed)" style="ellipse;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;strokeWidth=1.5;" vertex="1" parent="1">
+          <mxGeometry x="840" y="330" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_ext_scn_2" value="Add Walk-in / Unknown&lt;br&gt;Attendee to Session" style="ellipse;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;strokeWidth=1.5;" vertex="1" parent="1">
+          <mxGeometry x="610" y="445" width="190" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_ext_scn_3" value="Inspect &amp;amp; Resolve&lt;br&gt;Sync Conflicts" style="ellipse;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;strokeWidth=1.5;" vertex="1" parent="1">
+          <mxGeometry x="840" y="660" width="190" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Associations -->
+        <mxCell id="edge_scn_1" style="endArrow=none;html=1;rounded=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeWidth=1.5;strokeColor=#333333;" edge="1" parent="1" source="act_scn" target="uc_scn_1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="edge_scn_2" style="endArrow=none;html=1;rounded=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeWidth=1.5;strokeColor=#333333;" edge="1" parent="1" source="act_scn" target="uc_scn_2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="edge_scn_3" style="endArrow=none;html=1;rounded=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeWidth=1.5;strokeColor=#333333;" edge="1" parent="1" source="act_scn" target="uc_scn_3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="edge_scn_4" style="endArrow=none;html=1;rounded=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeWidth=1.5;strokeColor=#333333;" edge="1" parent="1" source="act_scn" target="uc_scn_4"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="edge_scn_5" style="endArrow=none;html=1;rounded=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeWidth=1.5;strokeColor=#333333;" edge="1" parent="1" source="act_scn" target="uc_scn_5"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="edge_scn_6" style="endArrow=none;html=1;rounded=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeWidth=1.5;strokeColor=#333333;" edge="1" parent="1" source="act_scn" target="uc_scn_6"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <!-- Include Relationships -->
+        <mxCell id="inc_scn_1" value="&amp;lt;&amp;lt;include&amp;gt;&amp;gt;" style="html=1;verticalAlign=bottom;labelBackgroundColor=none;endArrow=open;endFill=0;dashed=1;rounded=0;strokeWidth=1.2;strokeColor=#900C3F;fontColor=#900C3F;" edge="1" parent="1" source="uc_scn_1" target="uc_inc_scn_1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="inc_scn_2" value="&amp;lt;&amp;lt;include&amp;gt;&amp;gt;" style="html=1;verticalAlign=bottom;labelBackgroundColor=none;endArrow=open;endFill=0;dashed=1;rounded=0;strokeWidth=1.2;strokeColor=#900C3F;fontColor=#900C3F;" edge="1" parent="1" source="uc_scn_3" target="uc_inc_scn_2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="inc_scn_3" value="&amp;lt;&amp;lt;include&amp;gt;&amp;gt;" style="html=1;verticalAlign=bottom;labelBackgroundColor=none;endArrow=open;endFill=0;dashed=1;rounded=0;strokeWidth=1.2;strokeColor=#900C3F;fontColor=#900C3F;" edge="1" parent="1" source="uc_scn_3" target="uc_inc_scn_3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="inc_scn_4" value="&amp;lt;&amp;lt;include&amp;gt;&amp;gt;" style="html=1;verticalAlign=bottom;labelBackgroundColor=none;endArrow=open;endFill=0;dashed=1;rounded=0;strokeWidth=1.2;strokeColor=#900C3F;fontColor=#900C3F;" edge="1" parent="1" source="uc_scn_3" target="uc_inc_scn_4"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="inc_scn_5" value="&amp;lt;&amp;lt;include&amp;gt;&amp;gt;" style="html=1;verticalAlign=bottom;labelBackgroundColor=none;endArrow=open;endFill=0;dashed=1;rounded=0;strokeWidth=1.2;strokeColor=#900C3F;fontColor=#900C3F;" edge="1" parent="1" source="uc_scn_6" target="uc_inc_scn_5"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <!-- Extend Relationships -->
+        <mxCell id="ext_scn_1" value="&amp;lt;&amp;lt;extend&amp;gt;&amp;gt;" style="html=1;verticalAlign=bottom;labelBackgroundColor=none;endArrow=open;endFill=0;dashed=1;rounded=0;strokeWidth=1.2;strokeColor=#856404;fontColor=#856404;" edge="1" parent="1" source="uc_ext_scn_1" target="uc_scn_3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ext_scn_2" value="&amp;lt;&amp;lt;extend&amp;gt;&amp;gt;" style="html=1;verticalAlign=bottom;labelBackgroundColor=none;endArrow=open;endFill=0;dashed=1;rounded=0;strokeWidth=1.2;strokeColor=#856404;fontColor=#856404;" edge="1" parent="1" source="uc_ext_scn_2" target="uc_scn_4"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ext_scn_3" value="&amp;lt;&amp;lt;extend&amp;gt;&amp;gt;" style="html=1;verticalAlign=bottom;labelBackgroundColor=none;endArrow=open;endFill=0;dashed=1;rounded=0;strokeWidth=1.2;strokeColor=#856404;fontColor=#856404;" edge="1" parent="1" source="uc_ext_scn_3" target="uc_scn_6"><mxGeometry relative="1" as="geometry" /></mxCell>
+        </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

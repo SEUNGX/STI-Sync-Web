@@ -1,0 +1,94 @@
+@startuml Admin_Use_Case_Diagram
+title STI Sync - SAO / SAS Administrator Use Case Diagram
+left to right direction
+
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam actorStyle awesome
+
+skinparam actor {
+    BackgroundColor #FFF2CC
+    BorderColor #D6B656
+}
+
+skinparam usecase {
+    BackgroundColor #DAE8FC
+    BorderColor #6C8EBF
+    FontColor #001A4D
+    FontStyle bold
+}
+
+skinparam usecase<<include>> {
+    BackgroundColor #F8CECC
+    BorderColor #B85450
+    FontColor #900C3F
+    FontStyle normal
+}
+
+skinparam usecase<<extend>> {
+    BackgroundColor #FFF2CC
+    BorderColor #D6B656
+    FontColor #856404
+    FontStyle normal
+}
+
+actor "SAO / SAS\nAdministrator" as Admin
+
+rectangle "STI Sync Web - SAO Admin System Boundary" {
+    usecase "Log In to Admin Portal" as UC_Login
+    usecase "Manage Academic Semesters\n& Rollover" as UC_Acad
+    usecase "Manage Student Registry\nLifecycle" as UC_Students
+    usecase "Govern Student Organizations\n& Advisers" as UC_Orgs
+    usecase "Create Institutional\nSAS Event" as UC_SAOEvent
+    usecase "Review Club Event Proposals" as UC_EventReview
+    usecase "Audit Financial Liquidations" as UC_LiqReview
+    usecase "Manage Certificate\nTemplates & Issuance" as UC_Certs
+    usecase "Monitor System Audit Logs" as UC_Audit
+
+    ' Included Use Cases
+    usecase "«include»\nValidate Term & Execute\nTrack Rollover" as UC_Inc_Roll <<include>>
+    usecase "«include»\nRecord Immutable\nAudit Log Entry" as UC_Inc_Audit <<include>>
+    usecase "«include»\nVerify Student ID &\nSelfie Photo Comparison" as UC_Inc_IDVerify <<include>>
+    usecase "«include»\nConfigure Multi-Session\nTime Windows" as UC_Inc_MultiSession <<include>>
+    usecase "«include»\nRecruit Cross-Org\nScanner Officers" as UC_Inc_CrossScan <<include>>
+    usecase "«include»\nCalculate Suggested Fee\n& Budget Pools" as UC_Inc_BudgetCalc <<include>>
+    usecase "«include»\nGenerate Cryptographic\nVerification QR Hash" as UC_Inc_QRHash <<include>>
+
+    ' Extended Use Cases
+    usecase "«extend»\nCheck Financial Debt\nClearance Pre-Flight" as UC_Ext_DebtCheck <<extend>>
+    usecase "«extend»\nPermanently Purge\nStudent Archive" as UC_Ext_Purge <<extend>>
+    usecase "«extend»\nRequest Proposal Revision\nwith Itemized Notes" as UC_Ext_Revision <<extend>>
+    usecase "«extend»\nEnforce Red QR Lock\nGate Policy" as UC_Ext_QRLockPolicy <<extend>>
+    usecase "«extend»\nBatch Promote &\nRe-Enroll Students" as UC_Ext_Promote <<extend>>
+}
+
+' Actor Solid Line Associations (NO ARROWS)
+Admin -- UC_Login
+Admin -- UC_Acad
+Admin -- UC_Students
+Admin -- UC_Orgs
+Admin -- UC_SAOEvent
+Admin -- UC_EventReview
+Admin -- UC_LiqReview
+Admin -- UC_Certs
+Admin -- UC_Audit
+
+' Include Relationships (Dashed with arrow)
+UC_Acad ..> UC_Inc_Roll : «include»
+UC_Acad ..> UC_Inc_Audit : «include»
+UC_Students ..> UC_Inc_IDVerify : «include»
+UC_SAOEvent ..> UC_Inc_MultiSession : «include»
+UC_SAOEvent ..> UC_Inc_CrossScan : «include»
+UC_SAOEvent ..> UC_Inc_BudgetCalc : «include»
+UC_Certs ..> UC_Inc_QRHash : «include»
+
+' Extend Relationships (Dashed with arrow)
+UC_Ext_DebtCheck ..> UC_Students : «extend»
+UC_Ext_Purge ..> UC_Students : «extend»
+UC_Ext_Promote ..> UC_Students : «extend»
+UC_Ext_Revision ..> UC_EventReview : «extend»
+UC_Ext_QRLockPolicy ..> UC_SAOEvent : «extend»
+
+@enduml

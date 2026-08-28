@@ -1,0 +1,90 @@
+@startuml Student_Non_Scanner_Use_Case_Diagram
+title STI Sync - Student (Non-Scanner) Use Case Diagram
+left to right direction
+
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam actorStyle awesome
+
+skinparam actor {
+    BackgroundColor #FFE6CC
+    BorderColor #D79B00
+    FontStyle bold
+}
+
+skinparam usecase {
+    BackgroundColor #DAE8FC
+    BorderColor #6C8EBF
+    FontColor #001A4D
+    FontStyle bold
+}
+
+skinparam usecase<<include>> {
+    BackgroundColor #F8CECC
+    BorderColor #B85450
+    FontColor #900C3F
+    FontStyle normal
+}
+
+skinparam usecase<<extend>> {
+    BackgroundColor #FFF2CC
+    BorderColor #D6B656
+    FontColor #856404
+    FontStyle normal
+}
+
+actor "Student User\n(Mobile App)" as Student
+
+rectangle "STI Sync Mobile - Student Subsystem Boundary" {
+    ' Base Use Cases
+    usecase "Complete 6-Step Registration" as UC_Register
+    usecase "Log In to Mobile App" as UC_Login
+    usecase "Complete Semester\nRe-Enrollment" as UC_ReEnroll
+    usecase "Browse & Filter Events" as UC_Browse
+    usecase "View Event Details & Sessions" as UC_ViewEvent
+    usecase "Access Dynamic QR\nEntry Ticket" as UC_QRTicket
+    usecase "View Payables & Fines" as UC_ViewPayables
+    usecase "View & Download Certificates" as UC_Certs
+    usecase "Manage Student Profile" as UC_Profile
+
+    ' Included Use Cases
+    usecase "«include»\nUpload 2x2 Photo &\nSchool ID Card" as UC_Inc_UploadID <<include>>
+    usecase "«include»\nValidate Track Active\nAcademic Term" as UC_Inc_TermValidate <<include>>
+    usecase "«include»\nGenerate Signed QR\nTicket Payload" as UC_Inc_QRPayload <<include>>
+    usecase "«include»\nItemize Billed Amount,\nPaid & Balance" as UC_Inc_DebtSummary <<include>>
+    usecase "«include»\nVerify Certificate QR\nCode Authenticity" as UC_Inc_VerifyCode <<include>>
+
+    ' Extended Use Cases
+    usecase "«extend»\nShow Pending Verification\nStatus Screen" as UC_Ext_PendingScreen <<extend>>
+    usecase "«extend»\nDisplay Red Locked QR\nTicket Screen" as UC_Ext_QRLockBanner <<extend>>
+    usecase "«extend»\nView Live In/Out\nAttendance Status" as UC_Ext_AttendanceStatus <<extend>>
+    usecase "«extend»\nShow Cash Payment\nRemittance Instructions" as UC_Ext_PayInstruct <<extend>>
+}
+
+' Actor Solid Line Associations (NO ARROWS)
+Student -- UC_Register
+Student -- UC_Login
+Student -- UC_ReEnroll
+Student -- UC_Browse
+Student -- UC_ViewEvent
+Student -- UC_QRTicket
+Student -- UC_ViewPayables
+Student -- UC_Certs
+Student -- UC_Profile
+
+' Include Relationships (Dashed with arrow)
+UC_Register ..> UC_Inc_UploadID : «include»
+UC_ReEnroll ..> UC_Inc_TermValidate : «include»
+UC_QRTicket ..> UC_Inc_QRPayload : «include»
+UC_ViewPayables ..> UC_Inc_DebtSummary : «include»
+UC_Certs ..> UC_Inc_VerifyCode : «include»
+
+' Extend Relationships (Dashed with arrow)
+UC_Ext_PendingScreen ..> UC_Login : «extend»
+UC_Ext_QRLockBanner ..> UC_QRTicket : «extend»
+UC_Ext_AttendanceStatus ..> UC_QRTicket : «extend»
+UC_Ext_PayInstruct ..> UC_ViewPayables : «extend»
+
+@enduml
