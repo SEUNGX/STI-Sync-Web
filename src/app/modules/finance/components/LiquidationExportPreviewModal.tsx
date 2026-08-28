@@ -1,9 +1,22 @@
 import { useState, useMemo } from 'react';
-import { X, FileSpreadsheet, Check, Printer, Layers, Eye, CheckCircle2 } from 'lucide-react';
+import {
+  X,
+  FileSpreadsheet,
+  Plus,
+  Trash2,
+  Settings2,
+  Eye,
+  FileText,
+  RotateCcw,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import type { LiquidationDocument } from '../types/liquidation.types';
-import { formatCurrency, formatVariance } from '../../../utils/currency';
-import { formatAppDateTime } from '../../../utils/date';
+import {
+  exportOfficialStiLiquidationExcel,
+  type StiSignatory,
+} from '../utils/sti-liquidation-excel';
+import { formatCurrency } from '../../../utils/currency';
+import { formatAppDate } from '../../../utils/date';
 
 interface LiquidationExportPreviewModalProps {
   isOpen: boolean;
@@ -11,22 +24,13 @@ interface LiquidationExportPreviewModalProps {
   report: LiquidationDocument | null;
 }
 
-interface ColumnConfig {
-  key: string;
-  label: string;
-  enabled: boolean;
-}
-
-const DEFAULT_COLUMNS: ColumnConfig[] = [
-  { key: 'itemIndex', label: '#', enabled: true },
-  { key: 'description', label: 'Item Description', enabled: true },
-  { key: 'category', label: 'Expense Category', enabled: true },
-  { key: 'allocatedCost', label: 'Allocated Budget (₱)', enabled: true },
-  { key: 'totalCost', label: 'Actual Cost (₱)', enabled: true },
-  { key: 'variance', label: 'Variance (₱)', enabled: true },
-  { key: 'vendorName', label: 'Vendor Name', enabled: true },
-  { key: 'receiptNumber', label: 'Receipt / Invoice #', enabled: true },
-  { key: 'hasReceiptImage', label: 'Receipt Image', enabled: true },
+const DEFAULT_STI_SIGNATORIES: StiSignatory[] = [
+  { id: '1', type: 'Submitted By:', name: '', role: '(Name of Employee / Treasurer)' },
+  { id: '2', type: 'Checked By:', name: '', role: '(Accountant / Auditor)' },
+  { id: '3', type: 'Indorsed By:', name: '', role: '(Supervisor / Adviser)' },
+  { id: '4', type: 'Recommending Approval:', name: '', role: '(Supervisor)' },
+  { id: '5', type: 'Approved By:', name: '', role: '(Administrator / Academic Head)' },
+  { id: '6', type: 'Noted By:', name: '', role: '(President)' },
 ];
 
 export function LiquidationExportPreviewModal({
@@ -34,400 +38,631 @@ export function LiquidationExportPreviewModal({
   onClose,
   report,
 }: LiquidationExportPreviewModalProps) {
-  const [columns, setColumns] = useState<ColumnConfig[]>(DEFAULT_COLUMNS);
-  const [previewSearch, setPreviewSearch] = useState('');
-  const [isExporting, setIsExporting] = useState(false);
-
-  // Filter line items locally if search query typed inside modal
-  const displayItems = useMemo(() => {
-    if (!report || !report.lineItems) return [];
-    if (!previewSearch.trim()) return report.lineItems;
-    const q = previewSearch.toLowerCase();
-    return report.lineItems.filter(item =>
-      (item.description || '').toLowerCase().includes(q) ||
-      (item.category || '').toLowerCase().includes(q) ||
-      (item.vendorName || '').toLowerCase().includes(q) ||
-      (item.receiptNumber || '').toLowerCase().includes(q)
-    );
-  }, [report, previewSearch]);
-
   if (!isOpen || !report) return null;
 
-  const toggleColumn = (key: string) => {
-    setColumns(prev => prev.map(col => col.key === key ? { ...col, enabled: !col.enabled } : col));
-  };
+  // Metadata form state
+  const [officerName, setOfficerName] = useState(
+    report.submittedByName || report.createdByName || ''
+  );
+  const [chequeNumber, setChequeNumber] = useState(
+    report.id ? report.id.slice(0, 8).toUpperCase() : ''
+  );
+  const [activityEndDate, setActivityEndDate] = useState(
+    formatAppDate(report.createdAt, '')
+  );
+  const [submissionDeadline, setSubmissionDeadline] = useState('');
+  const [dateSubmitted, setDateSubmitted] = useState(
+    formatAppDate(report.submittedAt || report.createdAt, new Date().toLocaleDateString())
+  );
+  const [dateReleased, setDateReleased] = useState('');
+  const [amountAdvanced, setAmountAdvanced] = useState<number>(
+    report.allocatedBudget || report.totalAllocatedBudget || report.totalActualSpending || 0
+  );
+  const [daysLapsed, setDaysLapsed] = useState('-o-');
+  const [orNumber, setOrNumber] = useState(
+    report.lineItems?.find((i) => i.receiptNumber)?.receiptNumber || ''
+  );
 
-  const enabledColumns = columns.filter(c => c.enabled);
+  // Dynamic signatories state
+  const [signatories, setSignatories] = useState<StiSignatory[]>(() => {
+    return DEFAULT_STI_SIGNATORIES.map((sig, idx) =>
+      idx === 0 ? { ...sig, name: officerName } : sig
+    );
+  });
+
+  const [activeTab, setActiveTab] = useState<'preview' | 'signatories' | 'metadata'>('preview');
+  const [isExporting, setIsExporting] = useState(false);
+
+  // Categorized Items for Preview
+  const categorizedItems = useMemo(() => {
+    const map = new Map<string, typeof report.lineItems>();
+    (report.lineItems || []).forEach((item) => {
+      const cat = (item.category || 'General Expenses').trim();
+      if (!map.has(cat)) {
+        map.set(cat, []);
+      }
+      map.get(cat)!.push(item);
+    });
+    return Array.from(map.entries());
+  }, [report.lineItems]);
 
   const isDeficit = (report.surplusOrDeficit || 0) < 0;
   const varianceAmount = Math.abs(report.surplusOrDeficit || 0);
 
-  const getItemValue = (item: any, idx: number, key: string): string => {
-    const allocated = item.allocatedCost ?? 0;
-    const variance = allocated > 0 ? allocated - item.totalCost : 0;
-
-    switch (key) {
-      case 'itemIndex': return (idx + 1).toString();
-      case 'description': return item.description || '—';
-      case 'category': return item.category || '—';
-      case 'allocatedCost': return allocated > 0 ? formatCurrency(allocated) : '—';
-      case 'totalCost': return formatCurrency(item.totalCost || 0);
-      case 'variance':
-        if (allocated === 0) return '—';
-        return variance < 0 ? `${formatCurrency(variance)} (Deficit)` : `+${formatCurrency(variance)} (Surplus)`;
-      case 'vendorName': return item.vendorName || '—';
-      case 'receiptNumber': return item.receiptNumber || '—';
-      case 'hasReceiptImage': return item.receiptUrl ? 'Attached' : 'None';
-      default: return '';
-    }
+  // Signatory Handlers
+  const handleAddSignatory = () => {
+    const newId = (signatories.length + 1).toString();
+    setSignatories((prev) => [
+      ...prev,
+      {
+        id: newId,
+        type: 'Approved By:',
+        name: '',
+        role: '(Academic Head)',
+      },
+    ]);
   };
 
-  const sanitizeFileName = (name: string) => {
-    return name.replace(/[^a-zA-Z0-9_-]/g, '_').replace(/_+/g, '_');
+  const handleUpdateSignatory = (id: string, field: keyof StiSignatory, value: string) => {
+    setSignatories((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, [field]: value } : s))
+    );
   };
 
-  const escapeXml = (unsafe: string) => {
-    return unsafe.replace(/[<>&'"]/g, c => {
-      switch (c) {
-        case '<': return '&lt;';
-        case '>': return '&gt;';
-        case '&': return '&amp;';
-        case '\'': return '&apos;';
-        case '"': return '&quot;';
-        default: return c;
-      }
-    });
+  const handleRemoveSignatory = (id: string) => {
+    setSignatories((prev) => prev.filter((s) => s.id !== id));
   };
 
-  const exportToExcelXML = () => {
+  const handleResetSignatories = () => {
+    setSignatories(
+      DEFAULT_STI_SIGNATORIES.map((sig, idx) =>
+        idx === 0 ? { ...sig, name: officerName } : sig
+      )
+    );
+    toast.info('Reset signatories to official standard format.');
+  };
+
+  // Export Action
+  const handleExportExcel = () => {
     setIsExporting(true);
     try {
-      const now = formatAppDateTime(new Date());
-      const filename = `${sanitizeFileName(report.eventTitle)}_Financial_Liquidation.xls`;
-
-      let xml = `<?xml version="1.0" encoding="UTF-8"?>
-<?mso-application progid="Excel.Sheet"?>
-<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
- xmlns:o="urn:schemas-microsoft-com:office:office"
- xmlns:x="urn:schemas-microsoft-com:office:excel"
- xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
- <Styles>
-  <Style ss:ID="Default" ss:Name="Normal">
-   <Alignment ss:Vertical="Center"/>
-   <Font ss:FontName="Calibri" ss:Size="11" ss:Color="#000000"/>
-  </Style>
-  <Style ss:ID="TitleStyle">
-   <Font ss:FontName="Calibri" ss:Size="16" ss:Bold="1" ss:Color="#001A4D"/>
-   <Alignment ss:Horizontal="Left" ss:Vertical="Center"/>
-  </Style>
-  <Style ss:ID="SubTitleStyle">
-   <Font ss:FontName="Calibri" ss:Size="11" ss:Italic="1" ss:Color="#555555"/>
-   <Alignment ss:Horizontal="Left" ss:Vertical="Center"/>
-  </Style>
-  <Style ss:ID="HeaderStyle">
-   <Font ss:FontName="Calibri" ss:Size="11" ss:Bold="1" ss:Color="#FFFFFF"/>
-   <Interior ss:Color="#001A4D" ss:Pattern="Solid"/>
-   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
-  </Style>
-  <Style ss:ID="RowEven">
-   <Interior ss:Color="#F9FAFB" ss:Pattern="Solid"/>
-  </Style>
-  <Style ss:ID="RowOdd">
-   <Interior ss:Color="#FFFFFF" ss:Pattern="Solid"/>
-  </Style>
-  <Style ss:ID="TotalStyle">
-   <Font ss:FontName="Calibri" ss:Size="11" ss:Bold="1" ss:Color="#001A4D"/>
-   <Interior ss:Color="#FEF3C7" ss:Pattern="Solid"/>
-  </Style>
- </Styles>
- <Worksheet ss:Name="Liquidation Report">
-  <Table>
-   <Column ss:Width="40"/>
-   <Column ss:Width="200"/>
-   <Column ss:Width="140"/>
-   <Column ss:Width="120"/>
-   <Column ss:Width="120"/>
-   <Column ss:Width="130"/>
-   <Column ss:Width="140"/>
-   <Column ss:Width="120"/>
-   <Column ss:Width="90"/>
-   <Row ss:Height="26">
-    <Cell ss:MergeAcross="${Math.max(0, enabledColumns.length - 1)}" ss:StyleID="TitleStyle"><Data ss:Type="String">STI Sync — Approved Financial Liquidation Report</Data></Cell>
-   </Row>
-   <Row ss:Height="20">
-    <Cell ss:MergeAcross="${Math.max(0, enabledColumns.length - 1)}" ss:StyleID="SubTitleStyle"><Data ss:Type="String">Event: ${report.eventTitle} | Organization: ${report.organizationName} | Submitted By: ${report.createdByName}</Data></Cell>
-   </Row>
-   <Row ss:Height="20">
-    <Cell ss:MergeAcross="${Math.max(0, enabledColumns.length - 1)}" ss:StyleID="SubTitleStyle"><Data ss:Type="String">Approved Budget: ${formatCurrency(report.allocatedBudget)} | Actual Spend: ${formatCurrency(report.totalActualSpending)} | Net Variance: ${isDeficit ? `${formatCurrency(-varianceAmount)} (Deficit)` : `+${formatCurrency(varianceAmount)} (Surplus)`} | Exported: ${now}</Data></Cell>
-   </Row>
-   <Row ss:Height="10"></Row>
-   <Row ss:Height="24">`;
-
-      enabledColumns.forEach(col => {
-        xml += `<Cell ss:StyleID="HeaderStyle"><Data ss:Type="String">${col.label}</Data></Cell>`;
+      exportOfficialStiLiquidationExcel(report, {
+        officerName,
+        chequeNumber,
+        activityEndDate,
+        submissionDeadline,
+        dateSubmitted,
+        dateReleased,
+        amountAdvanced,
+        daysLapsed,
+        orNumber,
+        signatories,
       });
-      xml += `</Row>`;
-
-      report.lineItems.forEach((item, idx) => {
-        const rowStyle = idx % 2 === 0 ? 'RowEven' : 'RowOdd';
-        xml += `<Row ss:Height="20">`;
-        enabledColumns.forEach(col => {
-          const val = getItemValue(item, idx, col.key);
-          xml += `<Cell ss:StyleID="${rowStyle}"><Data ss:Type="String">${escapeXml(val)}</Data></Cell>`;
-        });
-        xml += `</Row>`;
-      });
-
-      // Total Row
-      xml += `<Row ss:Height="24">`;
-      enabledColumns.forEach(col => {
-        let val = '';
-        if (col.key === 'itemIndex') val = 'Total';
-        else if (col.key === 'description') val = 'TOTAL SUMMARY';
-        else if (col.key === 'allocatedCost') val = formatCurrency(report.allocatedBudget);
-        else if (col.key === 'totalCost') val = formatCurrency(report.totalActualSpending);
-        else if (col.key === 'variance') val = isDeficit ? `${formatCurrency(-varianceAmount)} (Deficit)` : `+${formatCurrency(varianceAmount)} (Surplus)`;
-        xml += `<Cell ss:StyleID="TotalStyle"><Data ss:Type="String">${escapeXml(val)}</Data></Cell>`;
-      });
-      xml += `</Row>`;
-
-      xml += `  </Table>
- </Worksheet>
-</Workbook>`;
-
-      const blob = new Blob([xml], { type: 'application/vnd.ms-excel' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-
-      toast.success('Liquidation Excel Exported!', {
-        description: `Exported ${report.lineItems.length} items to ${filename}`,
-      });
+      toast.success('Official STI Liquidation Excel exported successfully!');
       onClose();
     } catch (err) {
-      console.error('Failed to export liquidation Excel XML', err);
-      toast.error('Failed to generate Excel file.');
+      console.error('Failed to export STI liquidation Excel', err);
+      toast.error('Failed to generate official Excel file.');
     } finally {
       setIsExporting(false);
     }
-  };
-
-  const handlePrint = () => {
-    window.print();
   };
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-xs" onClick={onClose} />
 
-      <div className="relative w-full max-w-5xl h-[88vh] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+      <div className="relative w-full max-w-5xl h-[90vh] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-gray-200">
         {/* Modal Header */}
-        <div className="bg-[#001A4D] px-6 py-4 flex items-center justify-between flex-shrink-0 text-white">
+        <header className="bg-[#001A4D] px-6 py-4 flex items-center justify-between flex-shrink-0 text-white shadow-md">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-[#0E4EBD] rounded-xl flex items-center justify-center text-white">
-              <FileSpreadsheet className="w-5 h-5 text-[#FFD41C]" />
+            <div className="w-10 h-10 bg-[#0E4EBD] rounded-xl flex items-center justify-center text-[#FFD41C] shadow-inner">
+              <FileSpreadsheet className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-bold text-base text-white">Export Liquidation Report — Interactive Excel Preview</h3>
-              <p className="text-xs text-white/70">Inspect financial line items, select export columns, and preview before downloading.</p>
+              <div className="flex items-center gap-2">
+                <h3 className="font-extrabold text-base text-white tracking-tight">
+                  Official STI Liquidation Export Engine
+                </h3>
+                <span className="px-2 py-0.5 bg-[#FFD41C] text-[#001A4D] text-[10px] font-mono font-bold rounded-md uppercase">
+                  LIQUIDATION-FORMAT v1.0
+                </span>
+              </div>
+              <p className="text-xs text-white/70">
+                STI College Official Financial Liquidation Template Generator
+              </p>
             </div>
           </div>
-          <button onClick={onClose} className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors cursor-pointer">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
 
-        {/* Info & Financial Summary Banner */}
-        <div className="bg-blue-50/70 border-b border-blue-100 px-6 py-3.5 flex flex-wrap items-center justify-between gap-3 flex-shrink-0">
-          <div>
-            <div className="flex items-center gap-2">
-              <h4 className="font-bold text-sm text-[#001A4D]">{report.eventTitle}</h4>
-              <span className="px-2.5 py-0.5 bg-green-100 text-green-800 rounded-full text-[10px] font-bold flex items-center gap-1">
-                <CheckCircle2 className="w-3 h-3" /> Approved
-              </span>
-            </div>
-            <p className="text-xs text-gray-500 mt-0.5">
-              Host: <strong>{report.organizationName}</strong> • Submitted by: <strong>{report.createdByName}</strong>
-            </p>
-          </div>
-
-          <div className="flex items-center gap-4 text-xs">
-            <div className="bg-white px-3 py-1.5 rounded-lg border border-blue-200">
-              <span className="text-gray-500 block text-[10px] uppercase font-bold">Approved Budget</span>
-              <span className="font-bold text-[#001A4D] text-sm">{formatCurrency(report.allocatedBudget)}</span>
-            </div>
-            <div className="bg-white px-3 py-1.5 rounded-lg border border-blue-200">
-              <span className="text-gray-500 block text-[10px] uppercase font-bold">Actual Spending</span>
-              <span className="font-bold text-[#0E4EBD] text-sm">{formatCurrency(report.totalActualSpending)}</span>
-            </div>
-            <div className="bg-white px-3 py-1.5 rounded-lg border border-blue-200">
-              <span className="text-gray-500 block text-[10px] uppercase font-bold">{isDeficit ? 'Net Deficit' : 'Net Surplus'}</span>
-              <span className={`font-bold text-sm ${isDeficit ? 'text-red-600' : 'text-green-600'}`}>
-                {formatVariance(isDeficit ? -varianceAmount : varianceAmount)}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Column Configurator & Preview Search */}
-        <div className="px-6 py-3 bg-gray-50 border-b border-gray-200 flex flex-wrap items-center justify-between gap-3 flex-shrink-0">
           <div className="flex items-center gap-2">
-            <Layers className="w-4 h-4 text-[#0E4EBD]" />
-            <span className="text-xs font-bold text-[#001A4D]">Included Columns:</span>
-            <span className="text-xs text-gray-500 font-mono">({enabledColumns.length}/{columns.length})</span>
+            <button
+              onClick={onClose}
+              className="p-2 text-white/70 hover:text-white rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </header>
+
+        {/* Tab Navigation & Status Bar */}
+        <div className="bg-gray-50 border-b border-gray-200 px-6 py-2.5 flex items-center justify-between flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setActiveTab('preview')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                activeTab === 'preview'
+                  ? 'bg-[#001A4D] text-white shadow-xs'
+                  : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-100'
+              }`}
+            >
+              <Eye className="w-3.5 h-3.5" />
+              <span>1. Clean Template Preview</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('signatories')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                activeTab === 'signatories'
+                  ? 'bg-[#001A4D] text-white shadow-xs'
+                  : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-100'
+              }`}
+            >
+              <Settings2 className="w-3.5 h-3.5" />
+              <span>2. Signatories Matrix ({signatories.length})</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('metadata')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                activeTab === 'metadata'
+                  ? 'bg-[#001A4D] text-white shadow-xs'
+                  : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-100'
+              }`}
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>3. Activity Header Details</span>
+            </button>
           </div>
 
-          <div className="flex flex-wrap items-center gap-1.5">
-            {columns.map((col) => (
-              <button
-                key={col.key}
-                onClick={() => toggleColumn(col.key)}
-                className={`px-2.5 py-1 rounded-md text-xs font-semibold border transition-all flex items-center gap-1 cursor-pointer ${
-                  col.enabled
-                    ? 'bg-[#001A4D] text-white border-[#001A4D]'
-                    : 'bg-white text-gray-500 border-gray-300 hover:border-gray-400'
-                }`}
-              >
-                {col.enabled && <Check className="w-3 h-3 text-white" />}
-                <span>{col.label}</span>
-              </button>
-            ))}
-          </div>
-
-          <div className="relative w-48">
-            <input
-              type="text"
-              placeholder="Search line items..."
-              value={previewSearch}
-              onChange={e => setPreviewSearch(e.target.value)}
-              className="w-full pl-7 pr-3 py-1 bg-white border border-gray-300 rounded-md text-xs focus:ring-1 focus:ring-[#0E4EBD] outline-none"
-            />
-            <Eye className="w-3.5 h-3.5 text-gray-400 absolute left-2 top-1/2 -translate-y-1/2" />
+          <div className="flex items-center gap-3 text-xs font-bold">
+            <span className="text-gray-500">Total Actual Spent:</span>
+            <span className="text-[#001A4D] font-mono text-sm">
+              {formatCurrency(report.totalActualSpending || report.totalActualSpent || 0)}
+            </span>
           </div>
         </div>
 
-        {/* Interactive Excel Sheet Live Preview */}
-        <div className="flex-1 overflow-auto p-6 bg-gray-100/60">
-          <div className="bg-white border border-gray-300 rounded-xl shadow-md overflow-hidden font-sans">
-            <div className="bg-[#001A4D] text-white p-4 border-b border-gray-300 flex items-center justify-between">
-              <div>
-                <h4 className="font-bold text-base text-white">Financial Liquidation Ledger Sheet</h4>
-                <p className="text-xs text-white/80">{report.eventTitle} — {report.organizationName}</p>
-              </div>
-              <div className="text-right text-xs text-white/70 font-mono">
-                {displayItems.length} line items visible
-              </div>
-            </div>
+        {/* Modal Body */}
+        <div className="flex-1 overflow-y-auto p-6 bg-slate-100/70">
+          {/* TAB 1: CLEAN MONOCHROME STI FORMAT PREVIEW */}
+          {activeTab === 'preview' && (
+            <div className="space-y-6 max-w-4xl mx-auto">
+              <div className="bg-white border-2 border-gray-400 rounded-lg shadow-sm p-6 font-sans text-xs space-y-6">
+                {/* 1. Header Section */}
+                <div className="border-b-2 border-black pb-4">
+                  <h2 className="text-base font-bold text-black uppercase tracking-tight">
+                    LIQUIDATION REPORT FOR {(report.eventTitle || 'Event Activity').toUpperCase()}
+                  </h2>
+                  <div className="grid grid-cols-2 gap-x-8 gap-y-1.5 mt-3 text-[11px] text-black">
+                    <div className="flex justify-between border-b border-gray-200 py-0.5">
+                      <span className="font-bold">Employee / Officer Name:</span>
+                      <span>{officerName || '—'}</span>
+                    </div>
+                    <div className="flex justify-between border-b border-gray-200 py-0.5">
+                      <span className="font-bold">Date Of Activity End:</span>
+                      <span>{activityEndDate || '—'}</span>
+                    </div>
+                    <div className="flex justify-between border-b border-gray-200 py-0.5">
+                      <span className="font-bold">Cheque Number:</span>
+                      <span className="font-mono">{chequeNumber || '—'}</span>
+                    </div>
+                    <div className="flex justify-between border-b border-gray-200 py-0.5">
+                      <span className="font-bold">Deadline For The Liquidation Submissions:</span>
+                      <span>{submissionDeadline || '—'}</span>
+                    </div>
+                    <div className="flex justify-between border-b border-gray-200 py-0.5">
+                      <span className="font-bold">Purpose:</span>
+                      <span>{report.eventTitle}</span>
+                    </div>
+                    <div className="flex justify-between border-b border-gray-200 py-0.5">
+                      <span className="font-bold">Date Submitted:</span>
+                      <span>{dateSubmitted}</span>
+                    </div>
+                    <div className="flex justify-between border-b border-gray-200 py-0.5">
+                      <span className="font-bold">Amount:</span>
+                      <span className="font-bold font-mono">{formatCurrency(amountAdvanced)}</span>
+                    </div>
+                    <div className="flex justify-between border-b border-gray-200 py-0.5">
+                      <span className="font-bold">No. Of Days Lapse:</span>
+                      <span>{daysLapsed}</span>
+                    </div>
+                  </div>
+                </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-[#001A4D] text-white font-bold divide-x divide-blue-900">
-                    {enabledColumns.map(col => (
-                      <th key={col.key} className="px-3 py-2.5 uppercase tracking-wider text-[11px] whitespace-nowrap">
-                        {col.label}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200 bg-white font-mono text-[12px]">
-                  {displayItems.length === 0 ? (
-                    <tr>
-                      <td colSpan={enabledColumns.length} className="py-12 text-center text-gray-400 font-sans">
-                        No expense line items found.
-                      </td>
-                    </tr>
-                  ) : (
-                    displayItems.map((item, idx) => (
-                      <tr key={item.id || idx} className={`hover:bg-blue-50/50 transition-colors ${idx % 2 === 1 ? 'bg-gray-50/70' : 'bg-white'}`}>
-                        {enabledColumns.map(col => {
-                          const val = getItemValue(item, idx, col.key);
-                          const isAllocated = col.key === 'allocatedCost';
-                          const isActual = col.key === 'totalCost';
-                          const isVariance = col.key === 'variance';
+                {/* 2. Section Header */}
+                <div className="text-[11px] font-bold text-black uppercase">
+                  CHARGE TO EXPENSE/REFUNDABLE ACCOUNT:
+                </div>
 
-                          return (
-                            <td key={col.key} className="px-3 py-2 whitespace-nowrap text-gray-800">
-                              {isActual ? (
-                                <span className="font-bold text-[#0E4EBD]">{val}</span>
-                              ) : isAllocated ? (
-                                <span className="font-semibold text-gray-700">{val}</span>
-                              ) : isVariance ? (
-                                <span className={`font-bold ${val.includes('Deficit') ? 'text-red-600' : val.includes('Surplus') ? 'text-green-600' : 'text-gray-500'}`}>
-                                  {val}
-                                </span>
-                              ) : (
-                                <span>{val}</span>
-                              )}
-                            </td>
-                          );
-                        })}
+                {/* 3. Expenses Breakdown Table (Monochrome Grid matching original template) */}
+                <div className="border border-black overflow-hidden">
+                  <table className="w-full text-left border-collapse text-[11px]">
+                    <thead>
+                      <tr className="bg-white text-black font-bold text-center border-b border-black">
+                        <th className="p-2 border-r border-black w-[24%]">PARTICULAR</th>
+                        <th className="p-2 border-r border-black w-[14%]">AMOUNT</th>
+                        <th colSpan={3} className="p-2 border-r border-black">ACTUAL EXPENSES BREAKDOWN</th>
+                        <th className="p-2 w-[18%]">Remarks</th>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-                {/* Total Summary Footer Row */}
-                <tfoot className="bg-amber-50 border-t-2 border-amber-300 font-mono font-bold text-xs">
-                  <tr>
-                    {enabledColumns.map(col => {
-                      let val = '';
-                      if (col.key === 'itemIndex') val = 'Total';
-                      else if (col.key === 'description') val = 'SUMMARY TOTALS';
-                      else if (col.key === 'allocatedCost') val = formatCurrency(report.allocatedBudget);
-                      else if (col.key === 'totalCost') val = formatCurrency(report.totalActualSpending);
-                      else if (col.key === 'variance') val = isDeficit ? `${formatCurrency(-varianceAmount)}` : `+${formatCurrency(varianceAmount)}`;
+                      <tr className="bg-white text-black font-bold text-[10px] text-center border-b border-black">
+                        <th className="p-1.5 border-r border-black font-normal">Breakdown For Cash Advances</th>
+                        <th className="p-1.5 border-r border-black"></th>
+                        <th className="p-1.5 border-r border-black">Amount</th>
+                        <th className="p-1.5 border-r border-black">Total Amount</th>
+                        <th className="p-1.5 border-r border-black">Variance</th>
+                        <th className="p-1.5"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-300 font-mono text-[11px]">
+                      {categorizedItems.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="p-6 text-center text-gray-400 font-sans">
+                            No recorded liquidation line items.
+                          </td>
+                        </tr>
+                      ) : (
+                        categorizedItems.map(([category, items], catIdx) => {
+                          const letter = String.fromCharCode(65 + catIdx);
+                          const catAllocated = items.reduce((sum, i) => sum + (i.allocatedCost || 0), 0);
 
-                      return (
-                        <td key={col.key} className="px-3 py-2.5 text-[#001A4D]">
-                          {val}
+                          return items.map((item, itemIdx) => {
+                            const isFirst = itemIdx === 0;
+                            const itemVariance = (item.allocatedCost || 0) > 0
+                              ? (item.allocatedCost || 0) - (item.totalCost || 0)
+                              : 0;
+
+                            return (
+                              <tr key={item.id || `${catIdx}-${itemIdx}`}>
+                                <td className="p-1.5 border-r border-black font-sans font-bold text-black">
+                                  {isFirst ? `${letter}. ${category}` : ''}
+                                </td>
+                                <td className="p-1.5 border-r border-black text-right text-black">
+                                  {isFirst ? (catAllocated > 0 ? formatCurrency(catAllocated) : '—') : ''}
+                                </td>
+                                <td className="p-1.5 border-r border-black font-sans text-black">
+                                  {item.description || item.vendorName}
+                                </td>
+                                <td className="p-1.5 border-r border-black text-right text-black">
+                                  {formatCurrency(item.totalCost || 0)}
+                                </td>
+                                <td className="p-1.5 border-r border-black text-right text-black">
+                                  {formatCurrency(itemVariance)}
+                                </td>
+                                <td className="p-1.5 text-black font-sans text-[10px]">
+                                  {item.receiptNumber ? `OR# ${item.receiptNumber}` : item.vendorName || '—'}
+                                </td>
+                              </tr>
+                            );
+                          });
+                        })
+                      )}
+
+                      {/* Totals Row */}
+                      <tr className="bg-white font-bold border-t-2 border-black text-black">
+                        <td className="p-2 border-r border-black font-sans">Total Cash Advance</td>
+                        <td className="p-2 border-r border-black text-right font-mono">
+                          {formatCurrency(amountAdvanced)}
                         </td>
-                      );
-                    })}
-                  </tr>
-                </tfoot>
-              </table>
+                        <td className="p-2 border-r border-black font-sans">Total Actual Expense</td>
+                        <td className="p-2 border-r border-black text-right font-mono">
+                          {formatCurrency(report.totalActualSpending || report.totalActualSpent || 0)}
+                        </td>
+                        <td className="p-2 border-r border-black text-right font-mono">
+                          {formatCurrency(amountAdvanced - (report.totalActualSpending || report.totalActualSpent || 0))}
+                        </td>
+                        <td className="p-2 font-sans text-xs">—</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* 4. Balance Summary Note Block */}
+                <div className="bg-white p-4 border border-black space-y-1 text-[11px] text-black">
+                  <div className="font-bold mb-1">Note: </div>
+                  <div className="flex justify-between w-72">
+                    <span className="font-medium">Amount Advanced:</span>
+                    <span className="font-mono font-bold">{formatCurrency(amountAdvanced)}</span>
+                  </div>
+                  <div className="flex justify-between w-72">
+                    <span className="font-medium">Total Actual Expense:</span>
+                    <span className="font-mono font-bold">
+                      {formatCurrency(report.totalActualSpending || report.totalActualSpent || 0)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between w-72 pt-1 border-t border-black">
+                    <span className="font-bold">Balance: </span>
+                    <span className="font-mono font-bold underline">
+                      {formatCurrency(amountAdvanced - (report.totalActualSpending || report.totalActualSpent || 0))}
+                    </span>
+                  </div>
+                  {orNumber && (
+                    <div className="text-[10px] pt-1">
+                      OR NO: <strong>{orNumber}</strong>
+                    </div>
+                  )}
+                </div>
+
+                {/* 5. Dynamic Signatures Matrix */}
+                <div className="pt-4 border-t border-gray-300">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-[11px] font-bold uppercase tracking-wider text-black">
+                      Signatures ({signatories.length})
+                    </h4>
+                    <button
+                      onClick={() => setActiveTab('signatories')}
+                      className="text-xs text-[#0E4EBD] hover:underline font-bold"
+                    >
+                      Edit Signatures →
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-6 pt-2">
+                    {signatories.map((sig) => (
+                      <div key={sig.id} className="space-y-1">
+                        <p className="text-[10px] font-bold text-black uppercase">{sig.type}</p>
+                        <div className="pt-6 border-b border-black text-center font-bold text-[11px] text-black">
+                          {sig.name || ''}
+                        </div>
+                        <div className="flex items-center justify-between text-[9.5px] text-gray-700">
+                          <span>{sig.role}</span>
+                          <span>(Date)</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* TAB 2: DYNAMIC SIGNATORIES MANAGER */}
+          {activeTab === 'signatories' && (
+            <div className="max-w-3xl mx-auto space-y-4">
+              <div className="bg-white border border-gray-300 rounded-xl p-4 flex items-center justify-between">
+                <div>
+                  <h4 className="font-bold text-sm text-[#001A4D]">Manage Report Signatories</h4>
+                  <p className="text-xs text-gray-600 mt-0.5">
+                    Customize who appears in the signature section of the exported Excel report.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleResetSignatories}
+                    className="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Reset Standard</span>
+                  </button>
+                  <button
+                    onClick={handleAddSignatory}
+                    className="px-3.5 py-1.5 bg-[#001A4D] hover:bg-[#0E4EBD] text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>+ Add Signatory</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                {signatories.map((sig, idx) => (
+                  <div
+                    key={sig.id}
+                    className="bg-white border border-gray-200 rounded-xl p-4 shadow-xs flex items-center gap-3"
+                  >
+                    <div className="w-7 h-7 bg-slate-100 rounded-full flex items-center justify-center text-xs font-bold text-gray-600 flex-shrink-0">
+                      {idx + 1}
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 flex-1">
+                      {/* Signatory Type */}
+                      <div>
+                        <label className="text-[10px] font-bold text-gray-400 uppercase">
+                          Header / Action
+                        </label>
+                        <input
+                          type="text"
+                          value={sig.type}
+                          onChange={(e) => handleUpdateSignatory(sig.id, 'type', e.target.value)}
+                          placeholder="e.g. Approved By:"
+                          className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-300 rounded-lg text-xs font-semibold text-black focus:ring-1 focus:ring-[#0E4EBD] outline-none"
+                        />
+                      </div>
+
+                      {/* Signatory Name */}
+                      <div>
+                        <label className="text-[10px] font-bold text-gray-400 uppercase">
+                          Full Name (or blank for print)
+                        </label>
+                        <input
+                          type="text"
+                          value={sig.name}
+                          onChange={(e) => handleUpdateSignatory(sig.id, 'name', e.target.value)}
+                          placeholder="Leave blank for physical sign..."
+                          className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-300 rounded-lg text-xs font-bold text-black focus:ring-1 focus:ring-[#0E4EBD] outline-none"
+                        />
+                      </div>
+
+                      {/* Signatory Position/Role */}
+                      <div>
+                        <label className="text-[10px] font-bold text-gray-400 uppercase">
+                          Position / Role
+                        </label>
+                        <input
+                          type="text"
+                          value={sig.role}
+                          onChange={(e) => handleUpdateSignatory(sig.id, 'role', e.target.value)}
+                          placeholder="e.g. (Academic Head)"
+                          className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-300 rounded-lg text-xs text-gray-700 focus:ring-1 focus:ring-[#0E4EBD] outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => handleRemoveSignatory(sig.id)}
+                      disabled={signatories.length <= 1}
+                      className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer disabled:opacity-30"
+                      title="Remove Signatory"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: ACTIVITY HEADER DETAILS */}
+          {activeTab === 'metadata' && (
+            <div className="max-w-2xl mx-auto bg-white border border-gray-200 rounded-2xl p-6 shadow-xs space-y-4">
+              <h4 className="font-bold text-sm text-[#001A4D] border-b border-gray-100 pb-2">
+                Official Liquidation Header Parameters
+              </h4>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-500 mb-1">
+                    Employee / Officer Name
+                  </label>
+                  <input
+                    type="text"
+                    value={officerName}
+                    onChange={(e) => setOfficerName(e.target.value)}
+                    placeholder="Officer name..."
+                    className="w-full p-2 border border-gray-300 rounded-lg font-semibold"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-500 mb-1">
+                    Cheque Number
+                  </label>
+                  <input
+                    type="text"
+                    value={chequeNumber}
+                    onChange={(e) => setChequeNumber(e.target.value)}
+                    placeholder="Cheque # / Ref #..."
+                    className="w-full p-2 border border-gray-300 rounded-lg font-mono font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-500 mb-1">
+                    Date Of Activity End
+                  </label>
+                  <input
+                    type="text"
+                    value={activityEndDate}
+                    onChange={(e) => setActivityEndDate(e.target.value)}
+                    placeholder="e.g. MAY 26, 2024"
+                    className="w-full p-2 border border-gray-300 rounded-lg"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-500 mb-1">
+                    Deadline For Submissions
+                  </label>
+                  <input
+                    type="text"
+                    value={submissionDeadline}
+                    onChange={(e) => setSubmissionDeadline(e.target.value)}
+                    placeholder="e.g. June 15, 2024"
+                    className="w-full p-2 border border-gray-300 rounded-lg"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-500 mb-1">
+                    Amount (Cash Advance ₱)
+                  </label>
+                  <input
+                    type="number"
+                    value={amountAdvanced}
+                    onChange={(e) => setAmountAdvanced(Number(e.target.value))}
+                    className="w-full p-2 border border-gray-300 rounded-lg font-mono font-bold text-black"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-500 mb-1">
+                    No. Of Days Lapse
+                  </label>
+                  <input
+                    type="text"
+                    value={daysLapsed}
+                    onChange={(e) => setDaysLapsed(e.target.value)}
+                    placeholder="-o-"
+                    className="w-full p-2 border border-gray-300 rounded-lg font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-500 mb-1">
+                    Official Receipt (OR) Number
+                  </label>
+                  <input
+                    type="text"
+                    value={orNumber}
+                    onChange={(e) => setOrNumber(e.target.value)}
+                    placeholder="OR Number..."
+                    className="w-full p-2 border border-gray-300 rounded-lg font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-500 mb-1">
+                    Date Submitted
+                  </label>
+                  <input
+                    type="text"
+                    value={dateSubmitted}
+                    onChange={(e) => setDateSubmitted(e.target.value)}
+                    className="w-full p-2 border border-gray-300 rounded-lg"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Footer Actions */}
-        <div className="px-6 py-4 bg-white border-t border-gray-200 flex items-center justify-between flex-shrink-0">
+        {/* Modal Footer */}
+        <footer className="px-6 py-4 bg-white border-t border-gray-200 flex items-center justify-between flex-shrink-0">
           <div className="text-xs text-gray-500 flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse" />
-            <span>Ready to generate formatted Excel spreadsheet with <strong>{report.lineItems.length}</strong> expense items.</span>
+            <span>
+              Format ready: <strong>LIQUIDATION-FORMAT_v1.xlsx</strong> ({report.lineItems?.length || 0} line items).
+            </span>
           </div>
 
           <div className="flex items-center gap-3">
             <button
               onClick={onClose}
               disabled={isExporting}
-              className="px-5 py-2.5 border border-gray-300 text-gray-700 rounded-xl text-sm font-semibold hover:bg-gray-50 transition-colors cursor-pointer"
+              className="px-5 py-2.5 border border-gray-300 text-gray-700 rounded-xl text-xs font-bold hover:bg-gray-50 transition-colors cursor-pointer"
             >
               Cancel
             </button>
+
             <button
-              onClick={handlePrint}
+              onClick={handleExportExcel}
               disabled={isExporting}
-              className="px-4 py-2.5 border border-[#001A4D] text-[#001A4D] rounded-xl text-sm font-bold hover:bg-[#001A4D]/5 disabled:opacity-50 transition-colors flex items-center gap-2 cursor-pointer"
-            >
-              <Printer className="w-4 h-4" />
-              Print / Save PDF
-            </button>
-            <button
-              onClick={exportToExcelXML}
-              disabled={isExporting || report.lineItems.length === 0}
-              className="px-6 py-2.5 bg-[#001A4D] hover:bg-[#0E4EBD] text-white rounded-xl text-sm font-bold disabled:opacity-50 transition-all shadow-xs flex items-center gap-2 cursor-pointer"
+              className="px-6 py-2.5 bg-[#001A4D] hover:bg-[#0E4EBD] text-white rounded-xl text-xs font-bold disabled:opacity-50 transition-all shadow-md flex items-center gap-2 cursor-pointer"
             >
               <FileSpreadsheet className="w-4 h-4 text-[#FFD41C]" />
-              {isExporting ? 'Generating Excel File...' : 'Download Excel (.xlsx)'}
+              <span>{isExporting ? 'Generating Official Excel...' : 'Download Official STI Excel (.xls)'}</span>
             </button>
           </div>
-        </div>
+        </footer>
       </div>
     </div>
   );
