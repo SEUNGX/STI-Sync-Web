@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'react-router';
 import {
   Plus,
   Search,
@@ -35,6 +36,9 @@ import type { OrganizationMemberDocument } from '../../modules/organizations/typ
 import { formatTimestampDate } from '../../modules/students/utils/date.utils';
 
 export default function MemberDirectory() {
+  const [searchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+
   const { profile } = useOfficerProfile();
   const activeOrgId = profile?.activeOrganizationId || '';
 
@@ -45,7 +49,18 @@ export default function MemberDirectory() {
   const { data: dbCourses = [] } = useCourses();
   const { data: dbDepartments = [] } = useDepartments();
 
-  const [activeTab, setActiveTab] = useState<'members' | 'pending' | 'officers' | 'inactive'>('members');
+  const [activeTab, setActiveTab] = useState<'members' | 'pending' | 'officers' | 'inactive'>(() => {
+    if (tabParam && ['members', 'pending', 'officers', 'inactive'].includes(tabParam)) {
+      return tabParam as any;
+    }
+    return 'members';
+  });
+
+  useEffect(() => {
+    if (tabParam && ['members', 'pending', 'officers', 'inactive'].includes(tabParam)) {
+      setActiveTab(tabParam as any);
+    }
+  }, [tabParam]);
   
   // Filter & Sort State across ALL tabs
   const [searchQuery, setSearchQuery] = useState('');

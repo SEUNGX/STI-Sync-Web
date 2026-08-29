@@ -14,6 +14,7 @@ import AttendanceQRSettings from '../components/settings/AttendanceQRSettings';
 import CertificateSettings from '../components/settings/CertificateSettings';
 import LiquidationSettings from '../components/settings/LiquidationSettings';
 import FinePenaltyRules from '../components/settings/FinePenaltyRules';
+import PayableCategorySettings from '../components/settings/PayableCategorySettings';
 import DocumentManagementSettings from '../components/settings/DocumentManagementSettings';
 import DataManagement from '../components/settings/DataManagement';
 import AuditVisibility from '../components/settings/AuditVisibility';
@@ -61,6 +62,8 @@ export function SystemSettings() {
         return <AttendanceQRSettings onUnsavedChange={handleUnsavedChange} />;
       case 'certificate-settings':
         return <CertificateSettings onUnsavedChange={handleUnsavedChange} />;
+      case 'payable-categories':
+        return <PayableCategorySettings onUnsavedChange={handleUnsavedChange} />;
       case 'liquidation-settings':
         return <LiquidationSettings onUnsavedChange={handleUnsavedChange} />;
       case 'fine-penalty':

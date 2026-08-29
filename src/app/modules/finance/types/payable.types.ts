@@ -45,6 +45,22 @@ export interface PayableDocument {
   transferredBatchId?: string | null;
   fineViolations?: FineViolationDetail[];  // Granular breakdown of session fine violations
 
+  // ─── Mobile App Compatibility & Academic Context ───
+  title?: string;
+  feeTitle?: string;
+  category?: string;
+  amount?: number;
+  paymentStatus?: string;
+  courseCode?: string;
+  courseName?: string;
+  departmentId?: string;
+  departmentName?: string;
+  yearLevel?: string;
+  section?: string;
+  academicLevel?: string;
+  semester?: string;
+  schoolYear?: string;
+
   // ─── Audit ───
   createdBy: string;
   createdAt: Timestamp;
@@ -60,23 +76,18 @@ export interface FineViolationDetail {
 }
 
 export interface SessionFineRule {
-  sessionId: string;
   sessionTitle: string;
-  timeInAbsentAmount: number;     // ₱ fine for absent at time-in
-  timeInLateAmount: number;       // ₱ fine for late check-in
-  timeOutAbsentAmount: number;    // ₱ fine for missing time-out (if session has timeout)
-  enableTimeInAbsent: boolean;
-  enableTimeInLate: boolean;
-  enableTimeOutAbsent: boolean;
+  ruleType: 'time_in_absent' | 'time_in_late' | 'time_out_absent';
+  amount: number;
 }
 
 export interface GenerateEventFinesPayload {
   eventId: string;
   eventTitle: string;
+  organizationId: string | null;
+  organizationName: string | null;
   semesterId: string;
-  rules: SessionFineRule[];
-  createdBy: string;
-  isOfficer: boolean;
+  sessionRules: SessionFineRule[];
   hostingOrgId?: string | null;
   hostingOrgName?: string | null;
   dueDate?: Date | Timestamp | string | null;
@@ -131,12 +142,26 @@ export interface CreatePayablePayload {
   studentSchoolId: string;
   type: PayableType;
   label: string;
+  title?: string;
+  feeTitle?: string;
+  category?: string;
   description?: string;
   organizationId?: string | null;
   organizationName?: string | null;
   semesterId: string;
+  semester?: string;
+  schoolYear?: string;
   eventId?: string | null;
   assignedAmount: number;
+  amount?: number;
+  paymentStatus?: string;
+  courseCode?: string;
+  courseName?: string;
+  departmentId?: string;
+  departmentName?: string;
+  yearLevel?: string;
+  section?: string;
+  academicLevel?: string;
   dueDate?: Date | Timestamp | null;
   createdBy: string;
   fineViolations?: FineViolationDetail[];

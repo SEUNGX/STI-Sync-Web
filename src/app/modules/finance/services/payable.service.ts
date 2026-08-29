@@ -175,22 +175,40 @@ export async function createPayable(payload: CreatePayablePayload): Promise<stri
     }
   }
 
+  const payableAmount = Number(payload.assignedAmount ?? payload.amount ?? 0);
+  const payableTitle = (payload.title || payload.label || payload.feeTitle || 'Payable Fee').trim();
+
   await setDoc(newDocRef, {
     id: newDocRef.id,
     studentId: payload.studentId,
     studentName: payload.studentName,
     studentSchoolId: payload.studentSchoolId,
     type: payload.type,
-    label: payload.label,
+    label: payableTitle,
+    title: payableTitle,
+    feeTitle: payableTitle,
+    category: payload.category || (payload.type === 'admin_fine' || payload.type === 'org_fine' ? 'Fine' : 'Institutional Assessment'),
     description: payload.description || '',
     organizationId: payload.organizationId || null,
-    organizationName: payload.organizationName || null,
+    organizationName: payload.organizationName || (payload.organizationId ? null : 'SAO Administration'),
     semesterId: payload.semesterId,
+    semester: payload.semester || '',
+    schoolYear: payload.schoolYear || '',
     eventId: payload.eventId || null,
-    assignedAmount: payload.assignedAmount,
+    amount: payableAmount,
+    assignedAmount: payableAmount,
     paidAmount: 0,
     status: 'pending' as PayableStatus,
+    paymentStatus: 'UNPAID',
+    qrTicketUnlocked: false,
     dueDate: formattedDueDate,
+    courseCode: payload.courseCode || '',
+    courseName: payload.courseName || '',
+    departmentId: payload.departmentId || '',
+    departmentName: payload.departmentName || '',
+    yearLevel: payload.yearLevel || '',
+    section: payload.section || '',
+    academicLevel: payload.academicLevel || 'COLLEGE',
     paidAt: null,
     recordedBy: null,
     paymentMethod: null,
@@ -1219,6 +1237,7 @@ export async function transferCollectionGroupToLedger(params: {
   semesterId?: string | null;
   recordedByUid?: string;
   collectionName?: string;
+  payableIds?: string[];
 }): Promise<{ transferredCount: number; transferredAmount: number }> {
   const {
     collectionGroupId,
@@ -1229,6 +1248,7 @@ export async function transferCollectionGroupToLedger(params: {
     semesterId,
     recordedByUid,
     collectionName,
+    payableIds,
   } = params;
 
   const payablesRef = collection(db, PAYABLES_COLLECTION);
@@ -1258,6 +1278,9 @@ export async function transferCollectionGroupToLedger(params: {
 
   const snap = await getDocs(qDocs);
   let eligibleDocs = snap.docs.filter((d) => {
+    if (payableIds && payableIds.length > 0 && !payableIds.includes(d.id)) {
+      return false;
+    }
     const data = d.data();
     const isPaidStatus = String(data.status || '').toLowerCase() === 'paid';
     const hasPaid = (Number(data.paidAmount) || 0) > 0;

@@ -1,7 +1,7 @@
 import {
   UserCircle, Lock, Activity, Calendar, Book,
   Building, Shield, Users, CalendarDays, QrCode, Award,
-  Receipt, AlertTriangle,
+  Receipt, AlertTriangle, Coins,
   Database, Eye, Files,
 } from 'lucide-react';
 
@@ -47,6 +47,7 @@ const navItems = [
   {
     group: 'FINANCE',
     items: [
+      { id: 'payable-categories', icon: Coins, label: 'Fee & Fine Categories' },
       { id: 'liquidation-settings', icon: Receipt, label: 'Liquidation Settings' },
       { id: 'fine-penalty', icon: AlertTriangle, label: 'Fine & Penalty Rules' },
     ]

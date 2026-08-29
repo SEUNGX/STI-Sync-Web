@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { toast } from 'sonner';
 
 import { useOrgLedger, parseTimestampMillis } from '../../modules/finance/hooks/useFinanceStream';
@@ -8,6 +8,8 @@ import { useOrgPayables, useOrgCollectionsStream } from '../../modules/finance/h
 import { transferCollectionGroupToLedger } from '../../modules/finance/services/payable.service';
 import { useOfficerProfile } from '../../auth/hooks/useOfficerProfile';
 import { useOrganizationStream } from '../../modules/organizations/hooks/useOrganizationStream';
+import { useOrgMembers } from '../../modules/organizations/hooks/useOrgMembers';
+import { useStudents } from '../../modules/students/hooks/useStudentStream';
 import type { OrgLedgerDocument } from '../../modules/finance/types/finance.types';
 import type { PayableDocument, StudentEventCollectionGroup } from '../../modules/finance/types/payable.types';
 import { Timestamp } from 'firebase/firestore';
@@ -28,6 +30,7 @@ import {
   AlertCircle,
   Clock,
   Plus,
+  Tag,
   Archive,
   Eye,
   X,
@@ -53,18 +56,14 @@ import {
   Upload,
   Trash2,
   Loader2,
+  Layers,
 } from "lucide-react";
 
-type FinanceTab = "budget" | "collections" | "payables" | "liquidation";
-type PayableSubTab = "member" | "type" | "overdue";
+type FinanceTab = "budget" | "collections";
+type CollectionsSubView = "collections" | "members" | "overdue";
 
-import { useOrgLiquidations } from '../../modules/finance/hooks/useLiquidationStream';
-import OfficerLiquidationModal from '../components/OfficerLiquidationModal';
-import ReceiptLightboxModal from '../../modules/finance/components/ReceiptLightboxModal';
-import { LiquidationExportPreviewModal } from '../../modules/finance/components/LiquidationExportPreviewModal';
 import TransactionDetailModal from '../../modules/finance/components/TransactionDetailModal';
 import { useUserNameResolver } from '../../modules/finance/hooks/useUserNameResolver';
-import type { LiquidationDocument, LiquidationStatus } from '../../modules/finance/types/liquidation.types';
 
 
 
@@ -1062,7 +1061,7 @@ function OrgCollectionDetailModal({
               <ArrowDownLeft className="w-4 h-4" />
               Transfer {formatCurrency(untransferredAmount)} to Club Treasury
             </button>
-          ) : totalCollected > 0 ? (
+) : totalCollected > 0 ? (
             <div className="flex-1 py-2.5 bg-blue-50 border border-blue-200 text-blue-700 rounded-xl text-sm font-bold text-center flex items-center justify-center gap-2 select-none">
               <CheckCircle className="w-4 h-4" />
               All Paid Collections Transferred ({formatCurrency(totalCollected)})
@@ -1078,351 +1077,278 @@ function OrgCollectionDetailModal({
   );
 }
 
-function OrgCollectionsTab({
+// ─── Merged Student Collections & Payables Tab ─────────────────────────────────
+
+function StudentCollectionsAndPayablesTab({
   isPast,
+  payables,
   organizationId,
   organizationName,
   semesterId,
   officerStudentId,
 }: {
   isPast: boolean;
+  payables: PayableDocument[];
   organizationId: string;
   organizationName: string;
   semesterId: string;
   officerStudentId: string;
 }) {
-  const { data: collections, loading } = useOrgCollectionsStream(organizationId, semesterId);
+  const { data: rawCollections, loading: collectionsLoading } = useOrgCollectionsStream(organizationId, semesterId);
+  const { members: orgMembers = [], loading: membersLoading } = useOrgMembers(organizationId);
+  const { data: allStudents = [] } = useStudents();
+  const [subView, setSubView] = useState<CollectionsSubView>("collections");
+
+  // Modals
   const [viewCollection, setViewCollection] = useState<StudentEventCollectionGroup | null>(null);
+  const [showGenerateDues, setShowGenerateDues] = useState(false);
+  const [showAddPayable, setShowAddPayable] = useState(false);
+  const [selectedPayableForPayment, setSelectedPayableForPayment] = useState<PayableDocument | null>(null);
   const [isTransferring, setIsTransferring] = useState(false);
 
+  // Filters
+  const [searchQuery, setSearchQuery] = useState("");
+  const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [collectionStatusFilter, setCollectionStatusFilter] = useState<string>("all");
+  const [memberStatusFilter, setMemberStatusFilter] = useState<string>("All");
+
+  // Pagination
+  const PER_PAGE = 8;
+  const [collectionsPage, setCollectionsPage] = useState(1);
+  const [membersPage, setMembersPage] = useState(1);
+
+  useEffect(() => {
+    setCollectionsPage(1);
+  }, [searchQuery, typeFilter, collectionStatusFilter]);
+
+  useEffect(() => {
+    setMembersPage(1);
+  }, [searchQuery, memberStatusFilter]);
+
+  // Active club members lookup
+  const activeMembers = useMemo(() => {
+    return orgMembers.filter((m) => m && m.status === 'active');
+  }, [orgMembers]);
+
+  const studentMap = useMemo(() => {
+    const map = new Map<string, any>();
+    allStudents.forEach((s) => {
+      if (s.id) map.set(s.id.toLowerCase().trim(), s);
+      if (s.authUid) map.set(s.authUid.toLowerCase().trim(), s);
+      if (s.studentId) map.set(s.studentId.toLowerCase().trim(), s);
+      if (s.email) map.set(s.email.toLowerCase().trim(), s);
+    });
+    return map;
+  }, [allStudents]);
+
+  // Build memberGroups strictly for active members of this club
+  const memberGroups = useMemo(() => {
+    return activeMembers.map((m) => {
+      const sDoc =
+        studentMap.get((m.studentId || '').toLowerCase().trim()) ||
+        studentMap.get((m.id || '').toLowerCase().trim()) ||
+        studentMap.get((m.email || '').toLowerCase().trim());
+
+      const possibleIds = new Set<string>();
+      if (m.studentId) possibleIds.add(m.studentId.toLowerCase().trim());
+      if (m.id) possibleIds.add(m.id.toLowerCase().trim());
+      if (sDoc?.id) possibleIds.add(sDoc.id.toLowerCase().trim());
+      if (sDoc?.authUid) possibleIds.add(sDoc.authUid.toLowerCase().trim());
+      if (sDoc?.studentId) possibleIds.add(sDoc.studentId.toLowerCase().trim());
+
+      // Filter payables that belong to this member
+      const memberPayables = payables.filter((p) => {
+        const pStudentId = (p.studentId || '').toLowerCase().trim();
+        const pSchoolId = (p.studentSchoolId || '').toLowerCase().trim();
+        return (pStudentId && possibleIds.has(pStudentId)) || (pSchoolId && possibleIds.has(pSchoolId));
+      });
+
+      const officialName = sDoc
+        ? [sDoc.firstName, sDoc.middleName, sDoc.lastName].filter(Boolean).join(' ')
+        : (m.studentName || 'Member');
+      const officialSchoolId = sDoc?.studentId || m.studentId || m.id;
+      const officialCourse = m.course || sDoc?.course || sDoc?.courseCode || '';
+      const officialYear = m.year || sDoc?.year || sDoc?.yearLevel || '';
+
+      return {
+        studentId: m.studentId || m.id,
+        studentName: officialName,
+        schoolId: officialSchoolId,
+        courseCode: officialCourse,
+        yearLevel: officialYear,
+        payables: memberPayables,
+      };
+    });
+  }, [activeMembers, studentMap, payables]);
+
+  // Overall financial calculations scoped strictly to club members
+  const totalAssigned = useMemo(() => {
+    return memberGroups.reduce((sum, m) => sum + m.payables.reduce((a, p) => a + (p.assignedAmount || 0), 0), 0);
+  }, [memberGroups]);
+
+  const totalCollected = useMemo(() => {
+    return memberGroups.reduce((sum, m) => sum + m.payables.reduce((a, p) => a + (p.paidAmount || 0), 0), 0);
+  }, [memberGroups]);
+
+  const totalOutstanding = totalAssigned - totalCollected;
+  const pendingTransferTotal = rawCollections.reduce((s, c) => s + (c.untransferredAmount || 0), 0);
+
+  // Filter collections
+  const filteredCollections = useMemo(() => {
+    return rawCollections.filter((c) => {
+      const q = searchQuery.toLowerCase().trim();
+      const matchesSearch =
+        !q ||
+        c.eventName.toLowerCase().includes(q) ||
+        (c.type || "").toLowerCase().includes(q);
+
+      const matchesType =
+        typeFilter === "all" ||
+        (typeFilter === "membership_due" && c.type === "membership_due") ||
+        (typeFilter === "event_fee" && c.type === "event_fee") ||
+        (typeFilter === "org_fine" && (c.type === "org_fine" || (c as any).type === "event_fine"));
+
+      const paid = c.payments.filter((p) => p.status === "Paid");
+      const untransferred = c.untransferredAmount || 0;
+
+      let matchesStatus = true;
+      if (collectionStatusFilter === "ready_transfer") {
+        matchesStatus = untransferred > 0;
+      } else if (collectionStatusFilter === "transferred") {
+        matchesStatus = c.transferredToBudget === true && untransferred === 0;
+      } else if (collectionStatusFilter === "no_payments") {
+        matchesStatus = paid.length === 0;
+      }
+
+      return matchesSearch && matchesType && matchesStatus;
+    });
+  }, [rawCollections, searchQuery, typeFilter, collectionStatusFilter]);
+
+  const totalCollectionsPages = Math.max(1, Math.ceil(filteredCollections.length / PER_PAGE));
+  const paginatedCollections = useMemo(() => {
+    const start = (collectionsPage - 1) * PER_PAGE;
+    return filteredCollections.slice(start, start + PER_PAGE);
+  }, [filteredCollections, collectionsPage]);
+
+  // Overdue payables strictly for active club members
+  const now = Date.now();
+  const overduePayables = useMemo(() => {
+    const list: Array<PayableDocument & { memberName?: string; memberSchoolId?: string }> = [];
+    memberGroups.forEach((m) => {
+      m.payables.forEach((p) => {
+        const isOverdue =
+          p.status === "overdue" ||
+          (p.status !== "paid" && p.status !== "waived" && p.dueDate?.toMillis && p.dueDate.toMillis() < now);
+        if (isOverdue) {
+          list.push({
+            ...p,
+            studentName: p.studentName || m.studentName,
+            studentSchoolId: p.studentSchoolId || m.schoolId,
+          });
+        }
+      });
+    });
+    return list;
+  }, [memberGroups, now]);
+
+  const filteredMembers = useMemo(() => {
+    return memberGroups.filter((m) => {
+      const q = searchQuery.toLowerCase().trim();
+      const matchesSearch =
+        !q ||
+        (m.studentName || "").toLowerCase().includes(q) ||
+        (m.schoolId || "").toLowerCase().includes(q);
+
+      const memberAssigned = m.payables.reduce((a, p) => a + (p.assignedAmount || 0), 0);
+      const memberPaid = m.payables.reduce((a, p) => a + (p.paidAmount || 0), 0);
+
+      let matchesStatus = true;
+      if (memberStatusFilter === "Paid") matchesStatus = memberPaid >= memberAssigned && memberAssigned > 0;
+      else if (memberStatusFilter === "Partial") matchesStatus = memberPaid > 0 && memberPaid < memberAssigned;
+      else if (memberStatusFilter === "Unpaid") matchesStatus = memberPaid === 0 && memberAssigned > 0;
+      else if (memberStatusFilter === "Overdue") {
+        matchesStatus = m.payables.some(
+          (p) => p.status === "overdue" || (p.dueDate?.toMillis && p.dueDate.toMillis() < now && p.status !== "paid")
+        );
+      }
+
+      return matchesSearch && matchesStatus;
+    });
+  }, [memberGroups, searchQuery, memberStatusFilter, now]);
+
+  const totalMemberPages = Math.max(1, Math.ceil(filteredMembers.length / PER_PAGE));
+  const paginatedMembers = useMemo(() => {
+    const start = (membersPage - 1) * PER_PAGE;
+    return filteredMembers.slice(start, start + PER_PAGE);
+  }, [filteredMembers, membersPage]);
+
+  // Transfer collection to ledger
   const handleTransfer = async (item: StudentEventCollectionGroup) => {
     setIsTransferring(true);
     try {
       const res = await transferCollectionGroupToLedger({
         collectionGroupId: item.id,
-        eventId: item.eventId !== 'unassigned' ? item.eventId : null,
+        eventId: item.eventId !== "unassigned" ? item.eventId : null,
         type: item.type,
         organizationId,
-        targetLedger: 'org',
-        semesterId: semesterId !== 'all' ? semesterId : null,
+        targetLedger: "org",
+        semesterId: semesterId !== "all" ? semesterId : null,
         recordedByUid: officerStudentId,
         collectionName: item.eventName,
+        payableIds: item.payments.map((p) => p.id),
       });
 
       if (res.transferredCount > 0) {
         toast.success(`Transferred ${formatCurrency(res.transferredAmount)} across ${res.transferredCount} payment(s) to Club Treasury.`);
       } else {
-        toast.info('No pending paid collections available to transfer.');
+        toast.info("No pending paid collections available to transfer.");
       }
     } catch (err: any) {
-      console.error('Failed to transfer collection to organization ledger:', err);
-      toast.error(err?.message || 'Failed to transfer collection.');
+      console.error("Failed to transfer collection to organization ledger:", err);
+      toast.error(err?.message || "Failed to transfer collection.");
     } finally {
       setIsTransferring(false);
     }
   };
 
-  const pendingTransferTotal = collections.reduce((s, c) => s + (c.untransferredAmount || 0), 0);
-
   return (
     <div className="space-y-4">
-      {/* Informational banner */}
+      {/* Information Banner */}
       <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
         <Info className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
         <div>
-          <p className="text-amber-900 font-bold text-sm">Centralized Club Collections & Treasury Transfer</p>
+          <p className="text-amber-900 font-bold text-sm">Centralized Student Collections, Dues & Treasury Transfer</p>
           <p className="text-amber-800 text-xs mt-0.5 leading-relaxed">
-            All student collections (Membership Dues, Event Fees, and Event Attendance Fines) recorded in Attendance Logs or Finance Center appear here. Click <strong>Transfer</strong> to atomically credit newly collected cash into your Club Budget Ledger.
+            Events with student payables, membership dues, and fine penalties are managed here. Click <strong>View & Transfer</strong> to review student payments and credit cash into your Club Budget Ledger.
           </p>
         </div>
       </div>
 
-      <div className="bg-white border border-[#E0E0E0] rounded-xl overflow-hidden shadow-xs">
-        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-          <div className="border-l-4 border-[#0E4EBD] pl-3">
-            <h3 className="text-[#001A4D] font-bold text-base">Club Payable Collections</h3>
-            <p className="text-gray-500 text-xs mt-0.5">Membership Dues, Event Fees, and Event Fines</p>
-          </div>
-          {pendingTransferTotal > 0 && !isPast && (
-            <div className="px-3 py-1.5 bg-amber-100 text-amber-800 rounded-lg text-xs font-bold flex items-center gap-1.5">
-              <Clock className="w-4 h-4 text-amber-600" />
-              Ready to Transfer: {formatCurrency(pendingTransferTotal)}
-            </div>
-          )}
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50">
-              <tr>
-                {["Collection Name", "Type", "Assigned / Student", "Students", "Paid", "Collected (₱)", "Status", "Action"].map((col) => (
-                  <th key={col} className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide border-b border-[#E0E0E0]">
-                    {col}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {loading ? (
-                <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-gray-500 text-sm">
-                    Loading student collections...
-                  </td>
-                </tr>
-              ) : collections.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-gray-500 text-sm">
-                    No student collections found for this organization.
-                  </td>
-                </tr>
-              ) : (
-                collections.map((c) => {
-                  const paid = c.payments.filter((p) => p.status === "Paid");
-                  const totalCollected = c.totalCollected || paid.reduce((s, p) => s + p.amount, 0);
-                  const pct = c.totalStudents > 0 ? Math.round((paid.length / c.totalStudents) * 100) : 0;
-                  const untransferred = c.untransferredAmount || 0;
-                  const hasTransferred = (c.transferredAmount || 0) > 0;
-
-                  const typeBadge =
-                    c.type === "membership_due"
-                      ? "bg-indigo-100 text-indigo-800"
-                      : c.type === "org_fine"
-                      ? "bg-rose-100 text-rose-700"
-                      : "bg-blue-100 text-blue-700";
-
-                  const typeName =
-                    c.type === "membership_due"
-                      ? "Membership Due"
-                      : c.type === "org_fine"
-                      ? "Event Fine"
-                      : "Event Fee";
-
-                  return (
-                    <tr key={c.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-3">
-                        <p className="text-[#001A4D] font-medium text-sm">{c.eventName}</p>
-                        <p className="text-gray-400 text-xs">{c.eventDate}</p>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`px-2 py-0.5 text-xs rounded-md font-semibold ${typeBadge}`}>
-                          {typeName}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-gray-700 text-sm font-medium">
-                        {formatCurrency(c.payablePerStudent)}
-                      </td>
-                      <td className="px-4 py-3 text-gray-600 text-sm">{c.totalStudents}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <div className="h-1.5 w-16 bg-gray-100 rounded-full overflow-hidden">
-                            <div className="h-full bg-green-500 rounded-full" style={{ width: `${pct}%` }} />
-                          </div>
-                          <span className="text-green-600 text-sm font-medium">{paid.length}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="text-green-700 font-bold text-sm">{formatCurrency(totalCollected)}</span>
-                      </td>
-                      <td className="px-4 py-3">
-                        {untransferred > 0 && hasTransferred ? (
-                          <span className="flex items-center gap-1 text-xs text-amber-800 bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-full font-bold whitespace-nowrap">
-                            <Clock className="w-3 h-3 text-amber-600" />
-                            Partially Transferred (+{formatCurrency(untransferred)} new)
-                          </span>
-                        ) : untransferred > 0 ? (
-                          <span className="flex items-center gap-1 text-xs text-amber-800 bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-full font-bold whitespace-nowrap">
-                            <Clock className="w-3 h-3 text-amber-600" />
-                            Ready to Transfer ({formatCurrency(untransferred)})
-                          </span>
-                        ) : c.transferredToBudget ? (
-                          <span className="flex items-center gap-1 text-xs text-green-700 bg-green-100 border border-green-200 px-2 py-0.5 rounded-full font-bold whitespace-nowrap">
-                            <CheckCircle className="w-3 h-3" />
-                            Fully Transferred
-                          </span>
-                        ) : (
-                          <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
-                            No Payments
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => setViewCollection(c)}
-                            className="flex items-center gap-1 px-2.5 py-1.5 border border-blue-300 text-blue-600 text-xs rounded-lg font-medium hover:bg-blue-50 transition-colors cursor-pointer whitespace-nowrap"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                            Details
-                          </button>
-                          {untransferred > 0 && !isPast && (
-                            <button
-                              onClick={() => handleTransfer(c)}
-                              disabled={isTransferring}
-                              className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-xs rounded-lg font-bold hover:bg-green-700 transition-colors cursor-pointer shadow-xs disabled:opacity-50 whitespace-nowrap"
-                            >
-                              <ArrowDownLeft className="w-3.5 h-3.5" />
-                              Transfer {formatCurrency(untransferred)}
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {viewCollection && (
-        <OrgCollectionDetailModal
-          collection={viewCollection}
-          isPast={isPast}
-          onClose={() => setViewCollection(null)}
-          onTransfer={() => {
-            handleTransfer(viewCollection);
-            setViewCollection(null);
-          }}
-        />
-      )}
-    </div>
-  );
-}
-
-// ─── Student Payables Tab (Real Firestore Backend) ──────────────────────────────
-
-function StudentPayablesTab({
-  isPast,
-  payables,
-  organizationId,
-  organizationName,
-  officerStudentId,
-}: {
-  isPast: boolean;
-  payables: PayableDocument[];
-  organizationId: string;
-  organizationName: string;
-  officerStudentId: string;
-}) {
-  const [subTab, setSubTab] = useState<PayableSubTab>("member");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("All");
-
-  const [showGenerateDues, setShowGenerateDues] = useState(false);
-  const [showAddPayable, setShowAddPayable] = useState(false);
-  const [selectedPayableForPayment, setSelectedPayableForPayment] = useState<PayableDocument | null>(null);
-
-  const totalAssigned = payables.reduce((a, p) => a + (p.assignedAmount || 0), 0);
-  const totalCollected = payables.reduce((a, p) => a + (p.paidAmount || 0), 0);
-  const totalOutstanding = totalAssigned - totalCollected;
-  const collectionRate = totalAssigned > 0 ? Math.round((totalCollected / totalAssigned) * 100) : 0;
-
-  // Overdue detection
-  const now = Date.now();
-  const overduePayables = payables.filter((p) => {
-    if (p.status === 'overdue') return true;
-    if (p.status === 'paid' || p.status === 'waived') return false;
-    if (p.dueDate?.toMillis && p.dueDate.toMillis() < now) return true;
-    return false;
-  });
-
-  // Grouping by student for "By Member"
-  const memberGroups = useMemo(() => {
-    const map = new Map<string, { studentId: string; studentName: string; schoolId: string; payables: PayableDocument[] }>();
-    payables.forEach((p) => {
-      const key = p.studentId;
-      if (!map.has(key)) {
-        map.set(key, {
-          studentId: p.studentId,
-          studentName: p.studentName || 'Student',
-          schoolId: p.studentSchoolId || p.studentId,
-          payables: [],
-        });
-      }
-      map.get(key)!.payables.push(p);
-    });
-    return Array.from(map.values());
-  }, [payables]);
-
-  // Grouping by type for "By Payable Type"
-  const typeGroups = useMemo(() => {
-    const map = new Map<string, { label: string; type: string; totalAssigned: number; collected: number; outstanding: number; memberCount: number }>();
-    payables.forEach((p) => {
-      const key = `${p.type}_${p.label}`;
-      if (!map.has(key)) {
-        map.set(key, {
-          label: p.label,
-          type: p.type.replace('_', ' '),
-          totalAssigned: 0,
-          collected: 0,
-          outstanding: 0,
-          memberCount: 0,
-        });
-      }
-      const g = map.get(key)!;
-      g.totalAssigned += p.assignedAmount || 0;
-      g.collected += p.paidAmount || 0;
-      g.outstanding += (p.assignedAmount || 0) - (p.paidAmount || 0);
-      g.memberCount += 1;
-    });
-    return Array.from(map.values());
-  }, [payables]);
-
-  const filteredMembers = memberGroups.filter((m) => {
-    if (!m) return false;
-    const q = (searchQuery || '').trim().toLowerCase();
-    const nameMatch = (m.studentName || '').toLowerCase().includes(q);
-    const idMatch = (m.schoolId || m.studentId || '').toLowerCase().includes(q);
-    if (q && !nameMatch && !idMatch) return false;
-    if (statusFilter === 'All') return true;
-
-    const memberAssigned = m.payables.reduce((a, p) => a + p.assignedAmount, 0);
-    const memberPaid = m.payables.reduce((a, p) => a + p.paidAmount, 0);
-
-    if (statusFilter === 'Paid') return memberPaid >= memberAssigned && memberAssigned > 0;
-    if (statusFilter === 'Partial') return memberPaid > 0 && memberPaid < memberAssigned;
-    if (statusFilter === 'Unpaid') return memberPaid === 0 && memberAssigned > 0;
-    if (statusFilter === 'Overdue') return m.payables.some((p) => p.status === 'overdue' || (p.dueDate?.toMillis && p.dueDate.toMillis() < now && p.status !== 'paid'));
-    return true;
-  });
-
-  return (
-    <div className="space-y-4">
       {/* Overview & Action Bar */}
-      <div className="p-3.5 bg-blue-50 border border-blue-200 rounded-xl flex items-center justify-between text-xs text-blue-900 shadow-xs">
-        <div className="flex items-center gap-2">
-          <Info className="w-4 h-4 text-[#0E4EBD] flex-shrink-0" />
-          <span>
-            This tab manages organizational dues and club fines. <strong>Event ticket payables & QR passes</strong> are managed and collected directly under each event in <strong>Event Management</strong>.
-          </span>
-        </div>
-        <a
-          href="/officer/events"
-          className="px-3 py-1.5 bg-[#001A4D] text-[#FFD41C] font-bold rounded-lg hover:bg-[#001A4D]/90 whitespace-nowrap ml-3 transition-colors shadow-xs"
-        >
-          Manage Event Payables →
-        </a>
-      </div>
-
-      <div className="bg-white border border-[#E0E0E0] rounded-xl p-5 space-y-4">
-        <div className="flex items-center justify-between border-b border-gray-100 pb-4">
-          <div>
-            <h3 className="font-bold text-[#001A4D] text-base">Club Payables & Membership Dues</h3>
-            <p className="text-gray-500 text-xs mt-0.5">Manage membership dues and non-event club payables for active members.</p>
+      <div className="bg-white border border-[#E0E0E0] rounded-xl p-5 space-y-4 shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 pb-4">
+          <div className="border-l-4 border-[#0E4EBD] pl-3">
+            <h3 className="font-bold text-[#001A4D] text-base">Student Collections & Payables</h3>
+            <p className="text-gray-500 text-xs mt-0.5">Membership Dues, Event Fees, Club Fines, and Member Assessments</p>
           </div>
           {!isPast && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              {pendingTransferTotal > 0 && (
+                <div className="px-3 py-2 bg-amber-100 text-amber-800 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-2xs">
+                  <Clock className="w-4 h-4 text-amber-600" />
+                  Ready to Transfer: {formatCurrency(pendingTransferTotal)}
+                </div>
+              )}
               <button
                 onClick={() => setShowGenerateDues(true)}
-                className="px-3.5 py-2 bg-[#0E4EBD] text-white rounded-lg text-xs font-bold hover:bg-[#0A3D94] transition-colors flex items-center gap-1.5"
+                className="px-3.5 py-2 bg-[#0E4EBD] text-white rounded-lg text-xs font-bold hover:bg-[#0A3D94] transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
               >
                 <Coins className="w-4 h-4 text-[#FFD41C]" />
                 Generate Membership Dues
               </button>
               <button
                 onClick={() => setShowAddPayable(true)}
-                className="px-3.5 py-2 bg-[#001A4D] text-white rounded-lg text-xs font-bold hover:bg-[#001A4D]/90 transition-colors flex items-center gap-1.5"
+                className="px-3.5 py-2 bg-[#001A4D] hover:bg-[#002D72] text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
               >
                 <Plus className="w-4 h-4 text-[#FFD41C]" />
                 Add Payable / Fine
@@ -1431,64 +1357,313 @@ function StudentPayablesTab({
           )}
         </div>
 
-        <div className="grid grid-cols-4 divide-x divide-gray-200">
-          {[
-            { label: "Total Payables Assigned", value: formatCurrency(totalAssigned), color: "text-[#001A4D]" },
-            { label: "Total Collected", value: formatCurrency(totalCollected), color: "text-green-600" },
-            { label: "Total Outstanding", value: formatCurrency(totalOutstanding), color: "text-red-600" },
-            { label: "Collection Rate", value: `${collectionRate}%`, color: "text-[#0E4EBD]" },
-          ].map((s) => (
-            <div key={s.label} className="px-5 first:pl-0 last:pr-0 text-center">
-              <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
-              <p className="text-gray-400 text-xs mt-1">{s.label}</p>
-            </div>
-          ))}
-        </div>
-        <div>
-          <div className="flex justify-between items-center mb-1">
-            <p className="text-gray-500 text-xs">{collectionRate}% of total payables collected this semester</p>
+        {/* 4-KPI Metric Row */}
+        <div className="grid grid-cols-2 md:grid-cols-4 divide-y md:divide-y-0 md:divide-x divide-gray-200 gap-y-3 md:gap-y-0">
+          <div className="px-4 first:pl-0 text-center">
+            <p className="text-2xl font-bold text-[#001A4D]">{formatCurrency(totalAssigned)}</p>
+            <p className="text-gray-400 text-xs mt-1">Total Assigned Dues</p>
           </div>
-          <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] rounded-full" style={{ width: `${collectionRate}%` }} />
+          <div className="px-4 text-center">
+            <p className="text-2xl font-bold text-green-600">{formatCurrency(totalCollected)}</p>
+            <p className="text-gray-400 text-xs mt-1">Total Collected</p>
+          </div>
+          <div className="px-4 text-center">
+            <p className="text-2xl font-bold text-red-600">{formatCurrency(totalOutstanding)}</p>
+            <p className="text-gray-400 text-xs mt-1">Total Outstanding</p>
+          </div>
+          <div className="px-4 last:pr-0 text-center">
+            <p className="text-2xl font-bold text-amber-600">{formatCurrency(pendingTransferTotal)}</p>
+            <p className="text-gray-400 text-xs mt-1">Ready to Transfer to Treasury</p>
           </div>
         </div>
       </div>
 
-      {/* Sub-tabs */}
+      {/* Sub-View Navigation Tabs */}
       <div className="flex gap-1 border-b border-gray-200">
-        {([["member", "By Member"], ["type", "By Payable Type"], ["overdue", `Overdue`]] as const).map(([key, label]) => (
-          <button
-            key={key}
-            onClick={() => setSubTab(key)}
-            className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-              subTab === key ? "border-[#001A4D] text-[#001A4D] font-bold" : "border-transparent text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            {label}
-            {key === "overdue" && overduePayables.length > 0 && (
-              <span className="w-4 h-4 bg-red-500 rounded-full text-white text-[10px] flex items-center justify-center font-bold">
-                {overduePayables.length}
-              </span>
-            )}
-          </button>
-        ))}
+        <button
+          onClick={() => {
+            setSubView("collections");
+            setSearchQuery("");
+          }}
+          className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors cursor-pointer ${
+            subView === "collections"
+              ? "border-[#001A4D] text-[#001A4D] font-bold"
+              : "border-transparent text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          <Layers className="w-4 h-4" />
+          Collection Groups ({rawCollections.length})
+        </button>
+
+        <button
+          onClick={() => {
+            setSubView("members");
+            setSearchQuery("");
+          }}
+          className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors cursor-pointer ${
+            subView === "members"
+              ? "border-[#001A4D] text-[#001A4D] font-bold"
+              : "border-transparent text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          <Users className="w-4 h-4" />
+          Member Payables Roster ({memberGroups.length})
+        </button>
+
+        <button
+          onClick={() => {
+            setSubView("overdue");
+            setSearchQuery("");
+          }}
+          className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors cursor-pointer ${
+            subView === "overdue"
+              ? "border-[#001A4D] text-[#001A4D] font-bold"
+              : "border-transparent text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          <AlertCircle className="w-4 h-4 text-red-500" />
+          Overdue Payables
+          {overduePayables.length > 0 && (
+            <span className="w-4 h-4 bg-red-500 rounded-full text-white text-[10px] flex items-center justify-center font-bold">
+              {overduePayables.length}
+            </span>
+          )}
+        </button>
       </div>
 
-      {/* Sub-tab 1: By Member */}
-      {subTab === "member" && (
-        <div className="bg-white border border-[#E0E0E0] rounded-xl overflow-hidden">
+      {/* ── Sub-view 1: Collection Groups (Admin-style Table) ── */}
+      {subView === "collections" && (
+        <div className="bg-white border border-[#E0E0E0] rounded-xl overflow-hidden shadow-xs space-y-0">
+          {/* Filters Bar */}
+          <div className="p-4 border-b border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="relative flex-1 w-full">
+              <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Search collection name, event, or fee..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-[#0E4EBD] outline-none"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <select
+                value={typeFilter}
+                onChange={(e) => setTypeFilter(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none bg-white cursor-pointer"
+              >
+                <option value="all">All Types</option>
+                <option value="membership_due">Membership Dues</option>
+                <option value="event_fee">Event Fees</option>
+                <option value="org_fine">Club Fines</option>
+              </select>
+
+              <select
+                value={collectionStatusFilter}
+                onChange={(e) => setCollectionStatusFilter(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none bg-white cursor-pointer"
+              >
+                <option value="all">All Status</option>
+                <option value="ready_transfer">Ready to Transfer</option>
+                <option value="transferred">Fully Transferred</option>
+                <option value="no_payments">No Payments</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  {["Collection / Event Name", "Type", "Assigned / Student", "Students", "Paid", "Collected (₱)", "Status", "Action"].map(
+                    (col) => (
+                      <th
+                        key={col}
+                        className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide border-b border-[#E0E0E0]"
+                      >
+                        {col}
+                      </th>
+                    )
+                  )}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 text-xs">
+                {collectionsLoading ? (
+                  <tr>
+                    <td colSpan={8} className="px-4 py-8 text-center text-gray-500">
+                      <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-[#0E4EBD]" />
+                      Loading collection groups...
+                    </td>
+                  </tr>
+                ) : paginatedCollections.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="px-4 py-8 text-center text-gray-500">
+                      No collection groups found matching your filters.
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedCollections.map((c) => {
+                    const paid = c.payments.filter((p) => p.status === "Paid");
+                    const totalCol = c.totalCollected || paid.reduce((s, p) => s + p.amount, 0);
+                    const pct = c.totalStudents > 0 ? Math.round((paid.length / c.totalStudents) * 100) : 0;
+                    const untransferred = c.untransferredAmount || 0;
+                    const hasTransferred = (c.transferredAmount || 0) > 0;
+
+                    const typeBadge =
+                      c.type === "membership_due"
+                        ? "bg-indigo-100 text-indigo-800"
+                        : c.type === "org_fine"
+                        ? "bg-rose-100 text-rose-700"
+                        : "bg-blue-100 text-blue-700";
+
+                    const typeName =
+                      c.type === "membership_due"
+                        ? "Membership Due"
+                        : c.type === "org_fine"
+                        ? "Club Fine"
+                        : "Event Fee";
+
+                    return (
+                      <tr key={c.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-4 py-3">
+                          <p className="text-[#001A4D] font-bold text-sm">{c.eventName}</p>
+                          <p className="text-gray-400 text-[11px]">{c.eventDate}</p>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-0.5 text-xs rounded-md font-semibold ${typeBadge}`}>
+                            {typeName}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-gray-700 text-sm font-semibold">
+                          {formatCurrency(c.payablePerStudent)}
+                        </td>
+                        <td className="px-4 py-3 text-gray-600 text-sm">{c.totalStudents}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <div className="h-1.5 w-16 bg-gray-100 rounded-full overflow-hidden">
+                              <div className="h-full bg-green-500 rounded-full" style={{ width: `${pct}%` }} />
+                            </div>
+                            <span className="text-green-600 text-xs font-bold">{paid.length}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-green-700 font-bold text-sm">{formatCurrency(totalCol)}</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          {untransferred > 0 && hasTransferred ? (
+                            <span className="flex items-center gap-1 text-[11px] text-amber-800 bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-full font-bold whitespace-nowrap">
+                              <Clock className="w-3 h-3 text-amber-600" />
+                              Partially Transferred (+{formatCurrency(untransferred)} new)
+                            </span>
+                          ) : untransferred > 0 ? (
+                            <span className="flex items-center gap-1 text-[11px] text-amber-800 bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-full font-bold whitespace-nowrap">
+                              <Clock className="w-3 h-3 text-amber-600" />
+                              Ready to Transfer ({formatCurrency(untransferred)})
+                            </span>
+                          ) : c.transferredToBudget ? (
+                            <span className="flex items-center gap-1 text-[11px] text-green-700 bg-green-100 border border-green-200 px-2 py-0.5 rounded-full font-bold whitespace-nowrap">
+                              <CheckCircle className="w-3 h-3" />
+                              Fully Transferred
+                            </span>
+                          ) : (
+                            <span className="text-[11px] text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+                              No Payments
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <button
+                            onClick={() => setViewCollection(c)}
+                            className="flex items-center gap-1 px-3 py-1.5 bg-[#001A4D] hover:bg-[#0E4EBD] text-white text-xs rounded-lg font-bold transition-colors whitespace-nowrap cursor-pointer shadow-2xs"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            View & Transfer
+                            <ChevronRight className="w-3 h-3" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Collection Groups Pagination */}
+          {filteredCollections.length > 0 && (
+            <div className="px-6 py-4 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-3 bg-gray-50/50">
+              <div className="text-xs text-gray-500 font-medium">
+                Showing <span className="font-bold text-gray-800">{(collectionsPage - 1) * PER_PAGE + 1}</span> to{" "}
+                <span className="font-bold text-gray-800">
+                  {Math.min(collectionsPage * PER_PAGE, filteredCollections.length)}
+                </span>{" "}
+                of <span className="font-bold text-gray-800">{filteredCollections.length}</span> collection groups
+              </div>
+
+              {totalCollectionsPages > 1 && (
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => setCollectionsPage((p) => Math.max(1, p - 1))}
+                    disabled={collectionsPage === 1}
+                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                  >
+                    Previous
+                  </button>
+
+                  {Array.from({ length: totalCollectionsPages }, (_, i) => i + 1)
+                    .filter((p) => p === 1 || p === totalCollectionsPages || Math.abs(p - collectionsPage) <= 1)
+                    .map((p, idx, arr) => {
+                      const prev = arr[idx - 1];
+                      return (
+                        <span key={p} className="flex items-center gap-1">
+                          {prev && p - prev > 1 && <span className="text-gray-400 text-xs px-1">...</span>}
+                          <button
+                            onClick={() => setCollectionsPage(p)}
+                            className={`w-7 h-7 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                              collectionsPage === p
+                                ? "bg-[#001A4D] text-white shadow-xs"
+                                : "border border-gray-200 text-gray-600 hover:bg-white"
+                            }`}
+                          >
+                            {p}
+                          </button>
+                        </span>
+                      );
+                    })}
+
+                  <button
+                    onClick={() => setCollectionsPage((p) => Math.min(totalCollectionsPages, p + 1))}
+                    disabled={collectionsPage === totalCollectionsPages}
+                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Sub-view 2: Member Payables Roster (Individual Student View) ── */}
+      {subView === "members" && (
+        <div className="bg-white border border-[#E0E0E0] rounded-xl overflow-hidden shadow-xs space-y-0">
           <div className="flex items-center gap-3 p-4 border-b border-gray-100">
-            <input
-              type="text"
-              placeholder="Search member by name or student ID..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD] focus:border-transparent outline-none"
-            />
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Search member by name or student ID..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-[#0E4EBD] outline-none"
+              />
+            </div>
             <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD] focus:border-transparent outline-none"
+              value={memberStatusFilter}
+              onChange={(e) => setMemberStatusFilter(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-[#0E4EBD] outline-none bg-white cursor-pointer"
             >
               <option value="All">All Status</option>
               <option value="Paid">Fully Paid</option>
@@ -1502,43 +1677,60 @@ function StudentPayablesTab({
             <table className="w-full">
               <thead className="bg-gray-50">
                 <tr>
-                  {["Member", "Assigned Payables", "Total Assigned", "Total Paid", "Outstanding", "Status", ...(!isPast ? ["Actions"] : [])].map((col) => (
-                    <th key={col} className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide border-b border-[#E0E0E0]">
-                      {col}
-                    </th>
-                  ))}
+                  {["Member", "Assigned Payables", "Total Assigned", "Total Paid", "Outstanding", "Status", ...(!isPast ? ["Actions"] : [])].map(
+                    (col) => (
+                      <th
+                        key={col}
+                        className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide border-b border-[#E0E0E0]"
+                      >
+                        {col}
+                      </th>
+                    )
+                  )}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
-                {filteredMembers.length === 0 ? (
+              <tbody className="divide-y divide-gray-100 text-xs">
+                {membersLoading ? (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
+                      <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-[#0E4EBD]" />
+                      Loading club members roster...
+                    </td>
+                  </tr>
+                ) : paginatedMembers.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="px-4 py-8 text-center text-gray-500 text-sm">
-                      No student payables found. Click <strong>Generate Membership Dues</strong> or <strong>Add Payable</strong> to assign fees.
+                      No active club members found matching your search.
                     </td>
                   </tr>
                 ) : (
-                  filteredMembers.map((m) => {
+                  paginatedMembers.map((m) => {
                     const assigned = m.payables.reduce((a, p) => a + (p.assignedAmount || 0), 0);
                     const paid = m.payables.reduce((a, p) => a + (p.paidAmount || 0), 0);
                     const outstanding = assigned - paid;
 
-                    let statusText = 'Paid';
-                    let statusColor = 'bg-green-100 text-green-700';
+                    let statusText = "No Dues";
+                    let statusColor = "bg-gray-100 text-gray-600";
 
-                    if (outstanding > 0) {
-                      if (paid > 0) {
-                        statusText = 'Partial';
-                        statusColor = 'bg-amber-100 text-amber-700';
+                    if (assigned > 0) {
+                      if (outstanding <= 0) {
+                        statusText = "Paid";
+                        statusColor = "bg-green-100 text-green-700 font-semibold";
+                      } else if (paid > 0) {
+                        statusText = "Partial";
+                        statusColor = "bg-amber-100 text-amber-700 font-semibold";
                       } else {
-                        statusText = 'Unpaid';
-                        statusColor = 'bg-gray-100 text-gray-700';
+                        statusText = "Unpaid";
+                        statusColor = "bg-rose-100 text-rose-700 font-semibold";
                       }
                     }
 
-                    const hasOverdue = m.payables.some((p) => p.status === 'overdue' || (p.dueDate?.toMillis && p.dueDate.toMillis() < now && p.status !== 'paid'));
+                    const hasOverdue = m.payables.some(
+                      (p) => p.status === "overdue" || (p.dueDate?.toMillis && p.dueDate.toMillis() < now && p.status !== "paid")
+                    );
                     if (hasOverdue) {
-                      statusText = 'Overdue';
-                      statusColor = 'bg-red-100 text-red-700';
+                      statusText = "Overdue";
+                      statusColor = "bg-red-100 text-red-700 font-bold";
                     }
 
                     return (
@@ -1546,21 +1738,42 @@ function StudentPayablesTab({
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
                             <div className="w-8 h-8 rounded-full bg-[#001A4D]/10 text-[#001A4D] flex items-center justify-center text-xs font-bold">
-                              {m.studentName.split(' ').map((n) => n[0]).join('').slice(0, 2)}
+                              {m.studentName
+                                .split(" ")
+                                .map((n) => n[0])
+                                .join("")
+                                .slice(0, 2)}
                             </div>
                             <div>
                               <p className="text-[#001A4D] font-medium text-sm">{m.studentName}</p>
-                              <p className="text-gray-400 text-xs">{m.schoolId}</p>
+                              <p className="text-gray-400 text-xs font-mono">
+                                {m.schoolId}
+                                {m.courseCode && (
+                                  <span className="ml-1 text-gray-500 font-sans font-medium">· {m.courseCode}</span>
+                                )}
+                                {m.yearLevel && (
+                                  <span className="ml-1 text-gray-400 font-sans">· {m.yearLevel}</span>
+                                )}
+                              </p>
                             </div>
                           </div>
                         </td>
                         <td className="px-4 py-3 text-xs text-gray-600 space-y-1">
-                          {m.payables.map((p) => (
-                            <div key={p.id} className="flex items-center justify-between gap-2 border-b border-gray-100 last:border-0 pb-0.5">
-                              <span className="truncate max-w-[160px]" title={p.label}>{p.label}</span>
-                              <span className="font-semibold text-gray-800">{formatCurrency(p.assignedAmount)}</span>
-                            </div>
-                          ))}
+                          {m.payables.length === 0 ? (
+                            <span className="text-gray-400 italic text-[11px]">No payables assigned</span>
+                          ) : (
+                            m.payables.map((p) => (
+                              <div
+                                key={p.id}
+                                className="flex items-center justify-between gap-2 border-b border-gray-100 last:border-0 pb-0.5"
+                              >
+                                <span className="truncate max-w-[160px]" title={p.label}>
+                                  {p.label}
+                                </span>
+                                <span className="font-semibold text-gray-800">{formatCurrency(p.assignedAmount)}</span>
+                              </div>
+                            ))
+                          )}
                         </td>
                         <td className="px-4 py-3 text-gray-700 text-sm font-semibold">{formatCurrency(assigned)}</td>
                         <td className="px-4 py-3 text-green-600 font-semibold text-sm">{formatCurrency(paid)}</td>
@@ -1575,16 +1788,20 @@ function StudentPayablesTab({
                             {outstanding > 0 ? (
                               <button
                                 onClick={() => {
-                                  const pendingPayable = m.payables.find((p) => (p.assignedAmount || 0) > (p.paidAmount || 0));
+                                  const pendingPayable = m.payables.find(
+                                    (p) => (p.assignedAmount || 0) > (p.paidAmount || 0)
+                                  );
                                   if (pendingPayable) setSelectedPayableForPayment(pendingPayable);
                                 }}
-                                className="px-3 py-1 bg-green-600 text-white rounded-lg text-xs font-semibold hover:bg-green-700 transition-colors flex items-center gap-1"
+                                className="px-3 py-1 bg-green-600 text-white rounded-lg text-xs font-semibold hover:bg-green-700 transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
                               >
                                 <CheckCircle className="w-3.5 h-3.5" />
                                 Record Payment
                               </button>
-                            ) : (
+                            ) : assigned > 0 ? (
                               <span className="text-xs text-green-600 font-medium">✓ Settled</span>
+                            ) : (
+                              <span className="text-xs text-gray-400">—</span>
                             )}
                           </td>
                         )}
@@ -1595,55 +1812,73 @@ function StudentPayablesTab({
               </tbody>
             </table>
           </div>
-        </div>
-      )}
 
-      {/* Sub-tab 2: By Payable Type */}
-      {subTab === "type" && (
-        <div className="grid grid-cols-3 gap-4">
-          {typeGroups.length === 0 ? (
-            <div className="col-span-3 bg-white border border-[#E0E0E0] rounded-xl p-8 text-center text-gray-500 text-sm">
-              No payable categories defined yet. Generate dues or add a payable to get started.
-            </div>
-          ) : (
-            typeGroups.map((pt, idx) => {
-              const pct = pt.totalAssigned > 0 ? Math.round((pt.collected / pt.totalAssigned) * 100) : 0;
-              return (
-                <div key={idx} className="bg-white border border-[#E0E0E0] rounded-xl p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-[#001A4D] font-bold text-sm truncate" title={pt.label}>{pt.label}</p>
-                    <span className="px-2 py-0.5 bg-blue-50 text-blue-700 text-xs rounded font-medium capitalize">{pt.type}</span>
-                  </div>
-                  <p className="text-[#0E4EBD] font-bold text-lg">{formatCurrency(pt.totalAssigned)}</p>
-                  <div className="flex justify-between text-xs mt-1 mb-2">
-                    <span className="text-green-600">{formatCurrency(pt.collected)} collected</span>
-                    <span className="text-red-600">{formatCurrency(pt.outstanding)} outstanding</span>
-                  </div>
-                  <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mb-2">
-                    <div className="h-full bg-[#0E4EBD]" style={{ width: `${pct}%` }} />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <p className="text-gray-400 text-xs">{pt.memberCount} member(s)</p>
-                  </div>
+          {/* Member Roster Pagination */}
+          {filteredMembers.length > 0 && (
+            <div className="px-6 py-4 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-3 bg-gray-50/50">
+              <div className="text-xs text-gray-500 font-medium">
+                Showing <span className="font-bold text-gray-800">{(membersPage - 1) * PER_PAGE + 1}</span> to{" "}
+                <span className="font-bold text-gray-800">{Math.min(membersPage * PER_PAGE, filteredMembers.length)}</span>{" "}
+                of <span className="font-bold text-gray-800">{filteredMembers.length}</span> members
+              </div>
+
+              {totalMemberPages > 1 && (
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => setMembersPage((p) => Math.max(1, p - 1))}
+                    disabled={membersPage === 1}
+                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                  >
+                    Previous
+                  </button>
+
+                  {Array.from({ length: totalMemberPages }, (_, i) => i + 1)
+                    .filter((p) => p === 1 || p === totalMemberPages || Math.abs(p - membersPage) <= 1)
+                    .map((p, idx, arr) => {
+                      const prev = arr[idx - 1];
+                      return (
+                        <span key={p} className="flex items-center gap-1">
+                          {prev && p - prev > 1 && <span className="text-gray-400 text-xs px-1">...</span>}
+                          <button
+                            onClick={() => setMembersPage(p)}
+                            className={`w-7 h-7 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                              membersPage === p
+                                ? "bg-[#001A4D] text-white shadow-xs"
+                                : "border border-gray-200 text-gray-600 hover:bg-white"
+                            }`}
+                          >
+                            {p}
+                          </button>
+                        </span>
+                      );
+                    })}
+
+                  <button
+                    onClick={() => setMembersPage((p) => Math.min(totalMemberPages, p + 1))}
+                    disabled={membersPage === totalMemberPages}
+                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                  >
+                    Next
+                  </button>
                 </div>
-              );
-            })
+              )}
+            </div>
           )}
         </div>
       )}
 
-      {/* Sub-tab 3: Overdue */}
-      {subTab === "overdue" && (
+      {/* ── Sub-view 3: Overdue Payables ── */}
+      {subView === "overdue" && (
         <div className="space-y-3">
           <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-xl">
             <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
             <div>
               <p className="text-red-700 font-bold text-sm mb-0.5">Overdue Payables ({overduePayables.length})</p>
-              <p className="text-gray-700 text-sm">These member payables are past their due date and require collection action.</p>
+              <p className="text-gray-700 text-xs">These member payables are past their due date and require collection action.</p>
             </div>
           </div>
 
-          <div className="bg-white border border-[#E0E0E0] rounded-xl overflow-hidden">
+          <div className="bg-white border border-[#E0E0E0] rounded-xl overflow-hidden shadow-xs">
             <table className="w-full">
               <thead className="bg-gray-50">
                 <tr>
@@ -1654,7 +1889,7 @@ function StudentPayablesTab({
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-gray-100 text-xs">
                 {overduePayables.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="px-4 py-8 text-center text-gray-500 text-sm">
@@ -1664,13 +1899,13 @@ function StudentPayablesTab({
                 ) : (
                   overduePayables.map((p) => {
                     const outstanding = (p.assignedAmount || 0) - (p.paidAmount || 0);
-                    const dueStr = formatAppDate(p.dueDate, 'Overdue');
+                    const dueStr = formatAppDate(p.dueDate, "Overdue");
 
                     return (
                       <tr key={p.id} className="hover:bg-red-50/30 transition-colors">
                         <td className="px-4 py-3">
                           <p className="text-[#001A4D] font-medium text-sm">{p.studentName}</p>
-                          <p className="text-gray-400 text-xs">{p.studentSchoolId || p.studentId}</p>
+                          <p className="text-gray-400 text-xs font-mono">{p.studentSchoolId || p.studentId}</p>
                         </td>
                         <td className="px-4 py-3 text-gray-700 text-sm font-medium">{p.label}</td>
                         <td className="px-4 py-3 text-red-600 font-bold text-sm">{formatCurrency(outstanding)}</td>
@@ -1679,7 +1914,7 @@ function StudentPayablesTab({
                           <td className="px-4 py-3">
                             <button
                               onClick={() => setSelectedPayableForPayment(p)}
-                              className="px-3 py-1 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700 transition-colors flex items-center gap-1"
+                              className="px-3 py-1 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700 transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
                             >
                               <CheckCircle className="w-3.5 h-3.5" /> Record Payment
                             </button>
@@ -1696,6 +1931,18 @@ function StudentPayablesTab({
       )}
 
       {/* Action Modals */}
+      {viewCollection && (
+        <OrgCollectionDetailModal
+          collection={viewCollection}
+          isPast={isPast}
+          onClose={() => setViewCollection(null)}
+          onTransfer={() => {
+            handleTransfer(viewCollection);
+            setViewCollection(null);
+          }}
+        />
+      )}
+
       {showGenerateDues && (
         <GenerateDuesModal
           isOpen={showGenerateDues}
@@ -1728,322 +1975,6 @@ function StudentPayablesTab({
   );
 }
 
-// ─── Liquidation Tab ───────────────────────────────────────────────────────────
-function LiquidationTab({
-  isPast,
-  organizationId,
-  organizationName,
-  officerStudentId,
-  officerStudentName,
-}: {
-  isPast: boolean;
-  organizationId: string;
-  organizationName: string;
-  officerStudentId: string;
-  officerStudentName: string;
-}) {
-  const { liquidations, loading } = useOrgLiquidations(organizationId);
-  const [showModal, setShowModal] = useState(false);
-  const [editingReport, setEditingReport] = useState<LiquidationDocument | null>(null);
-  const [viewingDetailReport, setViewingDetailReport] = useState<LiquidationDocument | null>(null);
-  const [exportReport, setExportReport] = useState<LiquidationDocument | null>(null);
-  const [lightboxData, setLightboxData] = useState<{ url: string; title: string; vendor?: string; amount?: number } | null>(null);
-
-  const handleOpenCreate = () => {
-    setEditingReport(null);
-    setShowModal(true);
-  };
-
-  const handleOpenEdit = (report: LiquidationDocument) => {
-    setEditingReport(report);
-    setShowModal(true);
-  };
-
-  const statusBadge = (status: LiquidationStatus) => {
-    switch (status) {
-      case 'approved':
-        return <span className="px-2.5 py-0.5 text-xs rounded-full font-bold bg-green-100 text-green-800">Approved</span>;
-      case 'pending':
-        return <span className="px-2.5 py-0.5 text-xs rounded-full font-bold bg-amber-100 text-amber-800">Pending Review</span>;
-      case 'returned':
-        return <span className="px-2.5 py-0.5 text-xs rounded-full font-bold bg-red-100 text-red-800">Returned</span>;
-      default:
-        return <span className="px-2.5 py-0.5 text-xs rounded-full font-bold bg-gray-100 text-gray-700">Draft</span>;
-    }
-  };
-
-  return (
-    <div className="space-y-4">
-      <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
-        <div className="flex items-start gap-2">
-          <AlertCircle className="w-4 h-4 text-[#0E4EBD] flex-shrink-0 mt-0.5" />
-          <p className="text-blue-900 text-sm">
-            Liquidation reports must account for budget items in your Club Budget Plan. The SAO Adviser will cross-reference your liquidations against your approved budget ceiling.
-          </p>
-        </div>
-      </div>
-      <div className="bg-white border border-[#E0E0E0] rounded-xl overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <div className="border-l-4 border-[#0E4EBD] pl-3">
-            <h3 className="text-[#001A4D] font-bold text-sm">Liquidation Reports</h3>
-          </div>
-          {!isPast && (
-            <button
-              onClick={handleOpenCreate}
-              className="px-3 py-1.5 bg-[#001A4D] text-white text-xs rounded-lg flex items-center gap-1.5 font-medium hover:bg-[#002B7F] transition-colors"
-            >
-              <Plus className="w-3.5 h-3.5 text-[#FFD41C]" />
-              New Liquidation Report
-            </button>
-          )}
-        </div>
-        <table className="w-full">
-          <thead className="bg-gray-50">
-            <tr>
-              {["Event Title", "Submitted", "Allocated Budget", "Actual Spending", "Status", "Actions"].map((col) => (
-                <th key={col} className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide border-b border-[#E0E0E0]">
-                  {col}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {loading ? (
-              <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-gray-500 text-sm">
-                  Loading liquidation reports from database...
-                </td>
-              </tr>
-            ) : liquidations.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-gray-500 text-sm">
-                  No liquidation reports found. Click <strong>New Liquidation Report</strong> to submit expenses.
-                </td>
-              </tr>
-            ) : (
-              liquidations.map((l) => {
-                const submittedDate = formatAppDate(l.submittedAt || l.createdAt, 'Draft');
-
-                return (
-                  <tr key={l.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-3 text-[#001A4D] font-bold text-sm">{l.eventTitle}</td>
-                    <td className="px-4 py-3 text-gray-500 text-sm">{submittedDate}</td>
-                    <td className="px-4 py-3 text-gray-700 font-semibold text-sm">{formatCurrency(l.allocatedBudget)}</td>
-                    <td className="px-4 py-3 text-[#001A4D] font-bold text-sm">{formatCurrency(l.totalActualSpending)}</td>
-                    <td className="px-4 py-3">{statusBadge(l.status)}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        {l.status === 'approved' && (
-                          <button
-                            onClick={() => setExportReport(l)}
-                            className="text-[#0E4EBD] hover:underline text-xs flex items-center gap-1 font-bold cursor-pointer"
-                          >
-                            <FileSpreadsheet className="w-3.5 h-3.5 text-[#FFC107]" /> Export
-                          </button>
-                        )}
-                        <button
-                          onClick={() => setViewingDetailReport(l)}
-                          className="text-blue-600 hover:underline text-xs flex items-center gap-1 font-medium cursor-pointer"
-                        >
-                          <Eye className="w-3.5 h-3.5" /> View Details
-                        </button>
-                        {!isPast && (l.status === 'draft' || l.status === 'returned') && (
-                          <button
-                            onClick={() => handleOpenEdit(l)}
-                            className="text-[#0E4EBD] hover:underline text-xs flex items-center gap-1 font-bold cursor-pointer"
-                          >
-                            <Edit3 className="w-3.5 h-3.5" /> Edit
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {showModal && (
-        <OfficerLiquidationModal
-          isOpen={showModal}
-          onClose={() => setShowModal(false)}
-          orgId={organizationId}
-          orgName={organizationName}
-          userUid={officerStudentId}
-          userName={officerStudentName}
-          userRole="officer"
-          editingReport={editingReport}
-        />
-      )}
-
-      {viewingDetailReport && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden border border-gray-100">
-            <div className="px-6 py-4 bg-[#001A4D] text-white flex items-center justify-between">
-              <div>
-                <h3 className="font-bold text-lg">{viewingDetailReport.eventTitle}</h3>
-                <div className="text-xs text-white/70">Liquidation Detail & Receipts</div>
-              </div>
-              <button
-                onClick={() => setViewingDetailReport(null)}
-                className="p-1 hover:bg-white/10 rounded-lg text-white cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="p-6 overflow-y-auto space-y-4 flex-1">
-              <div className="grid grid-cols-3 gap-3 bg-gray-50 p-3 rounded-lg text-center">
-                <div>
-                  <div className="text-xs text-gray-500">Allocated Budget</div>
-                  <div className="font-bold text-sm text-[#001A4D]">
-                    {formatCurrency(viewingDetailReport.allocatedBudget)}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs text-gray-500">Actual Spending</div>
-                  <div className="font-bold text-sm text-[#001A4D]">
-                    {formatCurrency(viewingDetailReport.totalActualSpending)}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs text-gray-500">Surplus / Deficit</div>
-                  <div className={`font-bold text-sm ${viewingDetailReport.surplusOrDeficit < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                    {formatVariance(viewingDetailReport.surplusOrDeficit)}
-                  </div>
-                </div>
-              </div>
-
-              {viewingDetailReport.status === 'approved' && (
-                <div className={`p-3 rounded-xl border text-xs flex items-center gap-2.5 ${
-                  viewingDetailReport.surplusOrDeficit > 0
-                    ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
-                    : viewingDetailReport.surplusOrDeficit < 0
-                    ? 'bg-rose-50 border-rose-200 text-rose-900'
-                    : 'bg-blue-50 border-blue-200 text-blue-900'
-                }`}>
-                  <CheckCircle className="w-4 h-4 flex-shrink-0 text-emerald-600" />
-                  <div>
-                    <span className="font-bold block">
-                      {viewingDetailReport.surplusOrDeficit > 0
-                        ? `✓ Treasury Surplus Refund: +${formatCurrency(viewingDetailReport.surplusOrDeficit)} credited to Club Treasury`
-                        : viewingDetailReport.surplusOrDeficit < 0
-                        ? `⚠ Treasury Deficit Overspend: −${formatCurrency(Math.abs(viewingDetailReport.surplusOrDeficit))} debited from Club Treasury`
-                        : '✓ Budget Fully Balanced: Spent exactly the allocated amount'}
-                    </span>
-                    <span className="text-[11px] opacity-80">
-                      Approved by SAO Adviser and automatically reconciled with your organization budget ledger.
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              {viewingDetailReport.status === 'returned' && viewingDetailReport.returnRemarks && (
-                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-900 font-medium space-y-1">
-                  <div className="font-bold text-[#991B1B] uppercase tracking-wider">SAO Adviser Return Remarks</div>
-                  <p>{viewingDetailReport.returnRemarks}</p>
-                </div>
-              )}
-
-              <h4 className="font-bold text-sm text-gray-900 pt-2">Line Items</h4>
-              <div className="space-y-2">
-                {viewingDetailReport.lineItems?.map((item, idx) => (
-                  <div key={idx} className="p-3 border border-gray-200 rounded-lg text-xs space-y-1.5 bg-gray-50/50">
-                    <div className="flex items-center justify-between font-bold text-gray-900">
-                      <span>{item.description} ({item.category})</span>
-                      <span className="text-[#001A4D]">Actual Cost: {formatCurrency(item.totalCost)}</span>
-                    </div>
-
-                    <div className="flex flex-wrap items-center justify-between text-gray-600 gap-2">
-                      <span>
-                        <strong>Actual:</strong> {item.quantity} Qty × {formatCurrency(item.unitCost)}
-                      </span>
-                    </div>
-
-                    {item.vendorName && <div className="text-gray-500 text-[11px]">Vendor: <strong>{item.vendorName}</strong></div>}
-
-                    {item.receiptUrl && (
-                      <div className="pt-1">
-                        <button
-                          onClick={() => setLightboxData({
-                            url: item.receiptUrl,
-                            title: item.description,
-                            vendor: item.vendorName,
-                            amount: item.totalCost,
-                          })}
-                          className="text-[#1E70E8] hover:underline font-semibold text-xs flex items-center gap-1 cursor-pointer"
-                        >
-                          <Eye className="w-3.5 h-3.5" /> View Uploaded Receipt Image ↗
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-
-              {viewingDetailReport.remarksHistory && viewingDetailReport.remarksHistory.length > 0 && (
-                <div className="pt-3 border-t border-gray-200">
-                  <h4 className="font-bold text-sm text-[#001A4D] mb-2">Remarks & Revision History</h4>
-                  <div className="space-y-2">
-                    {viewingDetailReport.remarksHistory.map((rem, rIdx) => (
-                      <div key={rIdx} className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-xs space-y-1">
-                        <div className="flex items-center justify-between text-gray-700 font-semibold">
-                          <span>{rem.authorName} ({rem.authorRole === 'admin' ? 'SAO Adviser' : 'Officer'})</span>
-                          <span className="text-[10px] text-gray-500">{formatAppDateTime(rem.timestamp)}</span>
-                        </div>
-                        <p className="text-gray-800">{rem.comment}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="px-6 py-3 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
-              <div>
-                {viewingDetailReport.status === 'approved' && (
-                  <button
-                    onClick={() => {
-                      setExportReport(viewingDetailReport);
-                      setViewingDetailReport(null);
-                    }}
-                    className="px-4 py-2 bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-sm"
-                  >
-                    <FileSpreadsheet className="w-4 h-4 text-[#FFC107]" /> Export Liquidation Report
-                  </button>
-                )}
-              </div>
-              <button
-                onClick={() => setViewingDetailReport(null)}
-                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-xs font-bold hover:bg-gray-300 cursor-pointer"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Liquidation Excel Export Preview Modal */}
-      <LiquidationExportPreviewModal
-        isOpen={!!exportReport}
-        onClose={() => setExportReport(null)}
-        report={exportReport}
-      />
-
-      <ReceiptLightboxModal
-        isOpen={!!lightboxData}
-        onClose={() => setLightboxData(null)}
-        imageUrl={lightboxData?.url || ''}
-        itemTitle={lightboxData?.title}
-        vendorName={lightboxData?.vendor}
-        amount={lightboxData?.amount}
-      />
-    </div>
-  );
-}
 
 // ─── Semester Transition Screens ───────────────────────────────────────────────
 function SemesterEndedScreen({ onViewPast, onStartNew }: { onViewPast: () => void; onStartNew: () => void }) {
@@ -2229,7 +2160,7 @@ export default function FinanceCenter() {
         <div>
           <h2 className="text-2xl font-bold text-[#001A4D]">Finance Center</h2>
           <p className="text-gray-500 text-sm">
-            Finance &rsaquo; {activeTab === "budget" ? "Budget Tracker" : activeTab === "payables" ? "Student Payables" : "Liquidation Reports"}
+            Finance &rsaquo; {activeTab === "budget" ? "Budget Tracker" : "Student Collections & Payables"}
             {activeOrgName && <span className="font-semibold ml-2 text-[#0E4EBD]">({activeOrgName})</span>}
           </p>
         </div>
@@ -2292,14 +2223,12 @@ export default function FinanceCenter() {
         </div>
       )}
 
-      {/* Four-Tab Area */}
+      {/* Three-Tab Area */}
       <div>
         <div className="flex border-b border-gray-200 mb-4 overflow-x-auto">
           {([
             ["budget", "Budget Tracker"],
-            ["collections", "Student Collections"],
-            ["payables", "Student Payables"],
-            ["liquidation", "Liquidation Reports"],
+            ["collections", "Student Collections & Payables"],
           ] as const).map(([key, label]) => (
             <button
               key={key}
@@ -2327,32 +2256,13 @@ export default function FinanceCenter() {
         )}
 
         {activeTab === "collections" && (
-          <OrgCollectionsTab
-            isPast={isPast}
-            organizationId={activeOrgId}
-            organizationName={activeOrgName}
-            semesterId={selectedSemId}
-            officerStudentId={officerStudentId}
-          />
-        )}
-
-        {activeTab === "payables" && (
-          <StudentPayablesTab
+          <StudentCollectionsAndPayablesTab
             isPast={isPast}
             payables={orgNonEventPayables}
             organizationId={activeOrgId}
             organizationName={activeOrgName}
+            semesterId={selectedSemId}
             officerStudentId={officerStudentId}
-          />
-        )}
-
-        {activeTab === "liquidation" && (
-          <LiquidationTab
-            isPast={isPast}
-            organizationId={activeOrgId}
-            organizationName={activeOrgName}
-            officerStudentId={officerStudentId}
-            officerStudentName={profile?.studentName || 'Officer'}
           />
         )}
       </div>

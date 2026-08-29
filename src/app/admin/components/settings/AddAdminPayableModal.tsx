@@ -11,54 +11,48 @@ import {
   AlertCircle,
   Shield,
   Tag,
+  BookOpen,
   GraduationCap,
-  Sparkles,
   ExternalLink,
 } from 'lucide-react';
-import { useSemesters, useCourses } from '../../modules/academic';
-import { useOrgMembers } from '../../modules/organizations/hooks/useOrgMembers';
-import { createPayable } from '../../modules/finance/services/payable.service';
-import { usePayableCategories } from '../../modules/finance/services/payable-category.service';
-import type { PayableType } from '../../modules/finance/types/payable.types';
+import { useSemesters, useCourses, useDepartments } from '../../../modules/academic';
+import { useStudents } from '../../../modules/students/hooks/useStudentStream';
+import { createPayable } from '../../../modules/finance/services/payable.service';
+import { usePayableCategories } from '../../../modules/finance/services/payable-category.service';
+import type { PayableType } from '../../../modules/finance/types/payable.types';
 import { toast } from 'sonner';
-import { formatCurrency } from '../../utils/currency';
+import { formatCurrency } from '../../../utils/currency';
 
-interface AddPayableModalProps {
+interface AddAdminPayableModalProps {
   isOpen: boolean;
   onClose: () => void;
-  organizationId: string;
-  organizationName: string;
-  addedBy: string;
-  onOpenCategoryMaintenance?: () => void;
+  addedBy?: string;
 }
 
-export function AddPayableModal({
+export function AddAdminPayableModal({
   isOpen,
   onClose,
-  organizationId,
-  organizationName,
-  addedBy,
-  onOpenCategoryMaintenance,
-}: AddPayableModalProps) {
+  addedBy = 'SAO Administration',
+}: AddAdminPayableModalProps) {
   const { data: semesters = [] } = useSemesters();
   const activeSemester = semesters.find((s) => s.status === 'ACTIVE') || semesters[0];
 
-  // Dynamic database courses
+  // Dynamic database courses & departments
   const { data: dbCourses = [] } = useCourses();
-  const activeCourses = useMemo(() => dbCourses.filter((c) => !c.archived), [dbCourses]);
+  const { data: dbDepartments = [] } = useDepartments();
 
-  // Dynamic fee/fine categories (scoped to club + institutional)
-  const { data: dbCategories = [] } = usePayableCategories(organizationId);
+  // Dynamic fee/fine categories
+  const { data: dbCategories = [] } = usePayableCategories();
   const activeCategories = useMemo(() => {
     return dbCategories.filter((c) => c.isActive);
   }, [dbCategories]);
 
-  const { members = [], loading: loadingMembers } = useOrgMembers(organizationId);
+  const { data: allStudents = [], loading: loadingStudents } = useStudents();
 
   const [selectedSemId, setSelectedSemId] = useState<string>(activeSemester?.id || '');
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
   const [payableType, setPayableType] = useState<PayableType>('custom');
-  const [categoryName, setCategoryName] = useState<string>('Club Assessment');
+  const [categoryName, setCategoryName] = useState<string>('Institutional Assessment');
   const [label, setLabel] = useState('');
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState<number | ''>('');
@@ -69,15 +63,22 @@ export function AddPayableModal({
   const [courseFilter, setCourseFilter] = useState('all');
   const [yearFilter, setYearFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Active club members pool
-  const activeMembers = useMemo(() => {
-    return (members || []).filter((m) => m && m.status === 'active');
-  }, [members]);
+  // Active students pool strictly matching Student Registry criteria
+  const activeStudents = useMemo(() => {
+    return (allStudents || []).filter(
+      (s) => s && (s.status === 'ACTIVE' || s.status?.toUpperCase() === 'ACTIVE') && !s.archived
+    );
+  }, [allStudents]);
 
-  // Dynamic year levels derived from selected course or standards
+  // Active courses from database
+  const activeCourses = useMemo(() => {
+    return dbCourses.filter((c) => !c.archived);
+  }, [dbCourses]);
+
+  // Dynamic year levels derived from selected course or academic standards
   const dynamicYearLevels = useMemo(() => {
     if (courseFilter !== 'all') {
       const selectedCourse = activeCourses.find((c) => c.id === courseFilter || c.code === courseFilter);
@@ -90,6 +91,7 @@ export function AddPayableModal({
         return collegeYears.slice(0, maxYears);
       }
     }
+    // Default standard list of academic year levels across College and SHS
     return ['1st Year', '2nd Year', '3rd Year', '4th Year', 'Grade 11', 'Grade 12'];
   }, [courseFilter, activeCourses]);
 
@@ -100,7 +102,7 @@ export function AddPayableModal({
     if (cat) {
       setLabel(cat.name);
       setAmount(cat.defaultAmount);
-      setPayableType((cat.type === 'admin_fine' ? 'org_fine' : cat.type) as PayableType);
+      setPayableType(cat.type);
       setCategoryName(cat.name);
       if (cat.description) {
         setDescription(cat.description);
@@ -108,59 +110,65 @@ export function AddPayableModal({
     }
   };
 
-  // Filtered members based on search, course, and year
-  const filteredMembers = useMemo(() => {
-    return activeMembers.filter((m) => {
+  // Filtered students based on search, database course, and year level
+  const filteredStudents = useMemo(() => {
+    return activeStudents.filter((s) => {
       const q = searchQuery.toLowerCase().trim();
-      const name = (m.studentName || '').toLowerCase();
-      const id = (m.studentId || (m as any).studentSchoolId || m.id || '').toLowerCase();
-      const matchesSearch = !q || name.includes(q) || id.includes(q);
+      const matchesSearch =
+        !q ||
+        (s.firstName && s.firstName.toLowerCase().includes(q)) ||
+        (s.lastName && s.lastName.toLowerCase().includes(q)) ||
+        (s.studentId && s.studentId.toLowerCase().includes(q)) ||
+        (s.email && s.email.toLowerCase().includes(q));
 
-      // Match course/program
+      // Match database program/course
       let matchesCourse = true;
       if (courseFilter !== 'all') {
         const targetCourse = activeCourses.find(
           (c) => c.id === courseFilter || c.code === courseFilter
         );
         if (targetCourse) {
-          const mCourseCode = ((m as any).courseCode || (m as any).course || '').toLowerCase().trim();
-          const mCourseName = ((m as any).courseName || (m as any).department || '').toLowerCase().trim();
+          const sCourseId = s.courseId || '';
+          const sCourseCode = (s.courseCode || s.course || '').toLowerCase().trim();
+          const sCourseName = (s.courseName || s.department || '').toLowerCase().trim();
+
           matchesCourse =
-            mCourseCode === targetCourse.code.toLowerCase() ||
-            mCourseName.includes(targetCourse.code.toLowerCase()) ||
-            mCourseName.includes(targetCourse.name.toLowerCase());
+            sCourseId === targetCourse.id ||
+            sCourseCode === targetCourse.code.toLowerCase() ||
+            sCourseName.includes(targetCourse.code.toLowerCase()) ||
+            sCourseName.includes(targetCourse.name.toLowerCase());
         }
       }
 
       // Match year level
       let matchesYear = true;
       if (yearFilter !== 'all') {
-        const mYear = String((m as any).yearLevel || (m as any).year || '').toLowerCase().trim();
-        matchesYear = mYear === yearFilter.toLowerCase() || mYear.includes(yearFilter.toLowerCase());
+        const sYear = String((s as any).yearLevel || s.year || '').toLowerCase().trim();
+        matchesYear = sYear === yearFilter.toLowerCase() || sYear.includes(yearFilter.toLowerCase());
       }
 
       return matchesSearch && matchesCourse && matchesYear;
     });
-  }, [activeMembers, searchQuery, courseFilter, yearFilter, activeCourses]);
+  }, [activeStudents, searchQuery, courseFilter, yearFilter, activeCourses]);
 
   if (!isOpen) return null;
 
-  const toggleMemberSelection = (id: string) => {
-    if (selectedMemberIds.includes(id)) {
-      setSelectedMemberIds(selectedMemberIds.filter((mId) => mId !== id));
+  const toggleStudentSelection = (id: string) => {
+    if (selectedStudentIds.includes(id)) {
+      setSelectedStudentIds(selectedStudentIds.filter((sId) => sId !== id));
     } else {
-      setSelectedMemberIds([...selectedMemberIds, id]);
+      setSelectedStudentIds([...selectedStudentIds, id]);
     }
   };
 
   const handleSelectAllFiltered = () => {
-    const filteredIds = filteredMembers.map((m) => m.studentId || m.id);
-    const allSelected = filteredIds.every((id) => selectedMemberIds.includes(id));
+    const filteredIds = filteredStudents.map((s) => s.id || s.studentId);
+    const allSelected = filteredIds.every((id) => selectedStudentIds.includes(id));
     if (allSelected) {
-      setSelectedMemberIds(selectedMemberIds.filter((id) => !filteredIds.includes(id)));
+      setSelectedStudentIds(selectedStudentIds.filter((id) => !filteredIds.includes(id)));
     } else {
-      const combined = new Set([...selectedMemberIds, ...filteredIds]);
-      setSelectedMemberIds(Array.from(combined));
+      const combined = new Set([...selectedStudentIds, ...filteredIds]);
+      setSelectedStudentIds(Array.from(combined));
     }
   };
 
@@ -185,14 +193,14 @@ export function AddPayableModal({
 
     const selectedSemesterObj = semesters.find((s) => s.id === semId);
 
-    // Determine target members
-    const targetMembers =
+    // Determine target students
+    const targetStudents =
       targetMode === 'all'
-        ? activeMembers
-        : activeMembers.filter((m) => selectedMemberIds.includes(m.studentId || m.id));
+        ? activeStudents
+        : activeStudents.filter((s) => selectedStudentIds.includes(s.id || s.studentId));
 
-    if (targetMembers.length === 0) {
-      toast.error('Please select at least one active member to assign this payable.');
+    if (targetStudents.length === 0) {
+      toast.error('Please select at least one student to assign this institutional payable.');
       return;
     }
 
@@ -200,23 +208,26 @@ export function AddPayableModal({
 
     try {
       let createdCount = 0;
-      for (const m of targetMembers) {
-        const authUid = (m as any).authUid || (m as any).studentAuthUid || m.id || m.studentId;
-        const schoolId = (m as any).studentSchoolId || m.studentId || m.id;
+      for (const s of targetStudents) {
+        const authUid = s.id || s.studentId;
+        const studentFullName =
+          [s.firstName, s.middleName, s.lastName].filter(Boolean).join(' ').trim() ||
+          s.name ||
+          'Student';
 
-        // Full mobile app compatibility + event fee parity
+        // Full mobile app compatibility + event fee parity fields
         await createPayable({
           studentId: authUid,
-          studentName: m.studentName || 'Member',
-          studentSchoolId: schoolId,
+          studentName: studentFullName,
+          studentSchoolId: s.studentId || '',
           type: payableType,
           label: label.trim(),
           title: label.trim(),
           feeTitle: label.trim(),
-          category: categoryName.trim() || (payableType === 'org_fine' ? 'Organization Fine' : 'Club Fee'),
-          description: description.trim() || `Assessment for ${organizationName}`,
-          organizationId: organizationId,
-          organizationName: organizationName,
+          category: categoryName.trim() || (payableType === 'admin_fine' ? 'Administrative Fine' : 'Institutional Assessment'),
+          description: description.trim() || `Institutional assessment by ${addedBy}`,
+          organizationId: null,
+          organizationName: 'SAO Administration',
           semesterId: semId,
           semester: selectedSemesterObj?.label || selectedSemesterObj?.semester || '',
           schoolYear: selectedSemesterObj?.academicYear || '',
@@ -224,20 +235,22 @@ export function AddPayableModal({
           amount: Number(amount),
           paymentStatus: 'UNPAID',
           dueDate: dueDate ? new Date(dueDate) : null,
-          courseCode: (m as any).courseCode || (m as any).course || '',
-          courseName: (m as any).courseName || '',
-          yearLevel: (m as any).yearLevel || (m as any).year || '',
-          section: (m as any).section || '',
-          academicLevel: (m as any).academicLevel || (String((m as any).yearLevel || '').includes('Grade') ? 'SHS' : 'COLLEGE'),
+          courseCode: s.courseCode || s.course || '',
+          courseName: s.courseName || '',
+          departmentId: s.departmentId || '',
+          departmentName: s.department || s.departmentName || '',
+          yearLevel: s.yearLevel || s.year || '',
+          section: s.section || '',
+          academicLevel: s.academicLevel || (String(s.yearLevel || '').includes('Grade') ? 'SHS' : 'COLLEGE'),
           createdBy: addedBy,
         });
         createdCount++;
       }
 
-      toast.success(`Successfully assigned "${label}" to ${createdCount} member(s).`);
+      toast.success(`Successfully assigned "${label}" to ${createdCount} student(s).`);
       onClose();
     } catch (err: any) {
-      console.error('[AddPayableModal] Creation error:', err);
+      console.error('[AddAdminPayableModal] Creation error:', err);
       toast.error(`Failed to assign payable: ${err.message || 'Unknown error'}`);
     } finally {
       setIsSubmitting(false);
@@ -245,17 +258,16 @@ export function AddPayableModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl w-full max-w-[660px] shadow-2xl flex flex-col max-h-[92vh] overflow-hidden border border-gray-100">
+    <div className="fixed inset-0 bg-black/55 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl w-full max-w-[660px] shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
         {/* Header */}
         <div className="bg-[#001A4D] px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2.5 text-white">
             <Shield className="w-5 h-5 text-[#FFD41C]" />
             <div>
-              <h2 className="font-bold text-base text-white">Add Club Payable / Fine</h2>
+              <h2 className="font-bold text-base text-white">Add Institutional Payable / Fine</h2>
               <p className="text-white/70 text-xs">
-                Assess member dues, custom fees, or fines for{' '}
-                <span className="text-[#FFD41C] font-semibold">{organizationName}</span>
+                Assess school-level student fees, dues, or penalties (synced with mobile app)
               </p>
             </div>
           </div>
@@ -270,42 +282,32 @@ export function AddPayableModal({
 
         {/* Content Form */}
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-5">
-          {/* Dynamic Categories */}
+          {/* Dynamic Categories from Settings */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
                 <Tag className="w-3.5 h-3.5 text-[#0E4EBD]" />
-                Fee & Fine Categories
+                Dynamic Fee & Fine Categories
               </label>
               <a
-                href="/officer/settings?tab=payable-categories"
+                href="/admin/settings"
                 target="_blank"
                 rel="noreferrer"
                 className="text-[11px] font-semibold text-[#0E4EBD] hover:underline flex items-center gap-1 cursor-pointer"
-                title="Manage categories in Officer Settings"
+                title="Manage categories in System Settings"
               >
                 Category Maintenance <ExternalLink className="w-3 h-3" />
               </a>
             </div>
 
             {/* Category selection chips */}
-            <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto p-1.5 bg-gray-50 rounded-xl border border-gray-200">
+            <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto p-1 bg-gray-50 rounded-xl border border-gray-200">
               {activeCategories.length === 0 ? (
-                <div className="flex items-center justify-between w-full p-1 text-xs text-gray-500">
-                  <span>No custom categories defined yet.</span>
-                  <a
-                    href="/officer/settings?tab=payable-categories"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-[#0E4EBD] font-bold hover:underline flex items-center gap-1"
-                  >
-                    + Manage in Settings <ExternalLink className="w-3 h-3" />
-                  </a>
-                </div>
+                <span className="text-xs text-gray-400 p-1">No custom categories configured in settings.</span>
               ) : (
                 activeCategories.map((cat) => {
                   const isSelected = selectedCategoryId === cat.id;
-                  const isFine = cat.categoryType === 'fine' || cat.type === 'org_fine' || cat.type === 'admin_fine';
+                  const isFine = cat.categoryType === 'fine' || cat.type === 'admin_fine';
                   return (
                     <button
                       type="button"
@@ -340,13 +342,13 @@ export function AddPayableModal({
                 type="text"
                 value={label}
                 onChange={(e) => setLabel(e.target.value)}
-                placeholder="e.g. Club Membership Due, T-Shirt Fee, Meeting Absence Fine"
+                placeholder="e.g. ID Replacement Fee"
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#001A4D]/20 focus:border-[#001A4D] outline-none font-medium"
                 required
               />
             </div>
 
-            {/* Assessment Category */}
+            {/* Category / Type */}
             <div>
               <label className="block text-xs font-bold text-[#001A4D] uppercase tracking-wider mb-1.5">
                 Assessment Category
@@ -355,7 +357,7 @@ export function AddPayableModal({
                 value={selectedCategoryId || payableType}
                 onChange={(e) => {
                   const val = e.target.value;
-                  if (val === 'custom' || val === 'org_fine' || val === 'membership_due') {
+                  if (val === 'custom' || val === 'admin_fine') {
                     setPayableType(val as PayableType);
                     setSelectedCategoryId('');
                   } else {
@@ -364,13 +366,12 @@ export function AddPayableModal({
                 }}
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#001A4D]/20 focus:border-[#001A4D] outline-none bg-white cursor-pointer"
               >
-                <optgroup label="Standard Types">
-                  <option value="custom">General Club Fee / Activity Assessment</option>
-                  <option value="membership_due">Club Membership Due</option>
-                  <option value="org_fine">Absence / Disciplinary Fine</option>
+                <optgroup label="System Preset Types">
+                  <option value="custom">Institutional Fee / Assessment</option>
+                  <option value="admin_fine">Administrative Fine / Penalty</option>
                 </optgroup>
                 {activeCategories.length > 0 && (
-                  <optgroup label="Configured Categories">
+                  <optgroup label="Settings Defined Categories">
                     {activeCategories.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name} ({formatCurrency(c.defaultAmount)})
@@ -440,13 +441,13 @@ export function AddPayableModal({
           {/* Description */}
           <div>
             <label className="block text-xs font-bold text-[#001A4D] uppercase tracking-wider mb-1.5">
-              Description / Notes (Optional)
+              Description / Justification Notes (Optional)
             </label>
             <textarea
               rows={2}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="e.g. Terms, inclusions, or justification for this club assessment."
+              placeholder="e.g. Assessment reason, terms, or guidelines for student settlement."
               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#001A4D]/20 focus:border-[#001A4D] outline-none"
             />
           </div>
@@ -456,7 +457,7 @@ export function AddPayableModal({
             <div className="flex items-center justify-between">
               <label className="text-xs font-bold text-[#001A4D] uppercase tracking-wider flex items-center gap-1.5">
                 <GraduationCap className="w-3.5 h-3.5 text-[#0E4EBD]" />
-                Target Club Members
+                Target Students
               </label>
               <div className="flex items-center gap-2">
                 <button
@@ -468,7 +469,7 @@ export function AddPayableModal({
                       : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                   }`}
                 >
-                  Select Specific ({selectedMemberIds.length})
+                  Select Specific ({selectedStudentIds.length})
                 </button>
                 <button
                   type="button"
@@ -479,7 +480,7 @@ export function AddPayableModal({
                       : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                   }`}
                 >
-                  All Active Members ({activeMembers.length})
+                  All Active Students ({activeStudents.length})
                 </button>
               </div>
             </div>
@@ -490,8 +491,8 @@ export function AddPayableModal({
                 <span>
                   This payable of{' '}
                   <strong>{amount ? formatCurrency(Number(amount)) : '₱0.00'}</strong> will be
-                  assigned to all{' '}
-                  <strong>{activeMembers.length} active members</strong> of {organizationName}.
+                  automatically assigned to all{' '}
+                  <strong>{activeStudents.length} active students</strong> across all programs.
                 </span>
               </div>
             ) : (
@@ -504,21 +505,21 @@ export function AddPayableModal({
                       type="text"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Search member name or ID..."
+                      placeholder="Search student or ID..."
                       className="w-full pl-8 pr-2 py-1.5 text-xs bg-white border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-[#001A4D]/20"
                     />
                   </div>
 
-                  {/* Database Program Filter */}
+                  {/* Database-Driven Program / Course Dropdown */}
                   <select
                     value={courseFilter}
                     onChange={(e) => {
                       setCourseFilter(e.target.value);
-                      setYearFilter('all');
+                      setYearFilter('all'); // Reset year when program changes
                     }}
                     className="px-2 py-1.5 text-xs bg-white border border-gray-300 rounded-lg outline-none cursor-pointer"
                   >
-                    <option value="all">All Programs ({activeCourses.length})</option>
+                    <option value="all">All Programs / Courses ({activeCourses.length})</option>
                     {activeCourses.map((course) => (
                       <option key={course.id} value={course.id}>
                         {course.code} — {course.name}
@@ -526,7 +527,7 @@ export function AddPayableModal({
                     ))}
                   </select>
 
-                  {/* Dynamic Year Level Filter */}
+                  {/* Dynamic Year Level Dropdown */}
                   <select
                     value={yearFilter}
                     onChange={(e) => setYearFilter(e.target.value)}
@@ -541,7 +542,7 @@ export function AddPayableModal({
                   </select>
                 </div>
 
-                {/* Member Selection Roster */}
+                {/* Roster Selection Table */}
                 <div className="border border-gray-200 rounded-lg bg-white overflow-hidden max-h-48 overflow-y-auto">
                   <div className="px-3 py-1.5 bg-gray-50 border-b border-gray-200 flex items-center justify-between text-xs font-semibold text-gray-600">
                     <button
@@ -549,27 +550,34 @@ export function AddPayableModal({
                       onClick={handleSelectAllFiltered}
                       className="text-[#0E4EBD] hover:underline font-bold text-xs cursor-pointer"
                     >
-                      Toggle All Filtered ({filteredMembers.length})
+                      Toggle All Filtered ({filteredStudents.length})
                     </button>
-                    <span>{selectedMemberIds.length} member(s) selected</span>
+                    <span>{selectedStudentIds.length} student(s) selected</span>
                   </div>
 
-                  {loadingMembers ? (
-                    <div className="p-6 text-center text-xs text-gray-400">Loading member directory...</div>
-                  ) : filteredMembers.length === 0 ? (
-                    <div className="p-6 text-center text-xs text-gray-400">No members match filter criteria.</div>
+                  {loadingStudents ? (
+                    <div className="p-6 text-center text-xs text-gray-400">
+                      Loading student directory...
+                    </div>
+                  ) : filteredStudents.length === 0 ? (
+                    <div className="p-6 text-center text-xs text-gray-400">
+                      No students match filter criteria.
+                    </div>
                   ) : (
                     <div className="divide-y divide-gray-100">
-                      {filteredMembers.map((m) => {
-                        const mId = m.studentId || m.id;
-                        const isSelected = selectedMemberIds.includes(mId);
-                        const progDisplay = (m as any).courseCode || (m as any).course || (m as any).department || 'N/A';
-                        const yrDisplay = (m as any).yearLevel || (m as any).year || '';
+                      {filteredStudents.map((student) => {
+                        const sId = student.id || student.studentId;
+                        const isSelected = selectedStudentIds.includes(sId);
+                        const sName =
+                          [student.firstName, student.lastName].filter(Boolean).join(' ') ||
+                          'Student';
+                        const progDisplay = student.courseCode || student.course || student.department || 'N/A';
+                        const yrDisplay = student.yearLevel || student.year || '';
 
                         return (
                           <div
-                            key={mId}
-                            onClick={() => toggleMemberSelection(mId)}
+                            key={sId}
+                            onClick={() => toggleStudentSelection(sId)}
                             className={`px-3 py-2 flex items-center justify-between text-xs cursor-pointer transition-colors ${
                               isSelected ? 'bg-blue-50/70 font-semibold' : 'hover:bg-gray-50'
                             }`}
@@ -577,15 +585,17 @@ export function AddPayableModal({
                             <div className="flex items-center gap-2">
                               <div
                                 className={`w-4 h-4 rounded flex items-center justify-center border transition-colors ${
-                                  isSelected ? 'bg-[#001A4D] border-[#001A4D] text-white' : 'border-gray-300'
+                                  isSelected
+                                    ? 'bg-[#001A4D] border-[#001A4D] text-white'
+                                    : 'border-gray-300'
                                 }`}
                               >
                                 {isSelected && <Check className="w-3 h-3" />}
                               </div>
                               <div>
-                                <span className="text-[#001A4D]">{m.studentName}</span>
+                                <span className="text-[#001A4D]">{sName}</span>
                                 <span className="text-gray-400 ml-1.5 font-mono">
-                                  ({(m as any).studentSchoolId || m.studentId || m.id})
+                                  ({student.studentId})
                                 </span>
                               </div>
                             </div>

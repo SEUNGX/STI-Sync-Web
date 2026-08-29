@@ -5,12 +5,15 @@ import { useOrganizationStream } from '../../modules/organizations/hooks/useOrga
 import { useOrgEvents } from '../../modules/events/hooks/useEventStream';
 import { useOrgLiquidations } from '../../modules/finance/hooks/useLiquidationStream';
 import { useOrgMembers } from '../../modules/organizations/hooks/useOrgMembers';
+import { useOrgOfficers } from '../../modules/organizations/hooks/useOrgOfficers';
+import { useRoles } from '../../modules/roles/hooks/useRoles';
 import { useAttendanceStream } from '../../modules/attendance/hooks/useAttendanceStream';
 import { formatAppDate } from '../../utils/date';
 
 export default function OfficerDashboardPage() {
   const { profile } = useOfficerProfile();
   const { data: orgs } = useOrganizationStream();
+  const { data: roles = [] } = useRoles();
 
   const activeOrgId = profile?.activeOrganizationId || '';
   const activeOrg = orgs.find((o) => o.id === activeOrgId);
@@ -20,7 +23,66 @@ export default function OfficerDashboardPage() {
   const { events, loading: eventsLoading } = useOrgEvents(activeOrgId);
   const { liquidations, loading: liquidationsLoading } = useOrgLiquidations(activeOrgId);
   const { members, loading: membersLoading } = useOrgMembers(activeOrgId);
+  const { officers = [] } = useOrgOfficers(activeOrgId);
   const { attendance, loading: attendanceLoading } = useAttendanceStream();
+
+  // Resolve account owner position (e.g., Adviser, President, Vice President, Secretary)
+  const positionTitle = (() => {
+    // 1. Explicit adviser flag or role ID
+    if (profile?.isAdviser || profile?.activeRoleId?.toLowerCase() === 'adviser') {
+      return 'Adviser';
+    }
+
+    // 2. Organization adviser match
+    if (
+      activeOrg?.adviser?.name &&
+      profile?.studentName &&
+      activeOrg.adviser.name.trim().toLowerCase() === profile.studentName.trim().toLowerCase()
+    ) {
+      return 'Adviser';
+    }
+
+    // 3. Match activeRoleId from profile in roles list
+    if (profile?.activeRoleId) {
+      const matchedRole = roles.find((r) => r.id === profile.activeRoleId);
+      if (matchedRole?.name) return matchedRole.name;
+    }
+
+    // 4. Look up current user in org officers collection
+    const currentOfficer = officers.find(
+      (o) =>
+        (profile?.studentId && o.studentId === profile.studentId) ||
+        (profile?.email && o.email?.toLowerCase() === profile.email.toLowerCase())
+    );
+
+    if (currentOfficer?.roleId) {
+      const matchedRole = roles.find((r) => r.id === currentOfficer.roleId);
+      if (matchedRole?.name) return matchedRole.name;
+    }
+
+    // 5. Check if named as President in organization document
+    if (
+      activeOrg?.presidentName &&
+      profile?.studentName &&
+      activeOrg.presidentName.trim().toLowerCase() === profile.studentName.trim().toLowerCase()
+    ) {
+      return 'President';
+    }
+
+    // 6. Readable fallback if activeRoleId is a plain string title
+    if (profile?.activeRoleId && profile.activeRoleId.length > 2 && !profile.activeRoleId.includes('-')) {
+      return profile.activeRoleId.charAt(0).toUpperCase() + profile.activeRoleId.slice(1);
+    }
+
+    return '';
+  })();
+
+  // Greeting name with position (e.g., "Adviser Ann Perez" or "President John Paul Gomez")
+  const greetingDisplayName = positionTitle
+    ? (officerName.toLowerCase().startsWith(positionTitle.toLowerCase())
+        ? officerName
+        : `${positionTitle} ${officerName}`)
+    : officerName;
 
   // Metrics calculations
   const upcomingEventsList = events.filter((e) => e.proposalStatus === 'approved' || e.proposalStatus === 'pending' || e.proposalStatus === 'pending_review');
@@ -45,6 +107,7 @@ export default function OfficerDashboardPage() {
   // Real Pending Tasks
   const pendingTasks: { id: string; task: string; dueDate: string; isDueDays: boolean; link: string }[] = [];
 
+  // 1. Returned liquidations (Urgent revisions requested by SAO)
   liquidations.forEach((l) => {
     if (l.status === 'returned') {
       pendingTasks.push({
@@ -54,7 +117,40 @@ export default function OfficerDashboardPage() {
         isDueDays: true,
         link: '/officer/liquidation',
       });
-    } else if (l.status === 'draft') {
+    }
+  });
+
+  // 2. Returned event proposals (Urgent revisions requested by SAO)
+  events.forEach((e) => {
+    if (e.proposalStatus === 'returned') {
+      pendingTasks.push({
+        id: `evt-${e.id}`,
+        task: `Revise returned event proposal: ${e.title}`,
+        dueDate: e.adviserRemarks ? `Remarks: ${e.adviserRemarks.slice(0, 35)}...` : 'Revision requested by SAO Adviser',
+        isDueDays: true,
+        link: '/officer/events',
+      });
+    }
+  });
+
+  // 3. Pending membership applications (Awaiting officer review & approval)
+  members.forEach((m) => {
+    if (m.status === 'pending') {
+      pendingTasks.push({
+        id: `mem-${m.id}`,
+        task: `Review membership application: ${m.studentName || 'Student'}`,
+        dueDate: m.course
+          ? `${m.course}${m.year ? ` • Year ${m.year}` : ''} (${m.studentId || 'Pending'})`
+          : 'Membership application awaiting approval',
+        isDueDays: false,
+        link: '/officer/members?tab=pending',
+      });
+    }
+  });
+
+  // 4. Draft liquidations (In progress)
+  liquidations.forEach((l) => {
+    if (l.status === 'draft') {
       pendingTasks.push({
         id: `liq-${l.id}`,
         task: `Complete draft liquidation: ${l.eventTitle}`,
@@ -65,16 +161,9 @@ export default function OfficerDashboardPage() {
     }
   });
 
+  // 5. Draft event proposals (In progress)
   events.forEach((e) => {
-    if (e.proposalStatus === 'returned') {
-      pendingTasks.push({
-        id: `evt-${e.id}`,
-        task: `Revise returned event proposal: ${e.title}`,
-        dueDate: e.adviserRemarks ? `Remarks: ${e.adviserRemarks.slice(0, 35)}...` : 'Revision requested by SAO Adviser',
-        isDueDays: true,
-        link: '/officer/events',
-      });
-    } else if (e.proposalStatus === 'draft') {
+    if (e.proposalStatus === 'draft') {
       pendingTasks.push({
         id: `evt-${e.id}`,
         task: `Submit draft event proposal: ${e.title}`,
@@ -118,7 +207,7 @@ export default function OfficerDashboardPage() {
       {/* Welcome Banner */}
       <div className="bg-blue-50/70 border border-blue-200/80 rounded-2xl p-6 flex items-center justify-between shadow-xs">
         <div>
-          <h2 className="text-[#001A4D] text-[20px] font-bold mb-1">Good day, {officerName} 👋</h2>
+          <h2 className="text-[#001A4D] text-[20px] font-bold mb-1">Good day, {greetingDisplayName} 👋</h2>
           <p className="text-gray-600 text-[14px]">Here's what's happening with <span className="font-bold text-[#0E4EBD]">{activeOrgName}</span> today.</p>
         </div>
         <div className="w-12 h-12 bg-blue-100/80 rounded-xl flex items-center justify-center border border-blue-200">
@@ -232,7 +321,7 @@ export default function OfficerDashboardPage() {
                 <div className="text-center py-8 space-y-2">
                   <CheckCircle className="w-10 h-10 text-green-500 mx-auto" />
                   <p className="text-sm font-bold text-gray-800">You're all caught up!</p>
-                  <p className="text-xs text-gray-500">No pending task revisions or drafts requiring action.</p>
+                  <p className="text-xs text-gray-500">No pending task revisions, applications, or drafts requiring action.</p>
                 </div>
               ) : (
                 pendingTasks.slice(0, 5).map((task) => (

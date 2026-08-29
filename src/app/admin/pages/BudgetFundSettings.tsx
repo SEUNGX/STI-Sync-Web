@@ -47,6 +47,7 @@ import { formatAppDate, formatAppDateTime } from "../../utils/date";
 import TransactionDetailModal from "../../modules/finance/components/TransactionDetailModal";
 import { useUserNameResolver } from "../../modules/finance/hooks/useUserNameResolver";
 import { uploadToCloudinary } from "../../../services/cloudinary";
+import { AddAdminPayableModal } from "../components/settings/AddAdminPayableModal";
 
 // ─── Helper to extract numeric timestamp for latest-first sorting ───────────────
 function getTxTimestamp(tx: SaoLedgerDocument): number {
@@ -702,6 +703,7 @@ export function BudgetFundSettings() {
   
   const [showAddBudget, setShowAddBudget] = useState(false);
   const [showAddExpense, setShowAddExpense] = useState(false);
+  const [showAddPayable, setShowAddPayable] = useState(false);
   const [viewCollection, setViewCollection] = useState<StudentEventCollectionGroup | null>(null);
   const [selectedTxForDetail, setSelectedTxForDetail] = useState<SaoLedgerDocument | null>(null);
   
@@ -1188,12 +1190,21 @@ export function BudgetFundSettings() {
                 <h3 className="text-[#001A4D] font-bold text-base">Student Collections & Payables</h3>
                 <p className="text-gray-500 text-xs mt-0.5">Event registration fees, fines, and activities</p>
               </div>
-              {pendingTotal > 0 && (
-                <span className="px-3 py-1 bg-amber-100 text-amber-800 rounded-lg text-xs font-bold flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5 text-amber-600" />
-                  Ready to Transfer: {formatCurrency(pendingTotal)}
-                </span>
-              )}
+              <div className="flex items-center gap-3">
+                {pendingTotal > 0 && (
+                  <span className="px-3 py-1 bg-amber-100 text-amber-800 rounded-lg text-xs font-bold flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-amber-600" />
+                    Ready to Transfer: {formatCurrency(pendingTotal)}
+                  </span>
+                )}
+                <button
+                  onClick={() => setShowAddPayable(true)}
+                  className="px-3.5 py-2 bg-[#001A4D] hover:bg-[#0E4EBD] text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
+                >
+                  <Plus className="w-4 h-4 text-[#FFD41C]" />
+                  Add Institutional Payable / Fine
+                </button>
+              </div>
             </div>
             
             <div className="overflow-x-auto">
@@ -1371,6 +1382,13 @@ export function BudgetFundSettings() {
           isOpen={true}
           onClose={() => setSelectedTxForDetail(null)}
           isOfficer={false}
+        />
+      )}
+
+      {showAddPayable && (
+        <AddAdminPayableModal
+          isOpen={showAddPayable}
+          onClose={() => setShowAddPayable(false)}
         />
       )}
     </div>

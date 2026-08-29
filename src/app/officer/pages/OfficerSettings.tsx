@@ -7,11 +7,12 @@ import { useRoles } from '../../modules/roles/hooks/useRoles';
 import { updateStudent } from '../../modules/students/services/student.service';
 import { uploadToCloudinary } from '../../../services/cloudinary';
 import { changeOfficerOrAdviserPassword } from '../../auth/services/password.service';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Coins } from 'lucide-react';
 import OrganizationProfile from './OrganizationProfile';
+import OfficerPayableCategorySettings from '../components/settings/OfficerPayableCategorySettings';
 import { toast } from 'sonner';
 
-type SettingsSection = 'account' | 'organization' | 'security';
+type SettingsSection = 'account' | 'organization' | 'payable-categories' | 'security';
 
 function PasswordStrength({ password }: { password: string }) {
   const checks = [
@@ -52,6 +53,7 @@ function PasswordStrength({ password }: { password: string }) {
 const NAV_ITEMS: { key: SettingsSection; label: string }[] = [
   { key: 'account', label: 'Account Profile' },
   { key: 'organization', label: 'Organization Profile' },
+  { key: 'payable-categories', label: 'Fee & Fine Categories' },
   { key: 'security', label: 'Security & Password' },
 ];
 
@@ -63,20 +65,20 @@ export default function OfficerSettings({ defaultTab = 'account' }: OfficerSetti
   const [searchParams, setSearchParams] = useSearchParams();
   const tabQuery = searchParams.get('tab') as SettingsSection | null;
   const [activeSection, setActiveSection] = useState<SettingsSection>(
-    tabQuery && ['account', 'organization', 'security'].includes(tabQuery)
+    tabQuery && ['account', 'organization', 'payable-categories', 'security'].includes(tabQuery)
       ? tabQuery
       : defaultTab
   );
 
   // Sync tabQuery with state if searchParams change
   useEffect(() => {
-    if (tabQuery && ['account', 'organization', 'security'].includes(tabQuery)) {
+    if (tabQuery && ['account', 'organization', 'payable-categories', 'security'].includes(tabQuery)) {
       setActiveSection(tabQuery);
     }
   }, [tabQuery]);
 
   // Real Officer Data Hooks
-  const { profile, loading: profileLoading, markPasswordChanged } = useOfficerProfile();
+  const { profile, activeOrgName, loading: profileLoading, markPasswordChanged } = useOfficerProfile();
   const { data: students, loading: studentsLoading } = useStudents();
   const { data: roles } = useRoles();
 
@@ -394,6 +396,14 @@ export default function OfficerSettings({ defaultTab = 'account' }: OfficerSetti
             {/* ── Organization Profile ── */}
             {activeSection === 'organization' && (
               <OrganizationProfile embedded={true} />
+            )}
+
+            {/* ── Fee & Fine Categories ── */}
+            {activeSection === 'payable-categories' && (
+              <OfficerPayableCategorySettings
+                organizationId={profile?.activeOrganizationId || ''}
+                organizationName={activeOrgName || 'Organization'}
+              />
             )}
 
             {/* ── Security & Password ── */}
