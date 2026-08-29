@@ -2,15 +2,11 @@ import { useState, useMemo, useEffect } from "react";
 import { useOutletContext, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import {
-  CheckCircle2, XCircle, Calendar, Plus, Eye,
-  Search, ChevronLeft, ChevronRight, FileEdit, Clock,
-  Filter, ChevronDown, RotateCcw, Building2, MapPin, Tag, Coins, DollarSign, Layers,
-  Users, FileText
+  Calendar, Plus, Eye, Search, ChevronLeft, ChevronRight,
+  Filter, ChevronDown, RotateCcw, MapPin, Download,
+  Clock, FileEdit, CheckCircle2, XCircle
 } from "lucide-react";
-import { Card, CardContent } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
-import { Badge } from "../../components/ui/badge";
-import { Tabs, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import { Input } from "../../components/ui/input";
 import SaoEventCreationModal from "../components/SaoEventCreationModal";
 import EventProposalReview from "../components/EventProposalReview";
@@ -18,26 +14,15 @@ import EventProposalReview from "../components/EventProposalReview";
 import { useAllEvents, useDraftEvents } from "../../modules/events/hooks/useEventStream";
 import { useOrganizationStream } from "../../modules/organizations/hooks/useOrganizationStream";
 import { useEventCategoriesStream, useVenuesStream } from "../../modules/events/hooks/useEventConfigStream";
-import { approveEvent, rejectEvent } from "../../modules/events/services/event.service";
-import { useAdviserProfile } from "../../modules/auth/hooks/useAdviserProfile";
 import type { EventDocument } from "../../modules/events/types/event.types";
 import { formatCurrency } from "../../utils/currency";
-import { formatAppDateTime, formatSessionDateTime } from "../../utils/date";
+import { formatAppDateTime } from "../../utils/date";
 import stiOrmocLogo from "../../../imports/STI_ORMOC_LOGO.jpg";
 
-const ITEMS_PER_PAGE = 10;
+const ITEMS_PER_PAGE = 8;
 
 type TabValue = "all" | "pending" | "approved" | "completed" | "rejected" | "drafts";
 type DateRangeOption = "all" | "this_week" | "this_month" | "custom";
-
-function getDateRangeLabel(option: DateRangeOption): string {
-  switch (option) {
-    case "this_week": return "This Week";
-    case "this_month": return "This Month";
-    case "custom": return "Custom Range";
-    default: return "All Time";
-  }
-}
 
 function isWithinDateRange(
   dateStr: string | undefined,
@@ -96,70 +81,48 @@ function isEventPast(event: EventDocument): boolean {
   return new Date(lastDate) < new Date(new Date().toDateString());
 }
 
-/** Estimate draft completion label based on filled fields */
-function getDraftProgress(draft: EventDocument): { label: string; step: number } {
-  if (draft.documents && draft.documents.length > 0) return { label: "Documents ready", step: 6 };
-  if (draft.budgetItems && draft.budgetItems.length > 0) return { label: "Budget added", step: 5 };
-  if (draft.scanners && draft.scanners.length > 0) return { label: "Staff assigned", step: 4 };
-  if (draft.targetYearLevels && draft.targetYearLevels.length > 0) return { label: "Participants set", step: 3 };
-  if (draft.sessions && draft.sessions.length > 0) return { label: "Schedule set", step: 2 };
-  if (draft.title) return { label: "Event details added", step: 1 };
-  return { label: "Just started", step: 1 };
+function getEventTimestamp(event: EventDocument): number {
+  if (event.createdAt) {
+    if (typeof (event.createdAt as any).toDate === "function") return (event.createdAt as any).toDate().getTime();
+    if (typeof (event.createdAt as any).seconds === "number") return (event.createdAt as any).seconds * 1000;
+    const d = new Date(event.createdAt as any);
+    if (!isNaN(d.getTime())) return d.getTime();
+  }
+  const firstSession = getFirstSessionDate(event);
+  if (firstSession) {
+    const d = new Date(firstSession);
+    if (!isNaN(d.getTime())) return d.getTime();
+  }
+  if (event.updatedAt) {
+    if (typeof (event.updatedAt as any).toDate === "function") return (event.updatedAt as any).toDate().getTime();
+    if (typeof (event.updatedAt as any).seconds === "number") return (event.updatedAt as any).seconds * 1000;
+    const d = new Date(event.updatedAt as any);
+    if (!isNaN(d.getTime())) return d.getTime();
+  }
+  return 0;
 }
 
-function formatTimestamp(ts: any): string {
-  return formatAppDateTime(ts, "Unknown");
+function formatShortDate(dateStr?: any): string {
+  if (!dateStr) return "TBD";
+  let d: Date | null = null;
+  if (typeof dateStr.toDate === "function") d = dateStr.toDate();
+  else if (typeof dateStr.seconds === "number") d = new Date(dateStr.seconds * 1000);
+  else d = new Date(dateStr);
+
+  if (!d || isNaN(d.getTime())) return "TBD";
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
-// ─── Dropdown helper ────────────────────────────────────────────────────────
+function formatSubmittedDate(dateStr?: any): string {
+  if (!dateStr) return "—";
+  let d: Date | null = null;
+  if (typeof dateStr.toDate === "function") d = dateStr.toDate();
+  else if (typeof dateStr.seconds === "number") d = new Date(dateStr.seconds * 1000);
+  else d = new Date(dateStr);
 
-interface FilterDropdownProps {
-  label: string;
-  value: string;
-  options: { value: string; label: string }[];
-  onChange: (value: string) => void;
+  if (!d || isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
-
-function FilterDropdown({ label, value, options, onChange }: FilterDropdownProps) {
-  const [open, setOpen] = useState(false);
-  const selected = options.find(o => o.value === value);
-
-  return (
-    <div className="relative">
-      <button
-        onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 px-3 py-2 bg-white border border-[#E0E0E0] rounded-lg text-sm text-gray-700 hover:border-[#001A4D] transition-colors min-w-[160px] justify-between"
-      >
-        <span className="truncate">
-          <span className="text-gray-400 text-xs mr-1">{label}:</span>
-          <span className="font-medium">{selected?.label ?? label}</span>
-        </span>
-        <ChevronDown className={`w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
-      </button>
-
-      {open && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute top-full mt-1 left-0 z-20 bg-white border border-[#E0E0E0] rounded-lg shadow-lg min-w-full overflow-hidden">
-            {options.map(opt => (
-              <button
-                key={opt.value}
-                onClick={() => { onChange(opt.value); setOpen(false); }}
-                className={`w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50 transition-colors ${
-                  opt.value === value ? "bg-[#001A4D]/5 text-[#001A4D] font-medium" : "text-gray-700"
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-// ─── Main Component ──────────────────────────────────────────────────────────
 
 export function EventApprovals() {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -167,16 +130,16 @@ export function EventApprovals() {
   const [modalKey, setModalKey] = useState(0);
   const [selectedEvent, setSelectedEvent] = useState<EventDocument | null>(null);
 
-  const { globalSearch } = useOutletContext<{ globalSearch: string }>();
-  const searchQuery = globalSearch || "";
+  const { globalSearch } = useOutletContext<{ globalSearch: string }>() || { globalSearch: "" };
+  const [localSearch, setLocalSearch] = useState("");
+  const searchQuery = localSearch || globalSearch || "";
 
   const [searchParams] = useSearchParams();
   const targetId = searchParams.get("id") || searchParams.get("eventId");
 
   const [activeTab, setActiveTab] = useState<TabValue>("all");
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageInput, setPageInput] = useState("1");
-  const [submittingId, setSubmittingId] = useState<string | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
 
   // ── Filters ──────────────────────────────────────────────────────────────
   const [filterOrg, setFilterOrg] = useState<string>("all");
@@ -187,6 +150,10 @@ export function EventApprovals() {
 
   // ── Data streams ─────────────────────────────────────────────────────────
   const { events, loading: eventsLoading } = useAllEvents();
+  const { drafts, loading: draftsLoading } = useDraftEvents();
+  const { data: orgs } = useOrganizationStream();
+  const { categories } = useEventCategoriesStream();
+  const { venues } = useVenuesStream();
 
   useEffect(() => {
     if (targetId && events.length > 0) {
@@ -196,46 +163,43 @@ export function EventApprovals() {
       }
     }
   }, [targetId, events]);
-  const { drafts, loading: draftsLoading } = useDraftEvents();
-  const { data: orgs } = useOrganizationStream();
-  const { categories } = useEventCategoriesStream();
-  const { venues } = useVenuesStream();
-  const { profile } = useAdviserProfile();
 
-  // Reset pagination when filters / tab change
-  const handleTabChange = (value: string) => {
-    setActiveTab(value as TabValue);
+  const handleTabChange = (value: TabValue) => {
+    setActiveTab(value);
     setCurrentPage(1);
-    setPageInput("1");
   };
 
   useEffect(() => {
     setCurrentPage(1);
-    setPageInput("1");
   }, [searchQuery, filterOrg, filterDateRange, filterCategory, customFrom, customTo]);
 
-  const getOrg = (orgId: string) => orgs.find(o => o.id === orgId);
   const getOrgName = (orgId: string) => {
-    if (['sas', 'sas_admin', 'sao', 'sao_admin'].includes(orgId)) return 'Student Affairs & Services (SAS)';
-    const found = orgs.find(o => o.id === orgId);
-    return found ? (found.name || found.acronym || orgId) : orgId;
+    if (["sas", "sas_admin", "sao", "sao_admin"].includes(orgId)) return "Student Affairs & Services";
+    const found = orgs.find((o) => o.id === orgId);
+    return found ? (found.name || found.acronym || orgId) : orgId || "Student Org";
   };
-  const getOrgAcronym = (orgId: string) => {
-    if (['sas', 'sas_admin', 'sao', 'sao_admin'].includes(orgId)) return 'SAS';
-    const found = orgs.find(o => o.id === orgId);
-    return found ? (found.acronym || found.name.slice(0, 4).toUpperCase()) : 'ORG';
-  };
-  const getOrgLogo = (orgId: string) => {
-    if (['sas', 'sas_admin', 'sao', 'sao_admin'].includes(orgId) || !orgId) return stiOrmocLogo;
-    return orgs.find(o => o.id === orgId)?.logoUrl || null;
-  };
-  const getCategoryName = (catId: string) => categories.find(c => c.id === catId)?.name || catId;
-  const getVenueName = (venueId: string) => venues.find(v => v.id === venueId)?.name || null;
 
-  // ── Set of Non-Draft Event Identifiers for Draft Deduplication ────────────
+  const getOrgAcronym = (orgId: string) => {
+    if (["sas", "sas_admin", "sao", "sao_admin"].includes(orgId)) return "SAS";
+    const found = orgs.find((o) => o.id === orgId);
+    return found ? (found.acronym || found.name.slice(0, 4).toUpperCase()) : "ORG";
+  };
+
+  const getOrgLogo = (orgId: string) => {
+    if (["sas", "sas_admin", "sao", "sao_admin"].includes(orgId) || !orgId) return stiOrmocLogo;
+    return orgs.find((o) => o.id === orgId)?.logoUrl || null;
+  };
+
+  const getCategoryName = (catId: string) => categories.find((c) => c.id === catId)?.name || "General";
+  const getVenueName = (venueId?: string) => {
+    if (!venueId) return "Off-Campus";
+    return venues.find((v) => v.id === venueId)?.name || venueId;
+  };
+
+  // Draft Deduplication
   const nonDraftRefs = useMemo(() => {
     const refs = new Set<string>();
-    events.forEach(e => {
+    events.forEach((e) => {
       if (e.id) refs.add(e.id);
       if (e.referenceId) refs.add(e.referenceId);
       if (e.title) refs.add(e.title.trim().toLowerCase());
@@ -243,64 +207,68 @@ export function EventApprovals() {
     return refs;
   }, [events]);
 
-  // ── Filtered event list (non-drafts) ─────────────────────────────────────
+  // Filtered event list (Sorted LATEST FIRST by default)
   const filteredEvents = useMemo(() => {
-    return events.filter(event => {
-      // Tab filter
-      if (activeTab === "pending" && event.proposalStatus !== "pending" && event.proposalStatus !== "pending_review") return false;
-      if (activeTab === "approved" && (event.proposalStatus !== "approved" || isEventPast(event))) return false;
-      if (activeTab === "completed" && (event.proposalStatus !== "approved" || !isEventPast(event))) return false;
-      if (activeTab === "rejected" && event.proposalStatus !== "rejected") return false;
-      if (activeTab === "drafts") return false; // drafts rendered separately
+    return events
+      .filter((event) => {
+        // Tab filter
+        if (activeTab === "pending" && event.proposalStatus !== "pending" && event.proposalStatus !== "pending_review") return false;
+        if (activeTab === "approved" && (event.proposalStatus !== "approved" || isEventPast(event))) return false;
+        if (activeTab === "completed" && (event.proposalStatus !== "approved" || !isEventPast(event))) return false;
+        if (activeTab === "rejected" && event.proposalStatus !== "rejected") return false;
+        if (activeTab === "drafts") return false;
 
-      // Organisation filter
-      if (filterOrg !== "all" && event.hostingOrgId !== filterOrg) return false;
+        // Organization filter
+        if (filterOrg !== "all" && event.hostingOrgId !== filterOrg) return false;
 
-      // Category filter
-      if (filterCategory !== "all" && event.eventCategoryId !== filterCategory) return false;
+        // Category filter
+        if (filterCategory !== "all" && event.eventCategoryId !== filterCategory) return false;
 
-      // Date range filter (based on first session date)
-      const firstDate = getFirstSessionDate(event);
-      if (!isWithinDateRange(firstDate, filterDateRange, customFrom, customTo)) return false;
+        // Date range filter
+        const firstDate = getFirstSessionDate(event);
+        if (!isWithinDateRange(firstDate, filterDateRange, customFrom, customTo)) return false;
 
-      // Search
-      const q = searchQuery.toLowerCase();
-      if (q) {
-        const titleMatch = event.title?.toLowerCase().includes(q);
-        const refMatch = event.referenceId?.toLowerCase().includes(q);
-        const orgMatch = getOrgName(event.hostingOrgId).toLowerCase().includes(q);
-        if (!titleMatch && !refMatch && !orgMatch) return false;
-      }
+        // Search filter
+        const q = searchQuery.toLowerCase().trim();
+        if (q) {
+          const titleMatch = event.title?.toLowerCase().includes(q);
+          const refMatch = event.referenceId?.toLowerCase().includes(q);
+          const orgMatch = getOrgName(event.hostingOrgId).toLowerCase().includes(q);
+          const venueMatch = getVenueName(event.venueId).toLowerCase().includes(q);
+          if (!titleMatch && !refMatch && !orgMatch && !venueMatch) return false;
+        }
 
-      return true;
-    });
+        return true;
+      })
+      .sort((a, b) => getEventTimestamp(b) - getEventTimestamp(a));
   }, [events, searchQuery, activeTab, filterOrg, filterDateRange, filterCategory, customFrom, customTo]);
 
-  // ── Filtered drafts (excluding approved/published events) ───────────────
+  // Filtered drafts list (Sorted LATEST FIRST)
   const filteredDrafts = useMemo(() => {
-    return drafts.filter(draft => {
-      // Exclude if an approved / pending event with same ID, referenceId, or title exists
-      if (draft.id && nonDraftRefs.has(draft.id)) return false;
-      if (draft.referenceId && nonDraftRefs.has(draft.referenceId)) return false;
-      if (draft.title && nonDraftRefs.has(draft.title.trim().toLowerCase())) return false;
+    return drafts
+      .filter((draft) => {
+        if (draft.id && nonDraftRefs.has(draft.id)) return false;
+        if (draft.referenceId && nonDraftRefs.has(draft.referenceId)) return false;
+        if (draft.title && nonDraftRefs.has(draft.title.trim().toLowerCase())) return false;
 
-      if (filterOrg !== "all" && draft.hostingOrgId !== filterOrg) return false;
-      if (filterCategory !== "all" && draft.eventCategoryId !== filterCategory) return false;
-      const q = searchQuery.toLowerCase();
-      if (q && !draft.title?.toLowerCase().includes(q) && !draft.referenceId?.toLowerCase().includes(q)) return false;
-      return true;
-    });
+        if (filterOrg !== "all" && draft.hostingOrgId !== filterOrg) return false;
+        if (filterCategory !== "all" && draft.eventCategoryId !== filterCategory) return false;
+        const q = searchQuery.toLowerCase().trim();
+        if (q && !draft.title?.toLowerCase().includes(q) && !draft.referenceId?.toLowerCase().includes(q)) return false;
+        return true;
+      })
+      .sort((a, b) => getEventTimestamp(b) - getEventTimestamp(a));
   }, [drafts, nonDraftRefs, filterOrg, filterCategory, searchQuery]);
 
-  // ── Badge counts ──────────────────────────────────────────────────────────
+  // Counts
   const allCount = events.length;
-  const pendingCount = events.filter(e => e.proposalStatus === "pending" || e.proposalStatus === "pending_review").length;
-  const approvedCount = events.filter(e => e.proposalStatus === "approved" && !isEventPast(e)).length;
-  const completedCount = events.filter(e => e.proposalStatus === "approved" && isEventPast(e)).length;
-  const rejectedCount = events.filter(e => e.proposalStatus === "rejected").length;
+  const pendingCount = events.filter((e) => e.proposalStatus === "pending" || e.proposalStatus === "pending_review").length;
+  const approvedCount = events.filter((e) => e.proposalStatus === "approved" && !isEventPast(e)).length;
+  const completedCount = events.filter((e) => e.proposalStatus === "approved" && isEventPast(e)).length;
+  const rejectedCount = events.filter((e) => e.proposalStatus === "rejected").length;
   const draftsCount = filteredDrafts.length;
 
-  // ── Pagination ────────────────────────────────────────────────────────────
+  // Active list & Pagination
   const activeList = activeTab === "drafts" ? filteredDrafts : filteredEvents;
   const totalPages = Math.max(1, Math.ceil(activeList.length / ITEMS_PER_PAGE));
 
@@ -309,79 +277,39 @@ export function EventApprovals() {
     return activeList.slice(start, start + ITEMS_PER_PAGE);
   }, [activeList, currentPage]);
 
-  const handlePageChange = (newPage: number) => {
-    if (newPage >= 1 && newPage <= totalPages) {
-      setCurrentPage(newPage);
-      setPageInput(newPage.toString());
-    }
-  };
-
-  const handlePageInputSubmit = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") {
-      const val = parseInt(pageInput);
-      if (!isNaN(val) && val >= 1 && val <= totalPages) {
-        setCurrentPage(val);
-      } else {
-        setPageInput(currentPage.toString());
-      }
-    }
-  };
-
-  // ── Actions ───────────────────────────────────────────────────────────────
-  const handleQuickApprove = async (event: EventDocument) => {
-    if (!profile?.uid) {
-      toast.error("SAO Admin authentication is required to approve proposals. Please re-login as Admin.");
-      return;
-    }
-    setSubmittingId(event.id);
-    try {
-      await approveEvent(event.id, profile.uid, "Quick approved from dashboard.");
-      toast.success(`Event "${event.title}" approved successfully.`);
-    } catch (error: any) {
-      console.error(error);
-      toast.error(error?.message || "Failed to approve proposal. Please check admin permissions.");
-    } finally {
-      setSubmittingId(null);
-    }
-  };
-
-  const handleQuickReject = (event: EventDocument) => {
-    setSelectedEvent(event);
-  };
-
   const handleResumeDraft = (draft: EventDocument) => {
     setResumeDraft(draft);
     setModalKey(Date.now());
     setIsModalOpen(true);
   };
 
-  const handleCloseModal = () => {
-    setIsModalOpen(false);
-    setResumeDraft(null);
+  const handleExportCSV = () => {
+    if (activeList.length === 0) {
+      toast.info(`No ${activeTab === "all" ? "" : activeTab + " "}events to export.`);
+      return;
+    }
+    const headers = ["Event Title", "Organization", "Category", "Date", "Venue", "Budget", "Submitted", "Status"];
+    const rows = (activeList as EventDocument[]).map((e) => [
+      `"${(e.title || "").replace(/"/g, '""')}"`,
+      `"${getOrgAcronym(e.hostingOrgId || "")}"`,
+      `"${getCategoryName(e.eventCategoryId || "")}"`,
+      `"${getFirstSessionDate(e) || "TBD"}"`,
+      `"${getVenueName(e.venueId)}"`,
+      `"${e.totalRequestedBudget || e.totalApprovedBudget || 0}"`,
+      `"${formatSubmittedDate(e.createdAt)}"`,
+      `"${e.proposalStatus || (activeTab === "drafts" ? "draft" : "pending")}"`,
+    ]);
+
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `STI_Sync_Events_${activeTab.toUpperCase()}_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success(`Exported ${activeList.length} ${activeTab === "all" ? "" : activeTab + " "}event(s) to CSV.`);
   };
-
-  // ── Dropdown option lists ─────────────────────────────────────────────────
-  const orgOptions = [
-    { value: "all", label: "All Organizations" },
-    ...orgs.map(o => ({ value: o.id, label: o.acronym || o.name || o.id }))
-  ];
-
-  const dateOptions: { value: DateRangeOption; label: string }[] = [
-    { value: "all", label: "All Time" },
-    { value: "this_week", label: "This Week" },
-    { value: "this_month", label: "This Month" },
-    { value: "custom", label: "Custom Range" },
-  ];
-
-  const categoryOptions = [
-    { value: "all", label: "All Categories" },
-    ...categories
-      .filter(c => !c.archived)
-      .map(c => ({ value: c.id, label: c.name }))
-  ];
-
-  const isLoading = activeTab === "drafts" ? draftsLoading : eventsLoading;
-  const hasActiveFilters = filterOrg !== "all" || filterDateRange !== "all" || filterCategory !== "all";
 
   const resetFilters = () => {
     setFilterOrg("all");
@@ -389,452 +317,509 @@ export function EventApprovals() {
     setFilterCategory("all");
     setCustomFrom("");
     setCustomTo("");
+    setLocalSearch("");
   };
 
-  // ── Tab trigger helper ────────────────────────────────────────────────────
-  const TAB_CONFIG: { value: TabValue; label: string; count: number }[] = [
-    { value: "all", label: "All Events", count: allCount },
-    { value: "pending", label: "Pending", count: pendingCount },
-    { value: "approved", label: "Approved", count: approvedCount },
-    { value: "completed", label: "Completed", count: completedCount },
-    { value: "rejected", label: "Rejected", count: rejectedCount },
-    { value: "drafts", label: "Drafts", count: draftsCount },
-  ];
+  const hasActiveFilters = filterOrg !== "all" || filterDateRange !== "all" || filterCategory !== "all" || searchQuery !== "";
+
+  const renderStatusBadge = (status?: string, event?: EventDocument) => {
+    if (activeTab === "drafts" || status === "draft") {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-700 border border-gray-200">
+          <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />
+          Draft
+        </span>
+      );
+    }
+
+    if (status === "pending" || status === "pending_review") {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200/80">
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+          Pending
+        </span>
+      );
+    }
+
+    if (status === "approved") {
+      if (event && isEventPast(event)) {
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200/80">
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+            Completed
+          </span>
+        );
+      }
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/80">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+          Approved
+        </span>
+      );
+    }
+
+    if (status === "rejected") {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-200/80">
+          <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+          Rejected
+        </span>
+      );
+    }
+
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-700 border border-gray-200">
+        <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />
+        {status || "Unknown"}
+      </span>
+    );
+  };
+
+  const isLoading = activeTab === "drafts" ? draftsLoading : eventsLoading;
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between">
+    <div className="space-y-5 w-full">
+      {/* ── Header ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-[#001A4D]">Event Approvals</h2>
-          <p className="text-gray-500 text-sm">Review and approve event proposals from student organizations</p>
+          <h1 className="text-2xl font-bold text-[#001A4D] tracking-tight">Event Approvals</h1>
+          <p className="text-gray-500 text-sm mt-0.5">
+            Review and approve event proposals from student organizations
+          </p>
+
+          {/* Metric Summary Badges */}
+          <div className="flex flex-wrap items-center gap-2.5 mt-3">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50/80 border border-amber-200 rounded-lg text-xs font-bold text-amber-800">
+              <span className="font-extrabold text-amber-900">{pendingCount}</span> Pending Review
+            </div>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50/80 border border-emerald-200 rounded-lg text-xs font-bold text-emerald-800">
+              <span className="font-extrabold text-emerald-900">{approvedCount}</span> Approved
+            </div>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-red-50/80 border border-red-200 rounded-lg text-xs font-bold text-red-800">
+              <span className="font-extrabold text-red-900">{rejectedCount}</span> Rejected
+            </div>
+          </div>
         </div>
+
+        {/* Solid button without gradients */}
         <Button
-          onClick={() => { setResumeDraft(null); setModalKey(Date.now()); setIsModalOpen(true); }}
-          className="bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] hover:opacity-90 text-white font-bold shadow-sm"
+          onClick={() => {
+            setResumeDraft(null);
+            setModalKey(Date.now());
+            setIsModalOpen(true);
+          }}
+          className="bg-[#001A4D] hover:bg-[#002D72] text-white font-bold text-sm px-4 py-2.5 rounded-xl shadow-xs transition-colors flex items-center gap-2 cursor-pointer self-start sm:self-auto"
         >
-          <Plus className="w-4 h-4 mr-2" />
-          Create Event (SAO)
+          <Plus className="w-4 h-4 text-[#FFD41C]" />
+          Create SAO Event
         </Button>
       </div>
 
-      {/* Tabs + Filter Bar */}
-      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          {/* Tab Strip */}
-          <TabsList className="bg-white border border-[#E0E0E0] flex-shrink-0 flex-wrap h-auto gap-1 p-1">
-            {TAB_CONFIG.map(tab => (
-              <TabsTrigger
-                key={tab.value}
-                value={tab.value}
-                className="data-[state=active]:bg-[#001A4D] data-[state=active]:text-white data-[state=active]:border-b-[3px] data-[state=active]:border-[#FFC107] relative"
-              >
-                {tab.label}
-                <Badge
-                  className={`ml-2 hover:bg-[#FFC107] ${
-                    tab.value === "drafts"
-                      ? "bg-amber-500 text-white hover:bg-amber-500"
-                      : "bg-[#FFC107] text-[#001A4D]"
+      {/* ── Main Container: Filters + Fixed Table + Pagination ── */}
+      <div className="bg-white border border-[#E5E7EB] rounded-2xl shadow-xs overflow-hidden">
+        {/* Top Control Bar: Tabs on Left, Search & Actions on Right */}
+        <div className="p-4 border-b border-gray-100 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+          {/* Status Tabs */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 lg:pb-0">
+            {[
+              { key: "all", label: "All", count: allCount },
+              { key: "pending", label: "Pending", count: pendingCount },
+              { key: "approved", label: "Approved", count: approvedCount },
+              { key: "rejected", label: "Rejected", count: rejectedCount },
+              { key: "completed", label: "Completed", count: completedCount },
+              { key: "drafts", label: "Drafts", count: draftsCount },
+            ].map((tab) => {
+              const isActive = activeTab === tab.key;
+              return (
+                <button
+                  key={tab.key}
+                  onClick={() => handleTabChange(tab.key as TabValue)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                    isActive
+                      ? "bg-[#001A4D] text-white shadow-xs"
+                      : "bg-gray-100/80 text-gray-600 hover:bg-gray-200/80 hover:text-gray-900"
                   }`}
                 >
-                  {tab.count}
-                </Badge>
-              </TabsTrigger>
-            ))}
-          </TabsList>
+                  <span>{tab.label}</span>
+                  <span
+                    className={`px-1.5 py-0.2 rounded-full text-[11px] font-bold ${
+                      isActive ? "bg-white/20 text-white" : "bg-gray-200/80 text-gray-700"
+                    }`}
+                  >
+                    {tab.count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
 
-          {/* Filter Bar */}
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1.5 text-xs text-gray-400 font-medium mr-1">
-              <Filter className="w-3.5 h-3.5" />
-              Filter
+          {/* Right Controls */}
+          <div className="flex items-center gap-2">
+            {/* Search Input */}
+            <div className="relative flex-1 sm:w-60">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search events..."
+                value={localSearch}
+                onChange={(e) => setLocalSearch(e.target.value)}
+                className="w-full pl-9 pr-3 py-1.5 bg-gray-50/80 border border-gray-200 rounded-xl text-xs text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#001A4D]/10 focus:border-[#001A4D]"
+              />
             </div>
 
-            <FilterDropdown
-              label="Org"
-              value={filterOrg}
-              options={orgOptions}
-              onChange={setFilterOrg}
-            />
-            <FilterDropdown
-              label="Date"
-              value={filterDateRange}
-              options={dateOptions}
-              onChange={(v) => setFilterDateRange(v as DateRangeOption)}
-            />
-            <FilterDropdown
-              label="Category"
-              value={filterCategory}
-              options={categoryOptions}
-              onChange={setFilterCategory}
-            />
+            {/* Filter Toggle */}
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors flex items-center gap-1.5 cursor-pointer ${
+                showFilters || hasActiveFilters
+                  ? "border-[#001A4D] bg-[#001A4D]/5 text-[#001A4D]"
+                  : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+              }`}
+            >
+              <Filter className="w-3.5 h-3.5" />
+              <span>Filter</span>
+            </button>
+
+            {/* Export Button */}
+            <button
+              onClick={handleExportCSV}
+              className="px-3 py-1.5 rounded-xl text-xs font-bold border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-1.5 cursor-pointer"
+              title="Export filtered list to CSV"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Export</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Expandable Filter Drawer */}
+        {showFilters && (
+          <div className="p-4 bg-gray-50/60 border-b border-gray-200 flex flex-wrap items-center gap-3 text-xs">
+            <div>
+              <span className="text-gray-500 font-semibold mr-1.5">Org:</span>
+              <select
+                value={filterOrg}
+                onChange={(e) => setFilterOrg(e.target.value)}
+                className="px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-medium text-gray-800 outline-none focus:border-[#001A4D]"
+              >
+                <option value="all">All Organizations</option>
+                {orgs.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.acronym || o.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <span className="text-gray-500 font-semibold mr-1.5">Category:</span>
+              <select
+                value={filterCategory}
+                onChange={(e) => setFilterCategory(e.target.value)}
+                className="px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-medium text-gray-800 outline-none focus:border-[#001A4D]"
+              >
+                <option value="all">All Categories</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <span className="text-gray-500 font-semibold mr-1.5">Date:</span>
+              <select
+                value={filterDateRange}
+                onChange={(e) => setFilterDateRange(e.target.value as DateRangeOption)}
+                className="px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-medium text-gray-800 outline-none focus:border-[#001A4D]"
+              >
+                <option value="all">All Time</option>
+                <option value="this_week">This Week</option>
+                <option value="this_month">This Month</option>
+                <option value="custom">Custom Range</option>
+              </select>
+            </div>
+
+            {filterDateRange === "custom" && (
+              <div className="flex items-center gap-2">
+                <Input
+                  type="date"
+                  value={customFrom}
+                  onChange={(e) => setCustomFrom(e.target.value)}
+                  className="w-32 h-7 text-xs bg-white"
+                />
+                <span className="text-gray-400">to</span>
+                <Input
+                  type="date"
+                  value={customTo}
+                  onChange={(e) => setCustomTo(e.target.value)}
+                  className="w-32 h-7 text-xs bg-white"
+                />
+              </div>
+            )}
 
             {hasActiveFilters && (
               <button
                 onClick={resetFilters}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs text-red-500 hover:text-red-600 border border-red-200 hover:border-red-400 rounded-lg transition-colors"
+                className="ml-auto text-xs text-red-600 hover:text-red-700 font-semibold flex items-center gap-1 cursor-pointer"
               >
                 <RotateCcw className="w-3 h-3" />
-                Reset
+                Reset Filters
               </button>
             )}
           </div>
-        </div>
-
-        {/* Custom Date Range Picker */}
-        {filterDateRange === "custom" && (
-          <div className="flex items-center gap-3 mt-3 p-3 bg-gray-50 border border-[#E0E0E0] rounded-lg w-fit">
-            <span className="text-sm text-gray-500 font-medium">From</span>
-            <Input
-              type="date"
-              value={customFrom}
-              onChange={(e) => setCustomFrom(e.target.value)}
-              className="w-40 h-8 text-sm"
-            />
-            <span className="text-sm text-gray-500 font-medium">To</span>
-            <Input
-              type="date"
-              value={customTo}
-              onChange={(e) => setCustomTo(e.target.value)}
-              className="w-40 h-8 text-sm"
-            />
-          </div>
         )}
 
-        {/* Event List */}
-        <div className="mt-6 space-y-4">
+        {/* ── Table Container (No inner vertical scroll) ── */}
+        <div className="overflow-x-auto relative">
           {isLoading ? (
-            <p className="text-gray-500 py-8 text-center">Loading events...</p>
-          ) : activeTab === "drafts" ? (
-            /* ── DRAFTS TAB ──────────────────────────────────────────────── */
-            paginatedItems.length === 0 ? (
-              <div className="py-16 text-center">
-                <FileEdit className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-500 font-medium">No drafts found</p>
-                <p className="text-gray-400 text-sm mt-1">
-                  Click "Create Event (SAO)" and save as draft to continue later.
-                </p>
-              </div>
-            ) : (
-              (paginatedItems as EventDocument[]).map((draft) => {
-                const progress = getDraftProgress(draft);
-                const totalSteps = 7;
-                const progressPct = Math.round((progress.step / totalSteps) * 100);
-
-                return (
-                  <Card key={draft.id} className="border-amber-200 hover:shadow-md transition-shadow bg-amber-50/30">
-                    <CardContent className="p-6">
-                      <div className="flex items-start gap-4">
-                        <div className="w-2 h-2 rounded-full mt-2 bg-amber-400 flex-shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-start justify-between mb-2">
-                            <div>
-                              <h3 className="font-bold text-[#001A4D] text-lg">
-                                {draft.title || "Untitled Draft"}
-                              </h3>
-                              <p className="text-gray-500 text-sm">
-                                {draft.hostingOrgId ? getOrgName(draft.hostingOrgId) : "No organization set"}
-                              </p>
-                            </div>
-                            <Badge className="bg-amber-100 text-amber-700 border border-amber-300 hover:bg-amber-100">
-                              Draft
-                            </Badge>
-                          </div>
-
-                          {/* Progress bar */}
-                          <div className="mb-3">
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="text-xs text-gray-500">
-                                Progress: <span className="font-medium text-[#001A4D]">{progress.label}</span>
-                              </span>
-                              <span className="text-xs text-gray-400">Step {progress.step} of {totalSteps}</span>
-                            </div>
-                            <div className="w-full bg-gray-200 rounded-full h-1.5">
-                              <div
-                                className="bg-gradient-to-r from-amber-400 to-amber-500 h-1.5 rounded-full transition-all"
-                                style={{ width: `${progressPct}%` }}
-                              />
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-4 text-xs text-gray-400 mb-4">
-                            <div className="flex items-center gap-1">
-                              <Clock className="w-3 h-3" />
-                              <span>Last saved: {formatTimestamp(draft.updatedAt)}</span>
-                            </div>
-                            {draft.referenceId && (
-                              <span>Ref: {draft.referenceId}</span>
-                            )}
-                          </div>
-
-                          <div className="flex items-center gap-2">
-                            <Button
-                              onClick={() => handleResumeDraft(draft)}
-                              className="bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] hover:opacity-90 text-white font-bold shadow-xs"
-                            >
-                              <RotateCcw className="w-4 h-4 mr-2" />
-                              Resume Draft
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })
-            )
+            <div className="h-full flex items-center justify-center text-sm text-gray-500">
+              Loading events...
+            </div>
+          ) : activeList.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-2">
+              <Calendar className="w-12 h-12 text-gray-300 mx-auto" />
+              <div className="font-bold text-gray-700 text-sm">No events found</div>
+              <p className="text-xs text-gray-400 max-w-sm">
+                {activeTab === "drafts"
+                  ? "No saved drafts. You can create a new SAO event and save as draft."
+                  : "No events match the current filter or search criteria."}
+              </p>
+            </div>
           ) : (
-            /* ── NON-DRAFT TABS ──────────────────────────────────────────── */
-            paginatedItems.length === 0 ? (
-              <p className="text-gray-500 py-8 text-center">No events found matching the criteria.</p>
-            ) : (
-              (paginatedItems as EventDocument[]).map((event) => {
-                const isPending = event.proposalStatus === "pending_review" || event.proposalStatus === "pending";
-                const isApproved = event.proposalStatus === "approved";
-                const isRejected = event.proposalStatus === "rejected";
-                const firstSession = getFirstSessionDate(event) ?? "TBD";
-                const orgName = getOrgName(event.hostingOrgId);
-                const orgAcronym = getOrgAcronym(event.hostingOrgId);
-                const orgLogo = getOrgLogo(event.hostingOrgId);
-                const isSasAdmin = ['sas', 'sas_admin', 'sao', 'sao_admin'].includes(event.hostingOrgId);
-
-                return (
-                  <Card key={event.id} className="border border-[#E5E7EB] hover:border-[#0E4EBD]/40 hover:shadow-lg transition-all duration-200 bg-white overflow-hidden rounded-xl">
-                    {/* Top Organization Header & Status Bar */}
-                    <div className="px-4 py-3 sm:px-5 sm:py-3.5 flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 bg-slate-50/80">
-                      {/* Organization Branding Section with Logo */}
-                      <div className="flex items-center gap-3.5">
-                        {orgLogo ? (
-                          <img
-                            src={orgLogo}
-                            alt={orgAcronym}
-                            className="w-12 h-12 rounded-xl object-contain border border-gray-200 shadow-xs flex-shrink-0 bg-white p-0.5"
-                          />
-                        ) : (
-                          <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-black text-base shadow-xs flex-shrink-0 ${
-                            isSasAdmin
-                              ? 'bg-gradient-to-br from-[#001A4D] via-[#002B7F] to-[#0E4EBD] text-[#FFD41C]'
-                              : 'bg-gradient-to-br from-[#83358E] via-[#0E4EBD] to-[#001A4D] text-white'
-                          }`}>
-                            {isSasAdmin ? 'SAS' : orgAcronym.slice(0, 3)}
+            <table className="w-full text-left text-xs border-collapse">
+              <thead className="bg-gray-50/90 text-gray-500 font-bold uppercase tracking-wider text-[11px] border-b border-gray-200 sticky top-0 z-10 backdrop-blur-xs">
+                <tr>
+                  <th className="py-3 px-4">Event</th>
+                  <th className="py-3 px-4">Organization</th>
+                  <th className="py-3 px-4">Type</th>
+                  <th className="py-3 px-4">Date</th>
+                  <th className="py-3 px-4">Venue</th>
+                  <th className="py-3 px-4">Budget</th>
+                  <th className="py-3 px-4">Submitted</th>
+                  <th className="py-3 px-4">Status</th>
+                  <th className="py-3 px-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 text-gray-700 font-normal">
+                {activeTab === "drafts" ? (
+                  (paginatedItems as EventDocument[]).map((draft) => (
+                    <tr key={draft.id} className="hover:bg-gray-50/80 transition-colors">
+                      <td className="py-3.5 px-4">
+                        <div className="font-bold text-gray-900 text-sm leading-snug">
+                          {draft.title || "Untitled Draft"}
+                        </div>
+                        {draft.referenceId && (
+                          <div className="text-[11px] text-gray-400 font-mono mt-0.5">
+                            Ref: {draft.referenceId}
                           </div>
                         )}
-                        <div>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-black text-lg sm:text-xl text-[#001A4D] tracking-tight">
-                              {orgName}
-                            </span>
-                            <span className={`px-2.5 py-0.5 text-xs font-black rounded-md ${
-                              isSasAdmin
-                                ? 'bg-[#001A4D] text-[#FFD41C]'
-                                : 'bg-blue-100/90 text-[#0E4EBD]'
-                            }`}>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-full bg-amber-100 text-amber-800 font-bold text-[10px] flex items-center justify-center flex-shrink-0">
+                            {getOrgAcronym(draft.hostingOrgId || "").slice(0, 2)}
+                          </div>
+                          <span className="font-semibold text-gray-800 text-xs">
+                            {getOrgAcronym(draft.hostingOrgId || "")}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <span className="px-2 py-0.5 rounded-md text-[11px] font-medium bg-gray-100 text-gray-700">
+                          {getCategoryName(draft.eventCategoryId || "")}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 text-gray-600 font-medium">
+                        <div className="flex items-center gap-1.5">
+                          <Calendar className="w-3.5 h-3.5 text-gray-400" />
+                          <span>{formatShortDate(getFirstSessionDate(draft))}</span>
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-4 text-gray-600">
+                        <div className="flex items-center gap-1.5">
+                          <MapPin className="w-3.5 h-3.5 text-gray-400" />
+                          <span>{getVenueName(draft.venueId)}</span>
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-4 font-bold text-gray-900">
+                        {formatCurrency(draft.totalRequestedBudget || 0)}
+                      </td>
+                      <td className="py-3.5 px-4 text-gray-500 text-[11px]">
+                        {formatSubmittedDate(draft.updatedAt || draft.createdAt)}
+                      </td>
+                      <td className="py-3.5 px-4">
+                        {renderStatusBadge("draft", draft)}
+                      </td>
+                      <td className="py-3.5 px-4 text-right">
+                        <Button
+                          size="sm"
+                          onClick={() => handleResumeDraft(draft)}
+                          className="bg-[#001A4D] hover:bg-[#002D72] text-white text-xs font-bold px-3 py-1 rounded-lg shadow-xs cursor-pointer"
+                        >
+                          Resume Draft
+                        </Button>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  (paginatedItems as EventDocument[]).map((event) => {
+                    const orgAcronym = getOrgAcronym(event.hostingOrgId);
+                    const orgLogo = getOrgLogo(event.hostingOrgId);
+                    const isRejected = event.proposalStatus === "rejected";
+
+                    return (
+                      <tr key={event.id} className="hover:bg-slate-50/80 transition-colors">
+                        {/* Event Title */}
+                        <td className="py-3.5 px-4 max-w-[220px]">
+                          <div className="font-bold text-gray-900 text-sm leading-snug truncate">
+                            {event.title}
+                          </div>
+                          {isRejected && event.rejectionReason ? (
+                            <div className="text-[11px] text-red-600 font-medium truncate mt-0.5">
+                              {event.rejectionReason}
+                            </div>
+                          ) : event.referenceId ? (
+                            <div className="text-[11px] text-gray-400 font-mono mt-0.5">
+                              Ref: {event.referenceId}
+                            </div>
+                          ) : null}
+                        </td>
+
+                        {/* Organization */}
+                        <td className="py-3.5 px-4">
+                          <div className="flex items-center gap-2">
+                            {orgLogo ? (
+                              <img
+                                src={orgLogo}
+                                alt={orgAcronym}
+                                className="w-6 h-6 rounded-full object-contain border border-gray-200 bg-white p-0.5 flex-shrink-0"
+                              />
+                            ) : (
+                              <div className="w-6 h-6 rounded-full bg-[#001A4D] text-white font-bold text-[10px] flex items-center justify-center flex-shrink-0">
+                                {orgAcronym.slice(0, 2)}
+                              </div>
+                            )}
+                            <span className="font-bold text-gray-800 text-xs">
                               {orgAcronym}
                             </span>
                           </div>
-                          <div className="text-xs sm:text-sm text-gray-600 font-medium mt-0.5">
-                            <span>Ref ID: <strong className="font-mono text-gray-900 font-bold">{event.referenceId || 'N/A'}</strong></span>
-                          </div>
-                        </div>
-                      </div>
+                        </td>
 
-                      {/* Proposal Status Badge — NO hourglass emoji */}
-                      <Badge
-                        className={`px-4 py-1.5 text-xs sm:text-sm font-black rounded-full shadow-xs ${
-                          isPending
-                            ? "bg-amber-400 text-[#001A4D] hover:bg-amber-400 border-0"
-                            : isApproved
-                            ? "bg-gradient-to-r from-[#22C55E] to-[#16A34A] text-white border-0"
-                            : isRejected
-                            ? "bg-gradient-to-r from-[#EF4444] to-[#F97316] text-white border-0"
-                            : "bg-gray-100 text-gray-800"
-                        }`}
-                      >
-                        {isPending ? "Pending Review" : isApproved ? "Approved" : isRejected ? "Rejected" : event.proposalStatus}
-                      </Badge>
-                    </div>
-
-                    {/* Main Content Body */}
-                    <CardContent className="p-4 sm:p-5 space-y-4">
-                      {/* Event Title & Category Badges */}
-                      <div className="space-y-1.5">
-                        <h3 className="font-black text-[#001A4D] text-xl sm:text-2xl tracking-tight leading-snug">
-                          {event.title}
-                        </h3>
-                        {event.tagline && (
-                          <p className="text-sm sm:text-base text-gray-700 italic font-medium">
-                            "{event.tagline}"
-                          </p>
-                        )}
-                        <div className="flex flex-wrap items-center gap-2 pt-1">
-                          {event.eventCategoryId && (
-                            <Badge className="bg-slate-100 text-gray-800 hover:bg-slate-200 text-xs sm:text-sm font-bold px-3 py-1 border border-slate-300">
-                              <Tag className="w-3.5 h-3.5 mr-1.5 text-[#0E4EBD]" />
-                              {getCategoryName(event.eventCategoryId)}
-                            </Badge>
-                          )}
-                          {event.sessions && event.sessions.length > 0 && (
-                            <Badge className="bg-purple-50 text-purple-800 hover:bg-purple-100 text-xs sm:text-sm font-bold px-3 py-1 border border-purple-300">
-                              <Clock className="w-3.5 h-3.5 mr-1.5 text-purple-600" />
-                              {event.sessions.length} Session{event.sessions.length > 1 ? 's' : ''}
-                            </Badge>
-                          )}
-                          {event.enableQRTickets && (
-                            <Badge className="bg-blue-50 text-blue-800 hover:bg-blue-100 text-xs sm:text-sm font-bold px-3 py-1 border border-blue-300">
-                              QR Tickets Enabled
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Rejection Reason Box */}
-                      {isRejected && event.rejectionReason && (
-                        <div className="bg-red-50 border-l-4 border-red-500 p-3.5 rounded-r-lg text-sm text-red-800 font-medium">
-                          <span className="font-bold">Rejection Reason:</span> {event.rejectionReason}
-                        </div>
-                      )}
-
-                      {/* Middle Info Grid — Key Event Information */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-sm text-gray-800 bg-slate-50/80 p-3.5 rounded-xl border border-slate-200/80">
-                        {/* Session Schedule List */}
-                        <div className="col-span-full space-y-2">
-                          <span className="text-[11px] uppercase text-gray-500 font-black tracking-wider flex items-center gap-1.5">
-                            <Calendar className={`w-3.5 h-3.5 ${isPending ? "text-[#0E4EBD]" : isApproved ? "text-green-600" : "text-red-600"}`} />
-                            Event Schedule & Sessions ({event.sessions?.length || 0})
+                        {/* Type / Category */}
+                        <td className="py-3.5 px-4">
+                          <span className="px-2.5 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-700 inline-block">
+                            {getCategoryName(event.eventCategoryId || "")}
                           </span>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            {(event.sessions && event.sessions.length > 0 ? event.sessions : []).map((sess, idx) => (
-                              <div key={sess.id || idx} className="bg-white p-2.5 rounded-lg border border-slate-200 shadow-xs flex items-center justify-between gap-3 text-xs">
-                                <div>
-                                  <span className="font-extrabold text-[#001A4D] block text-xs sm:text-sm">
-                                    {sess.title || `Session ${idx + 1}`}
-                                  </span>
-                                  <span className="text-gray-700 font-bold font-mono text-[11px] sm:text-xs">
-                                    {formatSessionDateTime(sess.date, sess.startTime, sess.endTime)}
-                                  </span>
-                                </div>
-                              </div>
-                            ))}
-                            {(!event.sessions || event.sessions.length === 0) && (
-                              <div className="bg-white p-2.5 rounded-lg border border-slate-200 text-xs text-gray-500 italic">
-                                No session schedule set
-                              </div>
-                            )}
-                          </div>
-                        </div>
+                        </td>
 
-                        {event.venueId && getVenueName(event.venueId) && (
-                          <div className="flex items-center gap-2.5">
-                            <MapPin className="w-4 h-4 text-rose-500 flex-shrink-0" />
-                            <div>
-                              <span className="text-[11px] uppercase text-gray-500 font-extrabold block tracking-wider">Venue</span>
-                              <strong className="text-gray-900 font-bold text-sm">{getVenueName(event.venueId)}</strong>
-                            </div>
+                        {/* Date */}
+                        <td className="py-3.5 px-4 text-gray-600 font-medium whitespace-nowrap">
+                          <div className="flex items-center gap-1.5">
+                            <Calendar className="w-3.5 h-3.5 text-gray-400" />
+                            <span>{formatShortDate(getFirstSessionDate(event))}</span>
                           </div>
-                        )}
+                        </td>
 
-                        {event.expectedParticipantCount > 0 && (
-                          <div className="flex items-center gap-2.5">
-                            <Users className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                            <div>
-                              <span className="text-[11px] uppercase text-gray-500 font-extrabold block tracking-wider">Expected Reach</span>
-                              <strong className="text-gray-900 font-bold text-sm">{event.expectedParticipantCount} Participants</strong>
-                            </div>
+                        {/* Venue */}
+                        <td className="py-3.5 px-4 text-gray-600 whitespace-nowrap max-w-[160px] truncate">
+                          <div className="flex items-center gap-1.5 truncate">
+                            <MapPin className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                            <span className="truncate">{getVenueName(event.venueId)}</span>
                           </div>
-                        )}
+                        </td>
 
-                        {event.documents && event.documents.length > 0 && (
-                          <div className="flex items-center gap-2.5">
-                            <FileText className="w-4 h-4 text-amber-600 flex-shrink-0" />
-                            <div>
-                              <span className="text-[11px] uppercase text-gray-500 font-extrabold block tracking-wider">Submitted Files</span>
-                              <strong className="text-gray-900 font-bold text-sm">{event.documents.length} File(s) Attached</strong>
-                            </div>
-                          </div>
-                        )}
-                      </div>
+                        {/* Budget */}
+                        <td className="py-3.5 px-4 font-bold text-gray-900 whitespace-nowrap text-sm">
+                          {formatCurrency(event.totalRequestedBudget || event.totalApprovedBudget || 0)}
+                        </td>
 
-                      {/* Bottom Layout: Left View Details Button, Right Prominent Large Budget */}
-                      <div className="pt-3 flex flex-col md:flex-row md:items-center justify-between gap-4 border-t border-gray-100">
-                        {/* Left Side: View Details Button */}
-                        <div>
-                          <Button
-                            className="bg-[#001A4D] hover:bg-[#001A4D]/90 text-white font-bold px-6 py-2.5 rounded-lg shadow-xs cursor-pointer text-sm"
+                        {/* Submitted */}
+                        <td className="py-3.5 px-4 text-gray-500 text-xs whitespace-nowrap">
+                          {formatSubmittedDate(event.createdAt)}
+                        </td>
+
+                        {/* Status */}
+                        <td className="py-3.5 px-4 whitespace-nowrap">
+                          {renderStatusBadge(event.proposalStatus, event)}
+                        </td>
+
+                        {/* Actions */}
+                        <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                          <button
                             onClick={() => setSelectedEvent(event)}
+                            className="px-3 py-1.5 bg-gray-100 hover:bg-[#001A4D] hover:text-white text-gray-700 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer"
                           >
-                            <Eye className="w-4 h-4 mr-2 text-[#FFD41C]" />
-                            View Full Proposal
-                          </Button>
-                        </div>
-
-                        {/* Right Side: Prominent & BIG Budget Box in Lower Right */}
-                        <div className="bg-gradient-to-br from-blue-50 via-indigo-50/70 to-purple-50 border-2 border-[#0E4EBD]/30 p-3.5 sm:p-4 rounded-xl text-right flex-shrink-0 min-w-[230px] shadow-xs">
-                          <div className="text-xs font-extrabold text-gray-600 uppercase tracking-wider mb-0.5 flex items-center justify-end gap-1">
-                            <Coins className="w-4 h-4 text-[#0E4EBD]" />
-                            <span>Requested Budget</span>
-                          </div>
-                          <div className="text-3xl sm:text-4xl font-black text-[#001A4D] tracking-tight">
-                            {formatCurrency(event.totalRequestedBudget || event.totalApprovedBudget || 0)}
-                          </div>
-                          {event.totalApprovedBudget !== undefined && event.totalApprovedBudget !== (event.totalRequestedBudget || 0) && (
-                            <div className="text-xs sm:text-sm text-green-700 font-extrabold mt-1">
-                              Approved: {formatCurrency(event.totalApprovedBudget)}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })
-            )
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>View</span>
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           )}
         </div>
 
-        {/* Pagination */}
-        <div className="flex items-center justify-between mt-6 bg-white p-4 rounded-xl border border-[#E0E0E0]">
-          <p className="text-sm text-gray-500">
-            {activeList.length === 0
-              ? "No events found"
-              : `Showing ${(currentPage - 1) * ITEMS_PER_PAGE + 1} to ${Math.min(currentPage * ITEMS_PER_PAGE, activeList.length)} of ${activeList.length} ${activeTab === "drafts" ? "drafts" : "events"}`}
-          </p>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handlePageChange(currentPage - 1)}
+        {/* ── Bottom Pagination Bar ── */}
+        <div className="p-3.5 bg-gray-50/60 border-t border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-gray-500">
+          <div>
+            {activeList.length === 0 ? (
+              "Showing 0 events"
+            ) : (
+              <span>
+                Showing <strong className="text-gray-900 font-bold">{(currentPage - 1) * ITEMS_PER_PAGE + 1}</strong> to{" "}
+                <strong className="text-gray-900 font-bold">{Math.min(currentPage * ITEMS_PER_PAGE, activeList.length)}</strong> of{" "}
+                <strong className="text-gray-900 font-bold">{activeList.length}</strong> events
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
               disabled={currentPage === 1}
+              className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed font-semibold transition-colors cursor-pointer"
             >
-              <ChevronLeft className="w-4 h-4" />
-            </Button>
-            <div className="flex items-center gap-2 px-2">
-              <span className="text-sm text-gray-600">Page</span>
-              <Input
-                className="w-12 h-8 text-center px-1"
-                value={pageInput}
-                onChange={(e) => setPageInput(e.target.value)}
-                onKeyDown={handlePageInputSubmit}
-                onBlur={() => setPageInput(currentPage.toString())}
-              />
-              <span className="text-sm text-gray-600">of {totalPages}</span>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handlePageChange(currentPage + 1)}
-              disabled={currentPage === totalPages}
+              Previous
+            </button>
+
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+              <button
+                key={pageNum}
+                onClick={() => setCurrentPage(pageNum)}
+                className={`w-7 h-7 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                  currentPage === pageNum
+                    ? "bg-[#001A4D] text-white"
+                    : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-100"
+                }`}
+              >
+                {pageNum}
+              </button>
+            ))}
+
+            <button
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages || totalPages === 0}
+              className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed font-semibold transition-colors cursor-pointer"
             >
-              <ChevronRight className="w-4 h-4" />
-            </Button>
+              Next
+            </button>
           </div>
         </div>
-      </Tabs>
+      </div>
 
       {/* SAO Event Creation / Resume Draft Modal */}
       <SaoEventCreationModal
         key={modalKey}
         isOpen={isModalOpen}
-        onClose={handleCloseModal}
+        onClose={() => {
+          setIsModalOpen(false);
+          setResumeDraft(null);
+        }}
         initialDraft={resumeDraft ?? undefined}
         draftId={resumeDraft?.id}
       />

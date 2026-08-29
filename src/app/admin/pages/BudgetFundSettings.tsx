@@ -1,4 +1,4 @@
-import { useState, useMemo, type ElementType } from "react";
+import { useState, useMemo, useEffect, type ElementType } from "react";
 import {
   Plus,
   Building2,
@@ -18,12 +18,19 @@ import {
   DollarSign,
   FileText,
   ChevronRight,
+  ChevronLeft,
   Search,
   Filter,
   RefreshCw,
   Receipt,
   Layers,
-  AlertCircle
+  AlertCircle,
+  Download,
+  Upload,
+  Image as ImageIcon,
+  Trash2,
+  Camera,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useSemesters } from "../../modules/academic/hooks/useAcademicStream";
@@ -39,6 +46,24 @@ import { formatCurrency } from "../../utils/currency";
 import { formatAppDate, formatAppDateTime } from "../../utils/date";
 import TransactionDetailModal from "../../modules/finance/components/TransactionDetailModal";
 import { useUserNameResolver } from "../../modules/finance/hooks/useUserNameResolver";
+import { uploadToCloudinary } from "../../../services/cloudinary";
+
+// ─── Helper to extract numeric timestamp for latest-first sorting ───────────────
+function getTxTimestamp(tx: SaoLedgerDocument): number {
+  if (tx.date) {
+    if (typeof (tx.date as any).toDate === "function") return (tx.date as any).toDate().getTime();
+    if (typeof (tx.date as any).seconds === "number") return (tx.date as any).seconds * 1000;
+    const d = new Date(tx.date as any);
+    if (!isNaN(d.getTime())) return d.getTime();
+  }
+  if (tx.createdAt) {
+    if (typeof (tx.createdAt as any).toDate === "function") return (tx.createdAt as any).toDate().getTime();
+    if (typeof (tx.createdAt as any).seconds === "number") return (tx.createdAt as any).seconds * 1000;
+    const d = new Date(tx.createdAt as any);
+    if (!isNaN(d.getTime())) return d.getTime();
+  }
+  return 0;
+}
 
 // ─── Add School Budget Allocation Modal ───────────────────────────────────────
 function AddBudgetModal({ currentBalance, onClose, onSave }: {
@@ -50,9 +75,26 @@ function AddBudgetModal({ currentBalance, onClose, onSave }: {
   const availableSemesters = semesters.filter(s => s.status === 'ACTIVE' || s.status === 'UPCOMING');
 
   const [carryOver, setCarryOver] = useState(false);
-  const [form, setForm] = useState({ semesterId: "", amount: "", notes: "" });
+  const [form, setForm] = useState({ semesterId: "", amount: "", notes: "", receiptNumber: "" });
+  const [receiptUrl, setReceiptUrl] = useState<string>("");
+  const [isUploading, setIsUploading] = useState(false);
 
   const selectedSemester = availableSemesters.find(s => s.id === form.semesterId);
+
+  const handleFileUpload = async (file: File) => {
+    if (!file) return;
+    setIsUploading(true);
+    try {
+      const res = await uploadToCloudinary(file, { folder: "finance/budget_proofs" });
+      setReceiptUrl(res.secureUrl);
+      toast.success("Proof / allocation receipt photo uploaded successfully.");
+    } catch (err: any) {
+      console.error("Failed to upload proof photo:", err);
+      toast.error(err?.message || "Failed to upload proof photo.");
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   const handleSave = () => {
     if (!selectedSemester || !form.amount) return;
@@ -70,6 +112,9 @@ function AddBudgetModal({ currentBalance, onClose, onSave }: {
       source: "allocation",
       amount: finalAmount,
       addedBy: "Admin SAO",
+      receiptUrl: receiptUrl || undefined,
+      proofUrl: receiptUrl || undefined,
+      receiptNumber: form.receiptNumber?.trim() || undefined,
     });
     onClose();
   };
@@ -78,7 +123,7 @@ function AddBudgetModal({ currentBalance, onClose, onSave }: {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/55" onClick={onClose} />
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-[560px] overflow-hidden">
-        <div className="bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] px-6 py-4 flex items-center justify-between">
+        <div className="bg-[#001A4D] px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Building2 className="w-5 h-5 text-[#FFD41C]" />
             <h3 className="text-white font-bold text-base">Add School Budget Allocation</h3>
@@ -143,6 +188,79 @@ function AddBudgetModal({ currentBalance, onClose, onSave }: {
             />
           </div>
 
+          {/* ── Proof of Fund / Receipt Photo Upload ── */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <Receipt className="w-4 h-4 text-[#001A4D]" />
+                Proof of Allocation / Receipt Evidence <span className="text-xs text-gray-400 font-normal">(Optional)</span>
+              </span>
+            </label>
+
+            {receiptUrl ? (
+              <div className="flex items-center gap-3 p-3 bg-gray-50 border border-gray-200 rounded-xl">
+                <img
+                  src={receiptUrl}
+                  alt="Proof Preview"
+                  className="w-16 h-16 object-cover rounded-lg border border-gray-200"
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-gray-900 truncate flex items-center gap-1">
+                    <CheckCircle className="w-3.5 h-3.5 text-green-600" />
+                    Proof Photo Attached
+                  </p>
+                  <p className="text-[11px] text-gray-500 mt-0.5">Uploaded & ready to save with transaction</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setReceiptUrl("")}
+                  className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                  title="Remove photo"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <label className="border-2 border-dashed border-gray-300 hover:border-[#001A4D] rounded-xl p-4 flex flex-col items-center justify-center gap-1.5 cursor-pointer bg-gray-50/50 hover:bg-gray-50 transition-colors">
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  className="hidden"
+                  disabled={isUploading}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) handleFileUpload(f);
+                  }}
+                />
+                {isUploading ? (
+                  <div className="flex items-center gap-2 text-xs font-semibold text-[#001A4D] py-1">
+                    <Loader2 className="w-4 h-4 animate-spin text-[#0E4EBD]" />
+                    Uploading proof to cloud...
+                  </div>
+                ) : (
+                  <>
+                    <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center text-[#001A4D]">
+                      <Upload className="w-4 h-4" />
+                    </div>
+                    <div className="text-xs font-bold text-gray-700">Click to upload allocation proof / receipt photo</div>
+                    <div className="text-[10px] text-gray-400">PNG, JPG, WEBP up to 5MB</div>
+                  </>
+                )}
+              </label>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Official Receipt (OR) / Check / Ref # (optional)</label>
+            <input
+              type="text"
+              placeholder="e.g. OR-2026-0042 or Check #12345"
+              value={form.receiptNumber}
+              onChange={(e) => setForm({ ...form, receiptNumber: e.target.value })}
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#001A4D]/20 focus:border-[#001A4D]"
+            />
+          </div>
+
           <div className={`flex items-start gap-3 p-4 border rounded-lg ${currentBalance > 0 ? "bg-gray-50 border-gray-200" : "bg-gray-50/50 border-gray-100 opacity-60"}`}>
             <div className="flex-1">
               <p className="text-sm font-medium text-gray-900">Carry Over Unspent Balance from Previous Semester</p>
@@ -176,7 +294,7 @@ function AddBudgetModal({ currentBalance, onClose, onSave }: {
           <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 transition-colors cursor-pointer">Cancel</button>
           <button
             onClick={handleSave}
-            className="px-5 py-2.5 bg-[#001A4D] text-white rounded-lg text-sm font-medium flex items-center gap-2 hover:bg-[#001A4D]/90 transition-colors cursor-pointer"
+            className="px-5 py-2.5 bg-[#001A4D] hover:bg-[#002D72] text-white rounded-lg text-sm font-medium flex items-center gap-2 transition-colors cursor-pointer"
           >
             <Save className="w-4 h-4" />
             Save Budget Allocation
@@ -215,7 +333,7 @@ function CollectionDetailModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/55" onClick={onClose} />
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-[680px] max-h-[90vh] flex flex-col overflow-hidden">
-        <div className="bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] px-6 py-4 flex items-center justify-between flex-shrink-0">
+        <div className="bg-[#001A4D] px-6 py-4 flex items-center justify-between flex-shrink-0">
           <div>
             <div className="flex items-center gap-2">
               <h3 className="text-white font-bold text-base">{collection.eventName}</h3>
@@ -223,7 +341,7 @@ function CollectionDetailModal({
                 {collection.type?.replace('_', ' ') || 'Collection'}
               </span>
             </div>
-            <p className="text-blue-100 text-xs mt-0.5">Student Payables & Fines Collection Breakdown · {collection.eventDate}</p>
+            <p className="text-white/80 text-xs mt-0.5">{collection.eventDate}</p>
           </div>
           <button onClick={onClose} className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10 cursor-pointer">
             <X className="w-5 h-5" />
@@ -376,13 +494,48 @@ function AddExpenseModal({ activeSemesterId, events, onClose, onSave }: {
   onClose: () => void;
   onSave: (tx: Omit<SaoLedgerDocument, "id" | "createdAt">) => void;
 }) {
-  const [form, setForm] = useState({ description: "", event: "", amount: "", date: new Date().toISOString().split("T")[0] });
+  const [form, setForm] = useState({ description: "", event: "", amount: "", date: new Date().toISOString().split("T")[0], receiptNumber: "" });
+  const [receiptUrl, setReceiptUrl] = useState<string>("");
+  const [isUploading, setIsUploading] = useState(false);
+
+  const handleFileUpload = async (file: File) => {
+    if (!file) return;
+    setIsUploading(true);
+    try {
+      const res = await uploadToCloudinary(file, { folder: "finance/expense_receipts" });
+      setReceiptUrl(res.secureUrl);
+      toast.success("Expense receipt photo uploaded successfully.");
+    } catch (err: any) {
+      console.error("Failed to upload expense receipt:", err);
+      toast.error(err?.message || "Failed to upload receipt photo.");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleSave = () => {
+    if (!form.description || !form.amount || !form.date) return;
+    onSave({
+      semesterId: activeSemesterId,
+      date: Timestamp.fromDate(new Date(form.date)),
+      description: form.description,
+      eventId: form.event || null,
+      type: "expense",
+      source: "manual_expense",
+      amount: parseFloat(form.amount),
+      addedBy: "Admin SAO",
+      receiptUrl: receiptUrl || undefined,
+      proofUrl: receiptUrl || undefined,
+      receiptNumber: form.receiptNumber?.trim() || undefined,
+    });
+    onClose();
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/55" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-[480px] overflow-hidden">
-        <div className="bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] px-6 py-4 flex items-center justify-between">
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-[520px] overflow-hidden max-h-[90vh] flex flex-col">
+        <div className="bg-[#001A4D] px-6 py-4 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3">
             <ArrowUpRight className="w-5 h-5 text-[#FFD41C]" />
             <h3 className="text-white font-bold text-base">Add Budget Expense</h3>
@@ -391,7 +544,8 @@ function AddExpenseModal({ activeSemesterId, events, onClose, onSave }: {
             <X className="w-5 h-5" />
           </button>
         </div>
-        <div className="p-5 space-y-4">
+
+        <div className="p-5 space-y-4 overflow-y-auto flex-1">
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Date <span className="text-red-500">*</span></label>
@@ -423,25 +577,86 @@ function AddExpenseModal({ activeSemesterId, events, onClose, onSave }: {
               ))}
             </select>
           </div>
+
+          {/* ── Proof of Expense / Receipt Photo Upload ── */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <Receipt className="w-4 h-4 text-red-600" />
+                Proof of Expense / Receipt Photo <span className="text-xs text-gray-400 font-normal">(Optional)</span>
+              </span>
+            </label>
+
+            {receiptUrl ? (
+              <div className="flex items-center gap-3 p-3 bg-gray-50 border border-gray-200 rounded-xl">
+                <img
+                  src={receiptUrl}
+                  alt="Receipt Preview"
+                  className="w-16 h-16 object-cover rounded-lg border border-gray-200"
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-gray-900 truncate flex items-center gap-1">
+                    <CheckCircle className="w-3.5 h-3.5 text-green-600" />
+                    Receipt Photo Attached
+                  </p>
+                  <p className="text-[11px] text-gray-500 mt-0.5">Uploaded & ready to save with expense</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setReceiptUrl("")}
+                  className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                  title="Remove photo"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <label className="border-2 border-dashed border-gray-300 hover:border-[#001A4D] rounded-xl p-4 flex flex-col items-center justify-center gap-1.5 cursor-pointer bg-gray-50/50 hover:bg-gray-50 transition-colors">
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  className="hidden"
+                  disabled={isUploading}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) handleFileUpload(f);
+                  }}
+                />
+                {isUploading ? (
+                  <div className="flex items-center gap-2 text-xs font-semibold text-[#001A4D] py-1">
+                    <Loader2 className="w-4 h-4 animate-spin text-[#0E4EBD]" />
+                    Uploading receipt to cloud...
+                  </div>
+                ) : (
+                  <>
+                    <div className="w-8 h-8 rounded-full bg-red-50 flex items-center justify-center text-red-600">
+                      <Upload className="w-4 h-4" />
+                    </div>
+                    <div className="text-xs font-bold text-gray-700">Click to upload official receipt photo</div>
+                    <div className="text-[10px] text-gray-400">PNG, JPG, WEBP up to 5MB</div>
+                  </>
+                )}
+              </label>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Official Receipt (OR) / Invoice # (optional)</label>
+            <input
+              type="text"
+              placeholder="e.g. OR# 987654 or Invoice #INV-2026"
+              value={form.receiptNumber}
+              onChange={(e) => setForm({ ...form, receiptNumber: e.target.value })}
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#001A4D]/20 focus:border-[#001A4D]"
+            />
+          </div>
         </div>
-        <div className="px-5 py-4 border-t border-gray-200 flex justify-between">
+
+        <div className="px-5 py-4 border-t border-gray-200 flex justify-between flex-shrink-0">
           <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 cursor-pointer">Cancel</button>
           <button
-            onClick={() => {
-              if (!form.description || !form.amount || !form.date) return;
-              onSave({
-                semesterId: activeSemesterId,
-                date: Timestamp.fromDate(new Date(form.date)),
-                description: form.description,
-                eventId: form.event || null,
-                type: "expense",
-                source: "manual_expense",
-                amount: parseFloat(form.amount),
-                addedBy: "Admin SAO",
-              });
-              onClose();
-            }}
-            className="px-5 py-2.5 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 flex items-center gap-2 cursor-pointer"
+            onClick={handleSave}
+            className="px-5 py-2.5 bg-[#001A4D] hover:bg-[#002D72] text-white rounded-lg text-sm font-medium flex items-center gap-2 transition-colors cursor-pointer"
           >
             <Save className="w-4 h-4" />
             Save Expense
@@ -518,30 +733,88 @@ export function BudgetFundSettings() {
   }, [rawTransactions]);
 
   const filteredTx = useMemo(() => {
-    return transactions.filter((t) => {
-      const typeLower = (t.type || '').toLowerCase();
-      const passType =
-        txFilter === "all"
+    return transactions
+      .filter((t) => {
+        const typeLower = (t.type || '').toLowerCase();
+        const passType =
+          txFilter === "all"
+            ? true
+            : txFilter === "income"
+            ? typeLower === "income"
+            : typeLower === "expense";
+
+        const passSource = sourceFilter === "all" ? true : t.source === sourceFilter;
+        const passSem = semesterFilter === "all" ? true : (!t.semesterId || t.semesterId === semesterFilter);
+        
+        const q = searchQuery.trim().toLowerCase();
+        const displayEvent = t.eventId ? (eventMap.get(t.eventId) || '') : '';
+        const passSearch = !q
           ? true
-          : txFilter === "income"
-          ? typeLower === "income"
-          : typeLower === "expense";
+          : (t.description || '').toLowerCase().includes(q) ||
+            displayEvent.toLowerCase().includes(q) ||
+            (t.addedBy || '').toLowerCase().includes(q) ||
+            (t.collectionId || '').toLowerCase().includes(q);
 
-      const passSource = sourceFilter === "all" ? true : t.source === sourceFilter;
-      const passSem = semesterFilter === "all" ? true : (!t.semesterId || t.semesterId === semesterFilter);
-      
-      const q = searchQuery.trim().toLowerCase();
-      const displayEvent = t.eventId ? (eventMap.get(t.eventId) || '') : '';
-      const passSearch = !q
-        ? true
-        : (t.description || '').toLowerCase().includes(q) ||
-          displayEvent.toLowerCase().includes(q) ||
-          (t.addedBy || '').toLowerCase().includes(q) ||
-          (t.collectionId || '').toLowerCase().includes(q);
-
-      return passType && passSource && passSem && passSearch;
-    });
+        return passType && passSource && passSem && passSearch;
+      })
+      .sort((a, b) => getTxTimestamp(b) - getTxTimestamp(a));
   }, [transactions, txFilter, sourceFilter, semesterFilter, searchQuery, eventMap]);
+
+  // Pagination for Budget Tracker (8 per page)
+  const [ledgerPage, setLedgerPage] = useState(1);
+  const LEDGER_PER_PAGE = 8;
+  const totalLedgerPages = Math.max(1, Math.ceil(filteredTx.length / LEDGER_PER_PAGE));
+
+  const paginatedTx = useMemo(() => {
+    const start = (ledgerPage - 1) * LEDGER_PER_PAGE;
+    return filteredTx.slice(start, start + LEDGER_PER_PAGE);
+  }, [filteredTx, ledgerPage]);
+
+  useEffect(() => {
+    setLedgerPage(1);
+  }, [txFilter, sourceFilter, semesterFilter, searchQuery]);
+
+  // Pagination for Student Collections (8 per page)
+  const [collectionsPage, setCollectionsPage] = useState(1);
+  const COLLECTIONS_PER_PAGE = 8;
+  const totalCollectionsPages = Math.max(1, Math.ceil(collections.length / COLLECTIONS_PER_PAGE));
+
+  const paginatedCollections = useMemo(() => {
+    const start = (collectionsPage - 1) * COLLECTIONS_PER_PAGE;
+    return collections.slice(start, start + COLLECTIONS_PER_PAGE);
+  }, [collections, collectionsPage]);
+
+  // Export filtered budget tracker transactions to CSV
+  const handleExportCSV = () => {
+    if (filteredTx.length === 0) {
+      toast.info(`No transactions to export.`);
+      return;
+    }
+    const headers = ["Date", "Description", "Added By", "Related Event", "Source", "Type", "Amount", "Running Balance"];
+    const rows = filteredTx.map((t) => {
+      const displayEvent = t.eventId ? (eventMap.get(t.eventId) || t.eventId) : "";
+      return [
+        `"${formatAppDate(t.date, "-")}"`,
+        `"${(t.description || "").replace(/"/g, '""')}"`,
+        `"${(t.addedBy || "").replace(/"/g, '""')}"`,
+        `"${displayEvent.replace(/"/g, '""')}"`,
+        `"${t.source || ""}"`,
+        `"${t.type || ""}"`,
+        `"${t.amount || 0}"`,
+        `"${t.balance || 0}"`,
+      ];
+    });
+
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `STI_Sync_Budget_Ledger_${txFilter.toUpperCase()}_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success(`Exported ${filteredTx.length} transaction(s) to CSV.`);
+  };
 
   // Calculate totals based on the ledger transactions
   const currentBalance = transactions.length > 0 ? (transactions[transactions.length - 1]?.balance ?? 0) : 0;
@@ -588,7 +861,7 @@ export function BudgetFundSettings() {
   if (loading) return <div className="p-8 text-center text-gray-500">Loading school budget ledger...</div>;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 w-full">
       {/* ── Header ── */}
       <div className="flex items-start justify-between">
         <div>
@@ -748,12 +1021,23 @@ export function BudgetFundSettings() {
                   </button>
                 ))}
               </div>
+
+              {/* Export Button */}
+              <button
+                onClick={handleExportCSV}
+                className="px-3 py-1.5 rounded-lg text-xs font-bold border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                title="Export Transactions to CSV"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Export</span>
+              </button>
             </div>
           </div>
 
-          <div className="overflow-x-auto max-h-[520px] overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+          {/* ── Table Container (No inner vertical scroll) ── */}
+          <div className="overflow-x-auto relative">
             <table className="w-full relative">
-              <thead className="bg-gray-50 sticky top-0 z-10 shadow-xs border-b border-[#E0E0E0]">
+              <thead className="bg-gray-50/90 sticky top-0 z-10 shadow-xs border-b border-[#E0E0E0]">
                 <tr>
                   {["Date", "Description", "Related Event", "Source", "Amount", "Running Balance", "Action"].map((col) => (
                     <th key={col} className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide bg-gray-50 border-b border-[#E0E0E0]">{col}</th>
@@ -761,14 +1045,14 @@ export function BudgetFundSettings() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {filteredTx.length === 0 ? (
+                {paginatedTx.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="px-4 py-12 text-center text-gray-400 text-sm">
                       No transactions found matching your filters.
                     </td>
                   </tr>
                 ) : (
-                  [...filteredTx].reverse().map((tx) => {
+                  paginatedTx.map((tx) => {
                     const linkedCollection = tx.collectionId
                       ? collections.find((c) => c.id === tx.collectionId || c.id.includes(tx.collectionId!)) ?? null
                       : null;
@@ -822,7 +1106,7 @@ export function BudgetFundSettings() {
                   })
                 )}
               </tbody>
-              <tfoot className="sticky bottom-0 z-10">
+              <tfoot className="border-t border-[#E0E0E0]">
                 <tr className="bg-[#001A4D] shadow-md">
                   <td colSpan={4} className="px-4 py-3 text-white font-bold text-sm bg-[#001A4D]">Current School Budget Balance</td>
                   <td colSpan={3} className="px-4 py-3 text-[#FFD41C] font-bold text-lg bg-[#001A4D]">{formatCurrency(currentBalance)}</td>
@@ -830,6 +1114,58 @@ export function BudgetFundSettings() {
               </tfoot>
             </table>
           </div>
+
+          {/* ── Budget Tracker Pagination Bar ── */}
+          {filteredTx.length > 0 && (
+            <div className="px-6 py-4 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-3 bg-gray-50/50">
+              <div className="text-xs text-gray-500 font-medium">
+                Showing <span className="font-bold text-gray-800">{(ledgerPage - 1) * LEDGER_PER_PAGE + 1}</span> to{" "}
+                <span className="font-bold text-gray-800">{Math.min(ledgerPage * LEDGER_PER_PAGE, filteredTx.length)}</span> of{" "}
+                <span className="font-bold text-gray-800">{filteredTx.length}</span> transactions
+              </div>
+
+              {totalLedgerPages > 1 && (
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => setLedgerPage((p) => Math.max(1, p - 1))}
+                    disabled={ledgerPage === 1}
+                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                  >
+                    Previous
+                  </button>
+
+                  {Array.from({ length: totalLedgerPages }, (_, i) => i + 1)
+                    .filter((p) => p === 1 || p === totalLedgerPages || Math.abs(p - ledgerPage) <= 1)
+                    .map((p, idx, arr) => {
+                      const prev = arr[idx - 1];
+                      return (
+                        <span key={p} className="flex items-center gap-1">
+                          {prev && p - prev > 1 && <span className="text-gray-400 text-xs px-1">...</span>}
+                          <button
+                            onClick={() => setLedgerPage(p)}
+                            className={`w-7 h-7 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                              ledgerPage === p
+                                ? "bg-[#001A4D] text-white shadow-xs"
+                                : "border border-gray-200 text-gray-600 hover:bg-white"
+                            }`}
+                          >
+                            {p}
+                          </button>
+                        </span>
+                      );
+                    })}
+
+                  <button
+                    onClick={() => setLedgerPage((p) => Math.min(totalLedgerPages, p + 1))}
+                    disabled={ledgerPage === totalLedgerPages}
+                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -870,14 +1206,14 @@ export function BudgetFundSettings() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {collections.length === 0 ? (
+                  {paginatedCollections.length === 0 ? (
                     <tr>
                       <td colSpan={8} className="px-4 py-8 text-center text-gray-500 text-sm">
                         No student payable collections found.
                       </td>
                     </tr>
                   ) : (
-                    collections.map((c) => {
+                    paginatedCollections.map((c) => {
                       const paid = c.payments.filter((p) => p.status === "Paid");
                       const totalCollected = paid.reduce((s, p) => s + p.amount, 0);
                       const pct = c.totalStudents > 0 ? Math.round((paid.length / c.totalStudents) * 100) : 0;
@@ -947,6 +1283,58 @@ export function BudgetFundSettings() {
                 </tbody>
               </table>
             </div>
+
+            {/* Collections Pagination Bar */}
+            {collections.length > 0 && (
+              <div className="px-6 py-4 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-3 bg-gray-50/50">
+                <div className="text-xs text-gray-500 font-medium">
+                  Showing <span className="font-bold text-gray-800">{(collectionsPage - 1) * COLLECTIONS_PER_PAGE + 1}</span> to{" "}
+                  <span className="font-bold text-gray-800">{Math.min(collectionsPage * COLLECTIONS_PER_PAGE, collections.length)}</span> of{" "}
+                  <span className="font-bold text-gray-800">{collections.length}</span> collection groups
+                </div>
+
+                {totalCollectionsPages > 1 && (
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => setCollectionsPage((p) => Math.max(1, p - 1))}
+                      disabled={collectionsPage === 1}
+                      className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                    >
+                      Previous
+                    </button>
+
+                    {Array.from({ length: totalCollectionsPages }, (_, i) => i + 1)
+                      .filter((p) => p === 1 || p === totalCollectionsPages || Math.abs(p - collectionsPage) <= 1)
+                      .map((p, idx, arr) => {
+                        const prev = arr[idx - 1];
+                        return (
+                          <span key={p} className="flex items-center gap-1">
+                            {prev && p - prev > 1 && <span className="text-gray-400 text-xs px-1">...</span>}
+                            <button
+                              onClick={() => setCollectionsPage(p)}
+                              className={`w-7 h-7 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                collectionsPage === p
+                                  ? "bg-[#001A4D] text-white shadow-xs"
+                                  : "border border-gray-200 text-gray-600 hover:bg-white"
+                              }`}
+                            >
+                              {p}
+                            </button>
+                          </span>
+                        );
+                      })}
+
+                    <button
+                      onClick={() => setCollectionsPage((p) => Math.min(totalCollectionsPages, p + 1))}
+                      disabled={collectionsPage === totalCollectionsPages}
+                      className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                    >
+                      Next
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}

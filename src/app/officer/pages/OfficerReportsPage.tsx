@@ -535,7 +535,7 @@ export default function OfficerReportsPage() {
                 </Button>
                 <Button
                   onClick={() => exportReportToPDF(previewReport)}
-                  className="bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] text-white text-xs font-bold cursor-pointer shadow-sm"
+                  className="bg-[#001A4D] hover:bg-[#002D72] text-white text-xs font-bold cursor-pointer shadow-xs"
                 >
                   <Printer className="w-3.5 h-3.5 mr-1.5" />
                   Export Official PDF

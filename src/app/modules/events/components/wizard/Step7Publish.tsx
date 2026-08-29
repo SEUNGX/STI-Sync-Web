@@ -275,8 +275,8 @@ export default function Step7Publish({ data, onUpdate, onPublish, isPublishing, 
               disabled={!allValid || isPublishing}
               className={`w-full py-3 text-white rounded-lg font-bold text-base transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer ${
                 showOfficerMode
-                  ? 'bg-[#001A4D] hover:bg-[#0E4EBD] shadow-xs'
-                  : 'bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600'
+                  ? 'bg-[#001A4D] hover:bg-[#002D72] shadow-xs'
+                  : 'bg-emerald-600 hover:bg-emerald-700'
               }`}
             >
               <Rocket className="w-5 h-5" />

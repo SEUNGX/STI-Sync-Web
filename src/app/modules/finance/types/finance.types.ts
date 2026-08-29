@@ -21,6 +21,9 @@ export interface SaoLedgerDocument {
   amount: number;
   addedBy: string;               // Admin Name
   collectionId?: string;         // FK → /payables/collections
+  receiptUrl?: string;           // Cloudinary URL for receipt / proof image
+  proofUrl?: string;             // Optional alias for receiptUrl
+  receiptNumber?: string;        // Official Receipt (OR) # or reference #
   createdAt: Timestamp;
 }
 
@@ -36,5 +39,8 @@ export interface OrgLedgerDocument {
   amount: number;
   addedBy: string;               // Officer's Name
   collectionId?: string;         // FK → /payables/collections
+  receiptUrl?: string;           // Cloudinary URL for receipt / proof image
+  proofUrl?: string;             // Optional alias for receiptUrl
+  receiptNumber?: string;        // Official Receipt (OR) # or reference #
   createdAt: Timestamp;
 }

@@ -414,8 +414,8 @@ export default function OfficerEventProposalModal({ isOpen, onClose, initialDraf
       <div className="absolute inset-0 flex items-center justify-center p-4">
         <div className="relative w-full max-w-[1280px] h-[90vh] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden">
 
-          {/* Header — Deep Navy to Royal Blue */}
-          <div className="bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] px-6 py-4 flex items-center justify-between flex-shrink-0">
+          {/* Header — Deep Navy */}
+          <div className="bg-[#001A4D] px-6 py-4 flex items-center justify-between flex-shrink-0">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
                 <span className="text-white font-bold text-sm">S</span>

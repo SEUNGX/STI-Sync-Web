@@ -540,7 +540,7 @@ export default function TransactionDetailModal({
 
               {/* ── STRICT CASE 4: Allocation, Carry-Over, Manual Expense ── */}
               {source !== 'student_collection' && source !== 'event_budget' && source !== 'liquidation_surplus' && source !== 'liquidation_deficit' && (
-                <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-xs space-y-3">
+                <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-xs space-y-4">
                   <div className="flex items-center gap-2 border-b border-gray-100 pb-3">
                     <FileText className="w-4 h-4 text-[#0E4EBD]" />
                     <h4 className="font-bold text-sm text-[#001A4D]">Transaction Documentation</h4>
@@ -555,6 +555,56 @@ export default function TransactionDetailModal({
                       <p className="text-sm font-semibold text-gray-800 mt-1 capitalize">{badgeInfo.label}</p>
                     </div>
                   </div>
+
+                  {/* Uploaded Receipt / Proof Photo Evidence */}
+                  {(transaction.receiptUrl || transaction.proofUrl || (transaction as any).receiptNumber) && (
+                    <div className="pt-3 border-t border-gray-100 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-gray-700 flex items-center gap-1.5">
+                          <Receipt className="w-3.5 h-3.5 text-[#0E4EBD]" />
+                          Official Receipt / Proof of Transaction
+                        </span>
+                        {(transaction as any).receiptNumber && (
+                          <span className="text-xs font-mono font-semibold bg-gray-100 text-gray-800 px-2 py-0.5 rounded">
+                            OR/Ref: {(transaction as any).receiptNumber}
+                          </span>
+                        )}
+                      </div>
+
+                      {(transaction.receiptUrl || transaction.proofUrl) ? (
+                        <div className="flex items-center gap-3 p-3 bg-gray-50 border border-gray-200 rounded-xl">
+                          <img
+                            src={transaction.receiptUrl || transaction.proofUrl}
+                            alt="Receipt Preview"
+                            className="w-14 h-14 object-cover rounded-lg border border-gray-200 cursor-pointer hover:opacity-90"
+                            onClick={() => setSelectedReceipt({
+                              url: (transaction.receiptUrl || transaction.proofUrl)!,
+                              title: transaction.description,
+                              amount: transaction.amount,
+                            })}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-bold text-gray-900 truncate">Receipt / Proof Attached</p>
+                            <p className="text-[11px] text-gray-500 mt-0.5">Click preview or button to view full resolution</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedReceipt({
+                              url: (transaction.receiptUrl || transaction.proofUrl)!,
+                              title: transaction.description,
+                              amount: transaction.amount,
+                            })}
+                            className="px-3 py-1.5 bg-[#001A4D] hover:bg-[#0E4EBD] text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>View Proof</span>
+                          </button>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-gray-400 italic">No receipt image attached</p>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </>

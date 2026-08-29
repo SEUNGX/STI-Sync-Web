@@ -2094,7 +2094,7 @@ export function AcademicSemesterSettings() {
         </div>
         <button
           onClick={() => setShowRollover(true)}
-          className="px-5 py-2.5 bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] text-white rounded-lg font-bold text-sm flex items-center gap-2 hover:opacity-90 transition-opacity shadow-sm"
+          className="px-5 py-2.5 bg-[#001A4D] hover:bg-[#002D72] text-white rounded-lg font-bold text-sm flex items-center gap-2 transition-colors shadow-xs cursor-pointer"
         >
           <RefreshCw className="w-4 h-4" />
           Run Semester Rollover

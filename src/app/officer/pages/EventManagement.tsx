@@ -1,24 +1,16 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   Calendar,
   MapPin,
-  Users,
   Edit,
   Trash2,
   Plus,
   Search,
-  X,
-  Check,
-  Clock,
-  AlertCircle,
-  Tag,
-  FileText,
   Eye,
+  Filter,
   RotateCcw,
-  ArrowUpAZ,
-  ArrowDownAZ,
-  Coins,
-  Building2,
+  Clock,
+  Download
 } from 'lucide-react';
 import OfficerEventProposalModal from '../components/OfficerEventProposalModal';
 import { useOfficerProfile } from '../../auth/hooks/useOfficerProfile';
@@ -32,10 +24,11 @@ import { deleteEvent } from '../../modules/events/services/event.service';
 import type { EventDocument } from '../../modules/events/types/event.types';
 import { OfficerEventDetailView } from '../../modules/events';
 import { formatCurrency } from '../../utils/currency';
+import { toast } from 'sonner';
 
 type EventStatusTab = 'all' | 'draft' | 'pending' | 'approved' | 'completed' | 'rejected' | 'returned';
+const ITEMS_PER_PAGE = 8;
 
-// ─── COMPLETE DATE FORMATTING UTILITIES ─────────────────────────────────────
 function parseDateSafe(input: any): Date | null {
   if (!input) return null;
   if (typeof input.toDate === 'function') {
@@ -58,45 +51,28 @@ function parseDateSafe(input: any): Date | null {
   return null;
 }
 
-function formatFullAppDate(date: any, fallback = 'TBD'): string {
-  const parsed = parseDateSafe(date);
-  if (!parsed) return fallback;
-  try {
-    return parsed.toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
-  } catch {
-    return fallback;
-  }
+function formatShortDate(dateInput: any): string {
+  const d = parseDateSafe(dateInput);
+  if (!d) return 'TBD';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-function format12HourTime(timeStr?: string): string {
-  if (!timeStr) return '';
-  const trimmed = timeStr.trim();
-  if (!trimmed) return '';
-  const match = trimmed.match(/^(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)?$/i);
-  if (!match) return trimmed;
-  let hours = parseInt(match[1], 10);
-  const minutes = match[2];
-  const ampm = match[3] ? match[3].toUpperCase() : hours >= 12 ? 'PM' : 'AM';
-  hours = hours % 12 || 12;
-  return `${hours}:${minutes} ${ampm}`;
+function formatSubmittedDate(dateInput: any): string {
+  const d = parseDateSafe(dateInput);
+  if (!d) return '—';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-function formatFullSessionDateTime(dateInput: any, startTime?: string, endTime?: string): string {
-  const fullDate = formatFullAppDate(dateInput, 'TBD');
-  const startFormatted = format12HourTime(startTime);
-  const endFormatted = format12HourTime(endTime);
-
-  if (startFormatted && endFormatted) {
-    return `${fullDate} (${startFormatted} - ${endFormatted})`;
-  } else if (startFormatted) {
-    return `${fullDate} at ${startFormatted}`;
+function getEventTimestamp(event: EventDocument): number {
+  const c = parseDateSafe(event.createdAt);
+  if (c) return c.getTime();
+  if (event.sessions && event.sessions[0]) {
+    const s = parseDateSafe(event.sessions[0].date);
+    if (s) return s.getTime();
   }
-  return fullDate;
+  const u = parseDateSafe(event.updatedAt);
+  if (u) return u.getTime();
+  return 0;
 }
 
 export default function EventManagement() {
@@ -104,8 +80,8 @@ export default function EventManagement() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState('All');
   const [filterVenue, setFilterVenue] = useState('All');
-  const [sortBy, setSortBy] = useState<'date' | 'title' | 'referenceId' | 'created'>('date');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [showFilters, setShowFilters] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
@@ -121,11 +97,9 @@ export default function EventManagement() {
   const activeOrg = orgs.find((o) => o.id === activeOrgId);
   const activeOrgName = activeOrg ? activeOrg.name : 'My Organization';
   const activeOrgAcronym = activeOrg ? activeOrg.acronym || activeOrg.name.slice(0, 4).toUpperCase() : 'ORG';
-  const activeOrgLogo = activeOrg ? (activeOrg as any).logoUrl || (activeOrg as any).logo || '' : '';
 
   const { events, loading } = useOrgEvents(activeOrgId);
 
-  // Helper maps for Category & Venue names
   const categoryMap = useMemo(() => {
     const map = new Map<string, string>();
     categories.forEach((c) => map.set(c.id, c.name));
@@ -148,7 +122,7 @@ export default function EventManagement() {
     returned: events.filter((e) => e.proposalStatus === 'returned').length,
   };
 
-  // ─── Filter & Sort Events ──────────────────────────────────────────────────
+  // Filtered & Sorted (LATEST FIRST by default)
   const filteredEvents = useMemo(() => {
     return events
       .filter((event) => {
@@ -168,437 +142,492 @@ export default function EventManagement() {
         const taglineMatch = (event.tagline || '').toLowerCase().includes(q);
         const matchesSearch = titleMatch || refMatch || taglineMatch;
 
-        const matchesCategory =
-          filterCategory === 'All' || event.eventCategoryId === filterCategory;
-
-        const matchesVenue =
-          filterVenue === 'All' || event.venueId === filterVenue;
+        const matchesCategory = filterCategory === 'All' || event.eventCategoryId === filterCategory;
+        const matchesVenue = filterVenue === 'All' || event.venueId === filterVenue;
 
         return statusMatch && matchesSearch && matchesCategory && matchesVenue;
       })
-      .sort((a, b) => {
-        if (sortBy === 'title') {
-          const tA = (a.title || '').toLowerCase();
-          const tB = (b.title || '').toLowerCase();
-          return sortOrder === 'asc' ? tA.localeCompare(tB) : tB.localeCompare(tA);
-        } else if (sortBy === 'referenceId') {
-          const rA = (a.referenceId || '').toLowerCase();
-          const rB = (b.referenceId || '').toLowerCase();
-          return sortOrder === 'asc' ? rA.localeCompare(rB) : rB.localeCompare(rA);
-        } else if (sortBy === 'created') {
-          const cA = (a.createdAt as any)?.seconds || 0;
-          const cB = (b.createdAt as any)?.seconds || 0;
-          return sortOrder === 'asc' ? cA - cB : cB - cA;
-        } else {
-          // Default: Event Date (first session date)
-          const dateA = a.sessions && a.sessions[0] ? parseDateSafe(a.sessions[0].date)?.getTime() || 0 : 0;
-          const dateB = b.sessions && b.sessions[0] ? parseDateSafe(b.sessions[0].date)?.getTime() || 0 : 0;
-          return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
-        }
-      });
-  }, [events, activeStatus, searchQuery, filterCategory, filterVenue, sortBy, sortOrder]);
+      .sort((a, b) => getEventTimestamp(b) - getEventTimestamp(a));
+  }, [events, activeStatus, searchQuery, filterCategory, filterVenue]);
+
+  // Pagination
+  const totalPages = Math.max(1, Math.ceil(filteredEvents.length / ITEMS_PER_PAGE));
+  const paginatedItems = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filteredEvents.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredEvents, currentPage]);
+
+  const handleTabChange = (tab: EventStatusTab) => {
+    setActiveStatus(tab);
+    setCurrentPage(1);
+  };
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, filterCategory, filterVenue]);
 
   const handleDelete = async (id: string) => {
     if (!window.confirm('Are you sure you want to delete this event proposal?')) return;
     setDeletingId(id);
     try {
       await deleteEvent(id);
+      toast.success('Event proposal deleted.');
     } catch (e) {
       console.error(e);
-      alert('Failed to delete event proposal.');
+      toast.error('Failed to delete event proposal.');
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const handleExportCSV = () => {
+    if (filteredEvents.length === 0) {
+      toast.info(`No ${activeStatus === 'all' ? '' : activeStatus + ' '}events to export.`);
+      return;
+    }
+    const headers = ['Event Title', 'Category', 'Date', 'Venue', 'Total Budget', 'Submitted', 'Status'];
+    const rows = filteredEvents.map((e) => {
+      const firstDate = e.sessions && e.sessions[0] ? formatShortDate(e.sessions[0].date) : 'TBD';
+      const venueName = venueMap.get(e.venueId || '') || e.eventFormat || 'On-Campus';
+      const totalBudget = (e.budgetItems || []).reduce((sum, b) => sum + (Number(b.totalCost) || 0), 0);
+      return [
+        `"${(e.title || '').replace(/"/g, '""')}"`,
+        `"${categoryMap.get(e.eventCategoryId || '') || 'General'}"`,
+        `"${firstDate}"`,
+        `"${venueName}"`,
+        `"${totalBudget}"`,
+        `"${formatSubmittedDate(e.createdAt)}"`,
+        `"${e.proposalStatus || 'draft'}"`,
+      ];
+    });
+
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `${activeOrgAcronym}_Events_${activeStatus.toUpperCase()}_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success(`Exported ${filteredEvents.length} ${activeStatus === 'all' ? '' : activeStatus + ' '}event(s) to CSV.`);
+  };
+
+  const renderStatusBadge = (status?: string) => {
+    switch (status) {
+      case 'approved':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/80">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+            Approved
+          </span>
+        );
+      case 'pending':
+      case 'pending_review':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200/80">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+            Pending Review
+          </span>
+        );
+      case 'returned':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-300">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+            Returned
+          </span>
+        );
+      case 'rejected':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-200/80">
+            <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+            Rejected
+          </span>
+        );
+      case 'completed':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200/80">
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+            Completed
+          </span>
+        );
+      default:
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-700 border border-gray-200">
+            <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />
+            Draft
+          </span>
+        );
     }
   };
 
   const selectedEvent = events.find((e) => e.id === selectedEventId);
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+    <div className="space-y-5 w-full">
+      {/* ── Header ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <div className="text-gray-500 text-[13px] mb-1">
-            Dashboard &gt; Event Management {activeOrgName && <span className="font-semibold text-[#0E4EBD]">({activeOrgName})</span>}
+          <div className="text-gray-500 text-xs mb-1">
+            Dashboard &gt; Event Management {activeOrgName && <span className="font-semibold text-[#001A4D]">({activeOrgName})</span>}
           </div>
-          <h1 className="text-[#001A4D] text-2xl md:text-3xl font-extrabold tracking-tight">
+          <h1 className="text-2xl font-bold text-[#001A4D] tracking-tight">
             Event Proposals &amp; Management
           </h1>
+          <p className="text-gray-500 text-sm mt-0.5">
+            Create, manage, and submit event proposals for Student Affairs review
+          </p>
+
+          {/* Metric Summary Badges */}
+          <div className="flex flex-wrap items-center gap-2.5 mt-3">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50/80 border border-amber-200 rounded-lg text-xs font-bold text-amber-800">
+              <span className="font-extrabold text-amber-900">{statusCounts.pending}</span> Pending Review
+            </div>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50/80 border border-emerald-200 rounded-lg text-xs font-bold text-emerald-800">
+              <span className="font-extrabold text-emerald-900">{statusCounts.approved}</span> Approved
+            </div>
+            {statusCounts.returned > 0 && (
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50/80 border border-amber-300 rounded-lg text-xs font-bold text-amber-900">
+                <span className="font-extrabold">{statusCounts.returned}</span> Returned
+              </div>
+            )}
+            {statusCounts.rejected > 0 && (
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-red-50/80 border border-red-200 rounded-lg text-xs font-bold text-red-800">
+                <span className="font-extrabold text-red-900">{statusCounts.rejected}</span> Rejected
+              </div>
+            )}
+          </div>
         </div>
+
+        {/* Solid button without gradients */}
         <button
           onClick={() => {
             setEditingEvent(null);
             setShowCreateModal(true);
           }}
-          className="flex items-center gap-2 px-5 py-2.5 bg-[#001A4D] hover:bg-[#0E4EBD] text-white rounded-xl text-sm font-bold transition-colors shadow-sm cursor-pointer"
+          className="flex items-center gap-2 px-4 py-2.5 bg-[#001A4D] hover:bg-[#002D72] text-white rounded-xl text-sm font-bold transition-colors shadow-xs cursor-pointer self-start sm:self-auto"
         >
-          <Plus className="w-5 h-5 text-[#FFD41C]" />
+          <Plus className="w-4 h-4 text-[#FFD41C]" />
           Create Event Proposal
         </button>
       </div>
 
-      {/* ─── Search & Comprehensive Filters Bar ──────────────────────────────── */}
-      <div className="bg-white border border-[#E0E0E0] rounded-2xl p-4 shadow-xs space-y-4">
-        <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
-          {/* Search Input — Placeholder says "Search" */}
-          <div className="flex-1 relative">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-[#E0E0E0] rounded-xl text-sm focus:border-[#0E4EBD] focus:ring-2 focus:ring-[#0E4EBD]/20 outline-none"
-            />
-          </div>
-
-          {/* Category Filter */}
-          <select
-            value={filterCategory}
-            onChange={(e) => setFilterCategory(e.target.value)}
-            className="px-3 py-2 border border-[#E0E0E0] rounded-xl text-xs font-semibold text-[#001A4D] bg-white outline-none focus:ring-2 focus:ring-[#0E4EBD]/20 cursor-pointer"
-          >
-            <option value="All">All Categories</option>
-            {categories.map((cat) => (
-              <option key={cat.id} value={cat.id}>
-                {cat.name}
-              </option>
-            ))}
-          </select>
-
-          {/* Venue Filter */}
-          <select
-            value={filterVenue}
-            onChange={(e) => setFilterVenue(e.target.value)}
-            className="px-3 py-2 border border-[#E0E0E0] rounded-lg text-xs font-semibold text-[#001A4D] bg-white outline-none focus:ring-2 focus:ring-[#0E4EBD]/20 cursor-pointer"
-          >
-            <option value="All">All Venues</option>
-            {venues.map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.name}
-              </option>
-            ))}
-          </select>
-
-          {/* Sort Control */}
-          <div className="flex items-center gap-1.5 bg-gray-50 border border-[#E0E0E0] rounded-xl px-3 py-1.5">
-            <span className="text-xs text-gray-500 font-medium">Sort:</span>
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as any)}
-              className="bg-transparent text-xs font-bold text-[#001A4D] outline-none cursor-pointer"
-            >
-              <option value="date">Event Date</option>
-              <option value="title">Title</option>
-              <option value="referenceId">Reference ID</option>
-              <option value="created">Created Date</option>
-            </select>
-            <button
-              onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-              className="p-1 hover:bg-gray-200 rounded transition-colors text-[#0E4EBD] font-bold text-xs flex items-center gap-1 cursor-pointer"
-              title={sortOrder === 'asc' ? 'Ascending' : 'Descending'}
-            >
-              {sortOrder === 'asc' ? <ArrowUpAZ className="w-4 h-4" /> : <ArrowDownAZ className="w-4 h-4" />}
-              <span>{sortOrder === 'asc' ? 'ASC' : 'DESC'}</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Status Tabs */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 border-t border-gray-100 pt-3">
-          {[
-            { key: 'all', label: 'All Events' },
-            { key: 'draft', label: 'Drafts' },
-            { key: 'pending', label: 'Pending Review' },
-            { key: 'returned', label: 'Returned' },
-            { key: 'approved', label: 'Approved' },
-            { key: 'completed', label: 'Completed' },
-            { key: 'rejected', label: 'Rejected' },
-          ].map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => setActiveStatus(tab.key as EventStatusTab)}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
-                activeStatus === tab.key
-                  ? 'bg-[#001A4D] text-white shadow-xs'
-                  : 'bg-gray-100 text-gray-600 hover:bg-blue-50 hover:text-[#0E4EBD]'
-              }`}
-            >
-              {tab.label} ({statusCounts[tab.key as EventStatusTab]})
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* ─── EVENT CARDS GRID (ADMIN APPROVALS STYLE) ─────────────────────────── */}
-      {loading ? (
-        <div className="bg-white border border-[#E0E0E0] rounded-2xl p-12 text-center text-gray-500 shadow-xs">
-          Loading event proposals from database...
-        </div>
-      ) : filteredEvents.length === 0 ? (
-        <div className="bg-white border border-[#E0E0E0] rounded-2xl p-12 text-center shadow-xs">
-          <Calendar className="w-16 h-16 text-gray-300 mx-auto mb-3" />
-          <h3 className="font-bold text-[#001A4D] text-base">No Event Proposals Found</h3>
-          <p className="text-gray-500 text-xs mt-1">
-            No events match your current filter and search settings.
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {filteredEvents.map((event) => {
-            const isPending = event.proposalStatus === 'pending_review' || event.proposalStatus === 'pending';
-            const isApproved = event.proposalStatus === 'approved';
-            const isRejected = event.proposalStatus === 'rejected';
-            const isReturned = event.proposalStatus === 'returned';
-            const isDraft = event.proposalStatus === 'draft';
-            const isCompleted = event.proposalStatus === 'completed';
-
-            const categoryName = categoryMap.get(event.eventCategoryId || '') || event.eventCategoryId || '';
-            const venueName = venueMap.get(event.venueId || '') || event.eventFormat || 'On-Campus';
-            const totalBudget = (event.budgetItems || []).reduce((sum, b) => sum + (Number(b.totalCost) || 0), 0);
-
-            return (
-              <div
-                key={event.id}
-                className="border border-[#E5E7EB] hover:border-[#0E4EBD]/40 hover:shadow-lg transition-all duration-200 bg-white overflow-hidden rounded-xl shadow-2xs"
-              >
-                {/* ── Top Organization Header & Status Bar ── */}
-                <div className="px-4 py-3 sm:px-5 sm:py-3.5 flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 bg-slate-50/80">
-                  <div className="flex items-center gap-3.5">
-                    {activeOrgLogo ? (
-                      <img
-                        src={activeOrgLogo}
-                        alt={activeOrgAcronym}
-                        className="w-11 h-11 rounded-xl object-contain border border-gray-200 shadow-2xs flex-shrink-0 bg-white p-0.5"
-                      />
-                    ) : (
-                      <div className="w-11 h-11 rounded-xl flex items-center justify-center font-black text-sm shadow-2xs flex-shrink-0 bg-gradient-to-br from-[#001A4D] via-[#002B7F] to-[#0E4EBD] text-[#FFD41C]">
-                        {activeOrgAcronym.slice(0, 3)}
-                      </div>
-                    )}
-                    <div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-black text-base sm:text-lg text-[#001A4D] tracking-tight">
-                          {activeOrgName}
-                        </span>
-                        <span className="px-2 py-0.5 text-xs font-black rounded-md bg-blue-100/90 text-[#0E4EBD]">
-                          {activeOrgAcronym}
-                        </span>
-                      </div>
-                      <div className="text-xs text-gray-600 font-medium mt-0.5">
-                        <span>
-                          Ref ID:{' '}
-                          <strong className="font-mono text-gray-900 font-bold">
-                            {event.referenceId || event.id.slice(0, 10)}
-                          </strong>
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Proposal Status Badge */}
+      {/* ── Main Container: Tabs + Search + Fixed Height Table + Pagination ── */}
+      <div className="bg-white border border-[#E5E7EB] rounded-2xl shadow-xs overflow-hidden">
+        {/* Top Control Bar */}
+        <div className="p-4 border-b border-gray-100 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+          {/* Status Tabs */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 lg:pb-0">
+            {[
+              { key: 'all', label: 'All', count: statusCounts.all },
+              { key: 'pending', label: 'Pending', count: statusCounts.pending },
+              { key: 'approved', label: 'Approved', count: statusCounts.approved },
+              { key: 'returned', label: 'Returned', count: statusCounts.returned },
+              { key: 'completed', label: 'Completed', count: statusCounts.completed },
+              { key: 'rejected', label: 'Rejected', count: statusCounts.rejected },
+              { key: 'draft', label: 'Drafts', count: statusCounts.draft },
+            ].map((tab) => {
+              const isActive = activeStatus === tab.key;
+              return (
+                <button
+                  key={tab.key}
+                  onClick={() => handleTabChange(tab.key as EventStatusTab)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                    isActive
+                      ? 'bg-[#001A4D] text-white shadow-xs'
+                      : 'bg-gray-100/80 text-gray-600 hover:bg-gray-200/80 hover:text-gray-900'
+                  }`}
+                >
+                  <span>{tab.label}</span>
                   <span
-                    className={`px-4 py-1 text-xs font-black rounded-full shadow-2xs ${
-                      isPending
-                        ? 'bg-amber-400 text-[#001A4D]'
-                        : isApproved
-                        ? 'bg-gradient-to-r from-[#22C55E] to-[#16A34A] text-white'
-                        : isRejected
-                        ? 'bg-gradient-to-r from-[#EF4444] to-[#F97316] text-white'
-                        : isReturned
-                        ? 'bg-amber-500 text-white'
-                        : isCompleted
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-200 text-gray-800'
+                    className={`px-1.5 py-0.2 rounded-full text-[11px] font-bold ${
+                      isActive ? 'bg-white/20 text-white' : 'bg-gray-200/80 text-gray-700'
                     }`}
                   >
-                    {isPending
-                      ? 'Pending Review'
-                      : isApproved
-                      ? 'Approved'
-                      : isRejected
-                      ? 'Rejected'
-                      : isReturned
-                      ? 'Returned for Revision'
-                      : isDraft
-                      ? 'Draft Proposal'
-                      : event.proposalStatus}
+                    {tab.count}
                   </span>
-                </div>
+                </button>
+              );
+            })}
+          </div>
 
-                {/* ── Main Content Body ── */}
-                <div className="p-4 sm:p-5 space-y-4">
-                  {/* Event Title & Badges */}
-                  <div className="space-y-1.5">
-                    <h3 className="font-black text-[#001A4D] text-lg sm:text-xl tracking-tight leading-snug">
-                      {event.title}
-                    </h3>
-                    {event.tagline && (
-                      <p className="text-xs sm:text-sm text-gray-700 italic font-medium">
-                        "{event.tagline}"
-                      </p>
-                    )}
+          {/* Right Controls */}
+          <div className="flex items-center gap-2">
+            {/* Search Input */}
+            <div className="relative flex-1 sm:w-60">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search events..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-3 py-1.5 bg-gray-50/80 border border-gray-200 rounded-xl text-xs text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#001A4D]/10 focus:border-[#001A4D]"
+              />
+            </div>
 
-                    <div className="flex flex-wrap items-center gap-2 pt-1">
-                      {categoryName && (
-                        <span className="bg-slate-100 text-gray-800 text-xs font-bold px-3 py-1 rounded-md border border-slate-300 inline-flex items-center gap-1.5">
-                          <Tag className="w-3.5 h-3.5 text-[#0E4EBD]" />
+            {/* Filter Toggle */}
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors flex items-center gap-1.5 cursor-pointer ${
+                showFilters || filterCategory !== 'All' || filterVenue !== 'All'
+                  ? 'border-[#001A4D] bg-[#001A4D]/5 text-[#001A4D]'
+                  : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              <Filter className="w-3.5 h-3.5" />
+              <span>Filter</span>
+            </button>
+
+            {/* Export Button */}
+            <button
+              onClick={handleExportCSV}
+              className="px-3 py-1.5 rounded-xl text-xs font-bold border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-1.5 cursor-pointer"
+              title="Export events to CSV"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Export</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Filter Drawer */}
+        {showFilters && (
+          <div className="p-4 bg-gray-50/60 border-b border-gray-200 flex flex-wrap items-center gap-3 text-xs">
+            <div>
+              <span className="text-gray-500 font-semibold mr-1.5">Category:</span>
+              <select
+                value={filterCategory}
+                onChange={(e) => setFilterCategory(e.target.value)}
+                className="px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-medium text-gray-800 outline-none focus:border-[#001A4D]"
+              >
+                <option value="All">All Categories</option>
+                {categories.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <span className="text-gray-500 font-semibold mr-1.5">Venue:</span>
+              <select
+                value={filterVenue}
+                onChange={(e) => setFilterVenue(e.target.value)}
+                className="px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-medium text-gray-800 outline-none focus:border-[#001A4D]"
+              >
+                <option value="All">All Venues</option>
+                {venues.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {(filterCategory !== 'All' || filterVenue !== 'All') && (
+              <button
+                onClick={() => {
+                  setFilterCategory('All');
+                  setFilterVenue('All');
+                }}
+                className="text-xs text-red-600 hover:text-red-700 font-semibold flex items-center gap-1 cursor-pointer"
+              >
+                <RotateCcw className="w-3 h-3" />
+                Reset Filters
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* ── Table Container (No inner vertical scroll) ── */}
+        <div className="overflow-x-auto relative">
+          {loading ? (
+            <div className="h-full flex items-center justify-center text-sm text-gray-500">
+              Loading event proposals...
+            </div>
+          ) : filteredEvents.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-2">
+              <Calendar className="w-12 h-12 text-gray-300 mx-auto" />
+              <div className="font-bold text-gray-700 text-sm">No event proposals found</div>
+              <p className="text-xs text-gray-400 max-w-sm">
+                No events match the selected status or search filter. Click "+ Create Event Proposal" to get started.
+              </p>
+            </div>
+          ) : (
+            <table className="w-full text-left text-xs border-collapse">
+              <thead className="bg-gray-50/90 text-gray-500 font-bold uppercase tracking-wider text-[11px] border-b border-gray-200 sticky top-0 z-10 backdrop-blur-xs">
+                <tr>
+                  <th className="py-3 px-4">Event</th>
+                  <th className="py-3 px-4">Category</th>
+                  <th className="py-3 px-4">Date</th>
+                  <th className="py-3 px-4">Venue</th>
+                  <th className="py-3 px-4">Budget</th>
+                  <th className="py-3 px-4">Submitted</th>
+                  <th className="py-3 px-4">Status</th>
+                  <th className="py-3 px-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 text-gray-700 font-normal">
+                {paginatedItems.map((event) => {
+                  const categoryName = categoryMap.get(event.eventCategoryId || '') || 'General';
+                  const venueName = venueMap.get(event.venueId || '') || event.eventFormat || 'On-Campus';
+                  const totalBudget = (event.budgetItems || []).reduce((sum, b) => sum + (Number(b.totalCost) || 0), 0);
+                  const firstSessionDate = event.sessions && event.sessions[0] ? formatShortDate(event.sessions[0].date) : 'TBD';
+
+                  const isRejected = event.proposalStatus === 'rejected';
+                  const isReturned = event.proposalStatus === 'returned';
+                  const isDraft = event.proposalStatus === 'draft';
+                  const isApproved = event.proposalStatus === 'approved';
+
+                  return (
+                    <tr key={event.id} className="hover:bg-slate-50/80 transition-colors">
+                      {/* Event Title */}
+                      <td className="py-3.5 px-4 max-w-[240px]">
+                        <div className="font-bold text-gray-900 text-sm leading-snug truncate">
+                          {event.title}
+                        </div>
+                        {(isRejected || isReturned) && event.rejectionReason ? (
+                          <div className="text-[11px] text-red-600 font-medium truncate mt-0.5">
+                            Note: {event.rejectionReason}
+                          </div>
+                        ) : event.referenceId ? (
+                          <div className="text-[11px] text-gray-400 font-mono mt-0.5">
+                            Ref: {event.referenceId}
+                          </div>
+                        ) : null}
+                      </td>
+
+                      {/* Category */}
+                      <td className="py-3.5 px-4">
+                        <span className="px-2.5 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-700 inline-block">
                           {categoryName}
                         </span>
-                      )}
-                      {event.sessions && event.sessions.length > 0 && (
-                        <span className="bg-purple-50 text-purple-800 text-xs font-bold px-3 py-1 rounded-md border border-purple-300 inline-flex items-center gap-1.5">
-                          <Clock className="w-3.5 h-3.5 text-purple-600" />
-                          {event.sessions.length} Session{event.sessions.length > 1 ? 's' : ''}
-                        </span>
-                      )}
-                      {event.enableQRTickets && (
-                        <span className="bg-blue-50 text-blue-800 text-xs font-bold px-3 py-1 rounded-md border border-blue-300">
-                          QR Tickets Enabled
-                        </span>
-                      )}
-                    </div>
-                  </div>
+                      </td>
 
-                  {/* Rejection / Returned Reason Alert Box */}
-                  {(isRejected || isReturned) && event.rejectionReason && (
-                    <div className="bg-red-50 border-l-4 border-red-500 p-3 rounded-r-lg text-xs text-red-800 font-medium">
-                      <span className="font-bold">Officer Action Note:</span> {event.rejectionReason}
-                    </div>
-                  )}
-
-                  {/* Complete Format Sessions Schedule & Key Info Box */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-xs text-gray-800 bg-slate-50/80 p-3.5 rounded-xl border border-slate-200/80">
-                    {/* Event Schedule & Sessions (Complete Date Format) */}
-                    <div className="col-span-full space-y-2">
-                      <span className="text-[11px] uppercase text-gray-500 font-black tracking-wider flex items-center gap-1.5">
-                        <Calendar
-                          className={`w-3.5 h-3.5 ${
-                            isPending
-                              ? 'text-[#0E4EBD]'
-                              : isApproved
-                              ? 'text-green-600'
-                              : 'text-red-600'
-                          }`}
-                        />
-                        Event Schedule &amp; Sessions ({event.sessions?.length || 0})
-                      </span>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {event.sessions && event.sessions.length > 0 ? (
-                          event.sessions.map((sess, idx) => (
-                            <div
-                              key={sess.id || idx}
-                              className="bg-white p-2.5 rounded-lg border border-slate-200 shadow-2xs flex flex-col justify-center"
-                            >
-                              <span className="font-extrabold text-[#001A4D] text-xs">
-                                {sess.title || `Session ${idx + 1}`}
-                              </span>
-                              {/* Complete Date Format */}
-                              <span className="text-gray-700 font-bold font-mono text-[11px] mt-0.5">
-                                {formatFullSessionDateTime(sess.date, sess.startTime, sess.endTime)}
-                              </span>
-                            </div>
-                          ))
-                        ) : (
-                          <div className="bg-white p-2.5 rounded-lg border border-slate-200 text-xs text-gray-500 italic">
-                            No session schedule set
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Venue */}
-                    <div className="flex items-center gap-2.5">
-                      <MapPin className="w-4 h-4 text-rose-500 flex-shrink-0" />
-                      <div>
-                        <span className="text-[10px] uppercase text-gray-500 font-extrabold block tracking-wider">
-                          Venue
-                        </span>
-                        <strong className="text-gray-900 font-bold text-xs">{venueName}</strong>
-                      </div>
-                    </div>
-
-                    {/* Expected Reach */}
-                    <div className="flex items-center gap-2.5">
-                      <Users className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                      <div>
-                        <span className="text-[10px] uppercase text-gray-500 font-extrabold block tracking-wider">
-                          Expected Reach
-                        </span>
-                        <strong className="text-gray-900 font-bold text-xs">
-                          {event.expectedParticipantCount || 0} Participants
-                        </strong>
-                      </div>
-                    </div>
-
-                    {/* Submitted Documents */}
-                    <div className="flex items-center gap-2.5">
-                      <FileText className="w-4 h-4 text-amber-600 flex-shrink-0" />
-                      <div>
-                        <span className="text-[10px] uppercase text-gray-500 font-extrabold block tracking-wider">
-                          Attached Files
-                        </span>
-                        <strong className="text-gray-900 font-bold text-xs">
-                          {event.documents?.length || 0} File(s)
-                        </strong>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Card Bottom Footer Actions */}
-                  <div className="pt-3 flex flex-wrap items-center justify-between gap-3 border-t border-gray-100">
-                    <button
-                      onClick={() => setSelectedEventId(event.id)}
-                      className="px-4 py-2 bg-[#001A4D] hover:bg-[#0E4EBD] text-white font-bold rounded-lg text-xs flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
-                    >
-                      <Eye className="w-4 h-4 text-[#FFD41C]" /> View Full Proposal Details
-                    </button>
-
-                    <div className="flex items-center gap-3 ml-auto">
-                      {totalBudget > 0 && (
-                        <div className="px-3 py-1 bg-green-50 border border-green-200 rounded-lg text-right">
-                          <span className="text-[10px] uppercase text-green-700 font-bold block">Total Budget</span>
-                          <span className="text-xs font-black font-mono text-green-800">
-                            {formatCurrency(totalBudget)}
-                          </span>
+                      {/* Date */}
+                      <td className="py-3.5 px-4 text-gray-600 font-medium whitespace-nowrap">
+                        <div className="flex items-center gap-1.5">
+                          <Calendar className="w-3.5 h-3.5 text-gray-400" />
+                          <span>{firstSessionDate}</span>
                         </div>
-                      )}
+                      </td>
 
-                      {(isDraft || isReturned || (isRejected && event.allowResubmission !== false)) && (
-                        <button
-                          onClick={() => {
-                            setEditingEvent(event);
-                            setShowCreateModal(true);
-                          }}
-                          className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-[#0E4EBD] rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
-                          title={
-                            isReturned
-                              ? "Revise & Resubmit Proposal"
-                              : "Edit Proposal"
-                          }
-                        >
-                          <Edit className="w-3.5 h-3.5" /> Edit Proposal
-                        </button>
-                      )}
+                      {/* Venue */}
+                      <td className="py-3.5 px-4 text-gray-600 whitespace-nowrap max-w-[160px] truncate">
+                        <div className="flex items-center gap-1.5 truncate">
+                          <MapPin className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                          <span className="truncate">{venueName}</span>
+                        </div>
+                      </td>
 
-                      {!isApproved && (
-                        <button
-                          onClick={() => handleDelete(event.id)}
-                          disabled={deletingId === event.id}
-                          className="p-1.5 hover:bg-red-50 text-red-600 rounded-lg transition-colors cursor-pointer"
-                          title="Delete Proposal"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+                      {/* Budget */}
+                      <td className="py-3.5 px-4 font-bold text-gray-900 whitespace-nowrap text-sm">
+                        {formatCurrency(totalBudget)}
+                      </td>
+
+                      {/* Submitted */}
+                      <td className="py-3.5 px-4 text-gray-500 text-xs whitespace-nowrap">
+                        {formatSubmittedDate(event.createdAt)}
+                      </td>
+
+                      {/* Status */}
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        {renderStatusBadge(event.proposalStatus)}
+                      </td>
+
+                      {/* Actions */}
+                      <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => setSelectedEventId(event.id)}
+                            className="px-2.5 py-1 bg-gray-100 hover:bg-[#001A4D] hover:text-white text-gray-700 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer"
+                            title="View Proposal Details"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>View</span>
+                          </button>
+
+                          {(isDraft || isReturned || (isRejected && event.allowResubmission !== false)) && (
+                            <button
+                              onClick={() => {
+                                setEditingEvent(event);
+                                setShowCreateModal(true);
+                              }}
+                              className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-[#001A4D] border border-blue-200 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer"
+                              title="Edit Proposal"
+                            >
+                              <Edit className="w-3.5 h-3.5" />
+                              <span>Edit</span>
+                            </button>
+                          )}
+
+                          {!isApproved && (
+                            <button
+                              onClick={() => handleDelete(event.id)}
+                              disabled={deletingId === event.id}
+                              className="p-1 hover:bg-red-50 text-red-600 rounded-lg transition-colors cursor-pointer"
+                              title="Delete Proposal"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
         </div>
-      )}
+
+        {/* ── Bottom Pagination Bar ── */}
+        <div className="p-3.5 bg-gray-50/60 border-t border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-gray-500">
+          <div>
+            {filteredEvents.length === 0 ? (
+              'Showing 0 events'
+            ) : (
+              <span>
+                Showing <strong className="text-gray-900 font-bold">{(currentPage - 1) * ITEMS_PER_PAGE + 1}</strong> to{' '}
+                <strong className="text-gray-900 font-bold">{Math.min(currentPage * ITEMS_PER_PAGE, filteredEvents.length)}</strong> of{' '}
+                <strong className="text-gray-900 font-bold">{filteredEvents.length}</strong> events
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed font-semibold transition-colors cursor-pointer"
+            >
+              Previous
+            </button>
+
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+              <button
+                key={pageNum}
+                onClick={() => setCurrentPage(pageNum)}
+                className={`w-7 h-7 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                  currentPage === pageNum
+                    ? 'bg-[#001A4D] text-white'
+                    : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                {pageNum}
+              </button>
+            ))}
+
+            <button
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages || totalPages === 0}
+              className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed font-semibold transition-colors cursor-pointer"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      </div>
 
       {/* Create/Edit Event Modal */}
       {showCreateModal && (

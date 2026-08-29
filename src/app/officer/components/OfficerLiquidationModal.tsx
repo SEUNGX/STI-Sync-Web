@@ -284,7 +284,7 @@ export default function OfficerLiquidationModal({
       <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden border border-gray-100">
 
         {/* Modal Header */}
-        <div className="px-6 py-4 bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] text-white flex items-center justify-between">
+        <div className="px-6 py-4 bg-[#001A4D] text-white flex items-center justify-between">
           <div>
             <h2 className="text-xl font-bold">
               {editingReport ? 'Edit Financial Liquidation Report' : 'Create Liquidation Report'}
