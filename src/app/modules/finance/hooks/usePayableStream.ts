@@ -243,85 +243,93 @@ export function useAllEventPayablesStream() {
           return false;
         });
 
-        const groupsMap = new Map<string, StudentEventCollectionGroup>();
+        try {
+          const groupsMap = new Map<string, StudentEventCollectionGroup>();
 
-        for (const doc of institutionalDocs) {
-          const groupId = doc.eventId ? `${doc.eventId}_${doc.type}` : (doc.label || 'unassigned');
-          const eId = doc.eventId || 'unassigned';
+          for (const doc of institutionalDocs) {
+            const groupId = doc.eventId ? `${doc.eventId}_${doc.type}` : (doc.label || 'unassigned');
+            const eId = doc.eventId || 'unassigned';
 
-          if (!groupsMap.has(groupId)) {
-            groupsMap.set(groupId, {
-              id: groupId,
-              eventId: eId,
-              eventName: doc.label || doc.description || (doc.type === 'admin_fine' ? 'Event Fine Collection' : 'Event Fee Collection'),
-              eventDate: formatAppDateTime(doc.createdAt, formatAppDate(doc.createdAt, '—')),
-              type: doc.type,
-              organizationId: doc.organizationId || null,
-              payablePerStudent: doc.assignedAmount || 0,
-              totalStudents: 0,
-              totalAssigned: 0,
-              totalCollected: 0,
-              transferredAmount: 0,
-              untransferredAmount: 0,
-              transferredToBudget: false,
-              transferredDate: undefined,
-              payments: [],
+            if (!groupsMap.has(groupId)) {
+              groupsMap.set(groupId, {
+                id: groupId,
+                eventId: eId,
+                eventName: doc.label || doc.description || (doc.type === 'admin_fine' ? 'Event Fine Collection' : 'Event Fee Collection'),
+                eventDate: formatAppDateTime(doc.createdAt, formatAppDate(doc.createdAt, '—')),
+                type: doc.type,
+                organizationId: doc.organizationId || null,
+                payablePerStudent: doc.assignedAmount || 0,
+                totalStudents: 0,
+                totalAssigned: 0,
+                totalCollected: 0,
+                transferredAmount: 0,
+                untransferredAmount: 0,
+                transferredToBudget: false,
+                transferredDate: undefined,
+                payments: [],
+              });
+            }
+
+            const group = groupsMap.get(groupId)!;
+            group.totalStudents += 1;
+            group.totalAssigned = (group.totalAssigned || 0) + (Number(doc.assignedAmount) || 0);
+            
+            const statusLower = String(doc.status || '').toLowerCase();
+            const isPaidStatus = statusLower === 'paid';
+            const assignedAmt = Number(doc.assignedAmount) || 0;
+            const rawPaid = Number(doc.paidAmount) || 0;
+            const hasPaidAmount = rawPaid > 0;
+            const cappedPaid = assignedAmt > 0 ? Math.min(rawPaid, assignedAmt) : rawPaid;
+            const paidAmt = hasPaidAmount ? cappedPaid : (isPaidStatus ? assignedAmt : 0);
+            const isPaid = isPaidStatus || hasPaidAmount;
+
+            const docTransferredAmt = typeof doc.transferredAmount === 'number'
+              ? Math.min(paidAmt, Math.max(0, doc.transferredAmount))
+              : (doc.transferredToBudget ? paidAmt : 0);
+
+            const docUntransferredAmt = Math.max(0, paidAmt - docTransferredAmt);
+            const isDocFullyTransferred = paidAmt > 0 && docTransferredAmt >= paidAmt;
+
+            group.totalCollected = (group.totalCollected || 0) + paidAmt;
+            group.transferredAmount = (group.transferredAmount || 0) + docTransferredAmt;
+            group.untransferredAmount = (group.untransferredAmount || 0) + docUntransferredAmt;
+
+            if (docTransferredAmt > 0 && !group.transferredDate && doc.transferredAt) {
+              group.transferredDate = formatAppDateTime(doc.transferredAt, formatAppDate(doc.transferredAt));
+            }
+
+            group.payments.push({
+              id: doc.id,
+              name: doc.studentName || 'Student',
+              studentId: doc.studentSchoolId || doc.studentId,
+              amount: paidAmt,
+              paidDate: formatAppDateTime(doc.paidAt, formatAppDate(doc.paidAt, '—')),
+              status: isPaid ? 'Paid' : 'Pending',
+              transferredAmount: docTransferredAmt,
+              untransferredAmount: docUntransferredAmt,
+              transferredToBudget: isDocFullyTransferred,
+              transferredAt: doc.transferredAt ? formatAppDateTime(doc.transferredAt, formatAppDate(doc.transferredAt)) : undefined,
+              transferredBatchId: doc.transferredBatchId || undefined,
+              paymentMethod: doc.paymentMethod || 'cash',
+              fineViolations: doc.fineViolations || undefined,
+              description: doc.description || doc.label,
             });
           }
 
-          const group = groupsMap.get(groupId)!;
-          group.totalStudents += 1;
-          group.totalAssigned = (group.totalAssigned || 0) + (Number(doc.assignedAmount) || 0);
-          
-          const statusLower = String(doc.status || '').toLowerCase();
-          const isPaidStatus = statusLower === 'paid';
-          const hasPaidAmount = (Number(doc.paidAmount) || 0) > 0;
-          const assignedAmt = Number(doc.assignedAmount) || 0;
-          const paidAmt = hasPaidAmount ? Number(doc.paidAmount) : (isPaidStatus ? assignedAmt : 0);
-          const isPaid = isPaidStatus || hasPaidAmount;
-
-          const docTransferredAmt = typeof doc.transferredAmount === 'number'
-            ? Math.min(paidAmt, Math.max(0, doc.transferredAmount))
-            : (doc.transferredToBudget ? paidAmt : 0);
-
-          const docUntransferredAmt = Math.max(0, paidAmt - docTransferredAmt);
-          const isDocFullyTransferred = paidAmt > 0 && docTransferredAmt >= paidAmt;
-
-          group.totalCollected = (group.totalCollected || 0) + paidAmt;
-          group.transferredAmount = (group.transferredAmount || 0) + docTransferredAmt;
-          group.untransferredAmount = (group.untransferredAmount || 0) + docUntransferredAmt;
-
-          if (docTransferredAmt > 0 && !group.transferredDate && doc.transferredAt) {
-            group.transferredDate = formatAppDateTime(doc.transferredAt, formatAppDate(doc.transferredAt));
-          }
-
-          group.payments.push({
-            id: doc.id,
-            name: doc.studentName || 'Student',
-            studentId: doc.studentSchoolId || doc.studentId,
-            amount: paidAmt,
-            paidDate: formatAppDateTime(doc.paidAt, formatAppDate(doc.paidAt, '—')),
-            status: isPaid ? 'Paid' : 'Pending',
-            transferredAmount: docTransferredAmt,
-            untransferredAmount: docUntransferredAmt,
-            transferredToBudget: isDocFullyTransferred,
-            transferredAt: doc.transferredAt ? formatAppDateTime(doc.transferredAt, formatAppDate(doc.transferredAt)) : undefined,
-            transferredBatchId: doc.transferredBatchId || undefined,
-            paymentMethod: doc.paymentMethod || 'cash',
-            fineViolations: doc.fineViolations || undefined,
-            description: doc.description || doc.label,
+          // Set transferredToBudget = true ONLY if all collected funds have been transferred
+          groupsMap.forEach((group) => {
+            const hasCollected = (group.totalCollected || 0) > 0;
+            const hasUntransferred = (group.untransferredAmount || 0) > 0;
+            group.transferredToBudget = hasCollected && !hasUntransferred;
           });
+
+          setData(Array.from(groupsMap.values()));
+        } catch (processErr: any) {
+          console.error('Error processing institutionalDocs in useAllEventPayablesStream:', processErr);
+          setError(processErr);
+        } finally {
+          setLoading(false);
         }
-
-        // Set transferredToBudget = true ONLY if all collected funds have been transferred
-        groupsMap.forEach((group) => {
-          const hasCollected = (group.totalCollected || 0) > 0;
-          const hasUntransferred = (group.untransferredAmount || 0) > 0;
-          group.transferredToBudget = hasCollected && !hasUntransferred;
-        });
-
-        setData(Array.from(groupsMap.values()));
-        setLoading(false);
       },
       (err) => {
         console.error('Error fetching all event payables stream:', err);

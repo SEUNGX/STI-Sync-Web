@@ -38,6 +38,8 @@ export interface PayableDocument {
   paidAt: Timestamp | null;
   recordedBy: string | null;
   paymentMethod: string | null;
+  receiptNumber?: string | null;
+  notes?: string | null;
   qrTicketUnlocked?: boolean;              // Explicit toggle: true = student event QR ticket unlocked for gate scan
   transferredAmount?: number;              // Amount from this payable already transferred to budget
   transferredToBudget?: boolean;           // True if event fee collection transferred to SAO budget

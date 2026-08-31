@@ -230,7 +230,9 @@ export async function recordPayment(
   paymentAmount: number,
   recordedBy: string,
   paymentMethod: string = 'cash',
-  unlockQRTicket?: boolean
+  unlockQRTicket?: boolean,
+  receiptNumber?: string,
+  notes?: string
 ): Promise<void> {
   const payableRef = doc(db, PAYABLES_COLLECTION, payableId);
   const snap = await getDoc(payableRef);
@@ -242,7 +244,20 @@ export async function recordPayment(
   const data = snap.data() as PayableDocument;
   const currentPaid = Number(data.paidAmount) || 0;
   const assigned = Number(data.assignedAmount) || 0;
-  const newPaidAmount = currentPaid + paymentAmount;
+
+  // GUARD: Reject if already fully paid
+  if (data.status === 'paid' || (assigned > 0 && currentPaid >= assigned)) {
+    throw new Error('This payable is already fully paid.');
+  }
+
+  // Calculate remaining balance to prevent double payments
+  const remaining = assigned > 0 ? Math.max(0, assigned - currentPaid) : paymentAmount;
+  const actualPayment = Math.min(paymentAmount, remaining);
+  if (actualPayment <= 0) {
+    throw new Error('This payable has no remaining balance to pay.');
+  }
+
+  const newPaidAmount = currentPaid + actualPayment;
   const transferredAmt = typeof data.transferredAmount === 'number' ? data.transferredAmount : 0;
   const isFullyTransferred = transferredAmt >= newPaidAmount && newPaidAmount > 0;
 
@@ -266,6 +281,9 @@ export async function recordPayment(
     transferredToBudget: isFullyTransferred,
     updatedAt: serverTimestamp(),
   };
+
+  if (receiptNumber) updates.receiptNumber = receiptNumber;
+  if (notes) updates.notes = notes;
 
   // Option A (Strict): Automatically unlock only when 100% fully paid, or if explicit boolean passed
   if (typeof unlockQRTicket === 'boolean') {

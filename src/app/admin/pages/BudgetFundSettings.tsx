@@ -31,6 +31,15 @@ import {
   Trash2,
   Camera,
   Loader2,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  ChevronsLeft,
+  ChevronsRight,
+  RotateCcw,
+  SlidersHorizontal,
+  CreditCard,
+  Coins,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useSemesters } from "../../modules/academic/hooks/useAcademicStream";
@@ -38,7 +47,11 @@ import { useSaoLedger } from "../../modules/finance/hooks/useFinanceStream";
 import { useAllEventPayablesStream } from "../../modules/finance/hooks/usePayableStream";
 import { useAllEvents } from "../../modules/events/hooks/useEventStream";
 import { addLedgerTransaction } from "../../modules/finance/services/finance.service";
-import { transferCollectionGroupToLedger } from "../../modules/finance/services/payable.service";
+import {
+  transferCollectionGroupToLedger,
+  recordPayment,
+  bulkRecordPayment,
+} from "../../modules/finance/services/payable.service";
 import type { SaoLedgerDocument, TransactionSource, TransactionType } from "../../modules/finance/types/finance.types";
 import type { StudentEventCollectionGroup } from "../../modules/finance/types/payable.types";
 import { Timestamp } from "firebase/firestore";
@@ -306,6 +319,245 @@ function AddBudgetModal({ currentBalance, onClose, onSave }: {
   );
 }
 
+// ─── Collection Detailed Types & Badges ─────────────────────────────────────
+export type CollectionDetailedType =
+  | "event_fee"
+  | "event_fine"
+  | "institutional_fee"
+  | "admin_fine";
+
+export const COLLECTION_TYPE_META: Record<
+  CollectionDetailedType,
+  { label: string; shortLabel: string; badgeClass: string }
+> = {
+  event_fee: {
+    label: "Event Fees",
+    shortLabel: "Event Fee",
+    badgeClass: "bg-blue-50 text-[#0E4EBD] border border-blue-200",
+  },
+  event_fine: {
+    label: "Event Fines",
+    shortLabel: "Event Fine",
+    badgeClass: "bg-amber-50 text-amber-700 border border-amber-200",
+  },
+  institutional_fee: {
+    label: "Institutional Fees",
+    shortLabel: "Institutional Fee",
+    badgeClass: "bg-purple-50 text-purple-700 border border-purple-200",
+  },
+  admin_fine: {
+    label: "Administrative Fines",
+    shortLabel: "Administrative Fine",
+    badgeClass: "bg-rose-50 text-rose-700 border border-rose-200",
+  },
+};
+
+export function getCollectionDetailedType(c: StudentEventCollectionGroup): CollectionDetailedType {
+  const hasEvent = !!c.eventId && c.eventId !== "unassigned";
+  const nameLower = (c.eventName || "").toLowerCase();
+
+  if (c.type === "admin_fine") {
+    if (hasEvent || nameLower.includes("attendance") || nameLower.includes("event fine")) {
+      return "event_fine";
+    }
+    return "admin_fine";
+  }
+
+  if (c.type === "custom") {
+    return "institutional_fee";
+  }
+
+  if (c.type === "event_fee") {
+    if (hasEvent) {
+      return "event_fee";
+    }
+    return "institutional_fee";
+  }
+
+  if (nameLower.includes("fine") || nameLower.includes("penalty")) {
+    return hasEvent ? "event_fine" : "admin_fine";
+  }
+
+  return hasEvent ? "event_fee" : "institutional_fee";
+}
+
+// ─── Record Custom Payment Modal ──────────────────────────────────────────────
+interface RecordCustomPaymentModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSuccess?: (payableId: string) => void;
+  studentName: string;
+  studentId: string;
+  payableTitle: string;
+  defaultAmount: number;
+  payableId: string;
+}
+
+function RecordCustomPaymentModal({
+  isOpen,
+  onClose,
+  onSuccess,
+  studentName,
+  studentId,
+  payableTitle,
+  defaultAmount,
+  payableId,
+}: RecordCustomPaymentModalProps) {
+  const [amount, setAmount] = useState<number>(defaultAmount);
+  const [paymentMethod, setPaymentMethod] = useState<string>("cash");
+  const [receiptNumber, setReceiptNumber] = useState<string>("");
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+
+  if (!isOpen) return null;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!amount || amount <= 0) {
+      toast.error("Please enter a valid payment amount.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await recordPayment(
+        payableId,
+        amount,
+        "Admin SAO",
+        paymentMethod,
+        undefined,
+        receiptNumber.trim() || undefined
+      );
+      toast.success(`Payment of ${formatCurrency(amount)} recorded for ${studentName}`);
+      onSuccess?.(payableId);
+      onClose();
+    } catch (err: any) {
+      console.error("Error recording payment:", err);
+      toast.error(err?.message || "Failed to record payment. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-60 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/55 backdrop-blur-2xs" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col">
+        {/* Header */}
+        <div className="bg-[#001A4D] px-6 py-4 flex items-center justify-between text-white">
+          <div className="flex items-center gap-2.5">
+            <Coins className="w-5 h-5 text-[#FFD41C]" />
+            <div>
+              <h3 className="font-bold text-base">Record Payment</h3>
+              <p className="text-white/70 text-xs">Institutional Assessment / Fine</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            disabled={isSubmitting}
+            className="text-white/70 hover:text-white p-1 rounded-lg hover:bg-white/10 cursor-pointer"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+          {/* Student Info Card */}
+          <div className="bg-slate-50 border border-gray-200 rounded-xl p-3.5 space-y-1.5">
+            <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Student Details</p>
+            <p className="text-[#001A4D] font-bold text-sm">{studentName}</p>
+            <p className="text-gray-500 font-mono text-xs">Student ID: {studentId}</p>
+            <div className="pt-2 mt-2 border-t border-gray-200 flex items-center justify-between text-xs">
+              <span className="text-gray-600">Payable: <strong className="text-gray-800">{payableTitle}</strong></span>
+              <span className="font-bold text-[#001A4D]">{formatCurrency(defaultAmount)}</span>
+            </div>
+          </div>
+
+          {/* Amount */}
+          <div>
+            <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
+              Payment Amount (PHP) <span className="text-red-500">*</span>
+            </label>
+            <div className="relative">
+              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">₱</span>
+              <input
+                type="number"
+                min="0.01"
+                step="0.01"
+                value={amount}
+                onChange={(e) => setAmount(Number(e.target.value))}
+                className="w-full pl-8 pr-4 py-2 text-sm font-bold text-gray-900 border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-[#0E4EBD]/20 focus:border-[#0E4EBD]"
+                required
+              />
+            </div>
+          </div>
+
+          {/* Payment Method */}
+          <div>
+            <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
+              Payment Method
+            </label>
+            <select
+              value={paymentMethod}
+              onChange={(e) => setPaymentMethod(e.target.value)}
+              className="w-full px-3 py-2 text-xs font-medium border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-[#0E4EBD]/20 focus:border-[#0E4EBD] bg-white cursor-pointer"
+            >
+              <option value="cash">Cash (Over the Counter)</option>
+              <option value="gcash">GCash</option>
+              <option value="maya">Maya</option>
+              <option value="bank_transfer">Bank Deposit / Transfer</option>
+              <option value="other">Other Official Receipt</option>
+            </select>
+          </div>
+
+          {/* OR / Receipt # */}
+          <div>
+            <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
+              Official Receipt (OR) / Ref # <span className="text-gray-400 font-normal">(Optional)</span>
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. OR# 102938 or GCash Ref# 9988123"
+              value={receiptNumber}
+              onChange={(e) => setReceiptNumber(e.target.value)}
+              className="w-full px-3 py-2 text-xs border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-[#0E4EBD]/20 focus:border-[#0E4EBD]"
+            />
+          </div>
+
+          {/* Footer Buttons */}
+          <div className="pt-3 border-t border-gray-100 flex gap-2.5">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isSubmitting}
+              className="flex-1 py-2 border border-gray-300 text-gray-700 text-xs font-semibold rounded-xl hover:bg-gray-50 cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting || amount <= 0}
+              className="flex-1 py-2 bg-green-600 hover:bg-green-700 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-50 transition-colors"
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Recording...</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="w-3.5 h-3.5" />
+                  <span>Confirm & Mark Paid</span>
+                </>
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ─── Collection Detail / Transfer Modal ───────────────────────────────────────
 function CollectionDetailModal({
   collection,
@@ -316,30 +568,164 @@ function CollectionDetailModal({
   onClose: () => void;
   onTransfer: () => void;
 }) {
-  const paid = collection.payments.filter((p) => p.status === "Paid");
-  const pending = collection.payments.filter((p) => p.status === "Pending");
+  const [localPaidIds, setLocalPaidIds] = useState<Set<string>>(new Set());
+
+  // Merge collection payments with any locally recorded payments so status flips to Paid immediately
+  const effectivePayments = useMemo(() => {
+    return collection.payments.map((p) => {
+      if (localPaidIds.has(p.id)) {
+        return {
+          ...p,
+          status: "Paid" as const,
+          amount: p.amount > 0 ? p.amount : collection.payablePerStudent,
+          paidDate: p.paidDate && p.paidDate !== "—" ? p.paidDate : "Just now",
+          untransferredAmount: collection.payablePerStudent,
+        };
+      }
+      return p;
+    });
+  }, [collection.payments, localPaidIds, collection.payablePerStudent]);
+
+  const paid = effectivePayments.filter((p) => p.status === "Paid");
+  const pending = effectivePayments.filter((p) => p.status === "Pending");
   const totalCollected = paid.reduce((s, p) => s + p.amount, 0);
   
   const alreadyTransferred = paid.filter((p) => p.transferredToBudget);
-  const alreadyTransferredAmount = collection.payments.reduce((s, p) => s + (p.transferredAmount !== undefined ? p.transferredAmount : (p.transferredToBudget ? p.amount : 0)), 0);
+  const alreadyTransferredAmount = effectivePayments.reduce((s, p) => s + (p.transferredAmount !== undefined ? p.transferredAmount : (p.transferredToBudget ? p.amount : 0)), 0);
   
   const untransferred = paid.filter((p) => !p.transferredToBudget);
-  const untransferredAmount = collection.payments.reduce((s, p) => s + (p.untransferredAmount !== undefined ? p.untransferredAmount : (p.status === 'Paid' && !p.transferredToBudget ? p.amount : 0)), 0);
+  const untransferredAmount = effectivePayments.reduce((s, p) => s + (p.untransferredAmount !== undefined ? p.untransferredAmount : (p.status === 'Paid' && !p.transferredToBudget ? p.amount : 0)), 0);
 
   const collectionPct = collection.totalStudents > 0 
     ? Math.round((paid.length / collection.totalStudents) * 100) 
     : 0;
 
+  const detailedType = getCollectionDetailedType(collection);
+  const isCustomOrAdmin = detailedType === "institutional_fee" || detailedType === "admin_fine";
+
+  const [paymentModalStudent, setPaymentModalStudent] = useState<CollectionPaymentItem | null>(null);
+  const [selectedPaymentIds, setSelectedPaymentIds] = useState<string[]>([]);
+  const [isBulkSubmitting, setIsBulkSubmitting] = useState(false);
+
+  // Search, filter, sorting, and pagination state for payments
+  const [modalSearch, setModalSearch] = useState("");
+  const [modalStatusFilter, setModalStatusFilter] = useState<"all" | "paid" | "pending" | "ready" | "transferred">("all");
+  const [modalSortField, setModalSortField] = useState<"name" | "studentId" | "amount" | "date" | "status">("name");
+  const [modalSortDir, setModalSortDir] = useState<"asc" | "desc">("asc");
+  const [modalPage, setModalPage] = useState(1);
+  const [modalPerPage, setModalPerPage] = useState(10);
+
+  const handleSort = (field: "name" | "studentId" | "amount" | "date" | "status") => {
+    if (modalSortField === field) {
+      setModalSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setModalSortField(field);
+      setModalSortDir(field === "name" || field === "studentId" ? "asc" : "desc");
+    }
+    setModalPage(1);
+  };
+
+  const filteredAndSortedPayments = useMemo(() => {
+    return effectivePayments
+      .filter((p) => {
+        const isPaid = p.status === "Paid";
+        const isTransferred = isPaid && Boolean(p.transferredToBudget);
+        const isReady = isPaid && !isTransferred;
+
+        if (modalStatusFilter === "paid" && !isPaid) return false;
+        if (modalStatusFilter === "pending" && isPaid) return false;
+        if (modalStatusFilter === "transferred" && !isTransferred) return false;
+        if (modalStatusFilter === "ready" && !isReady) return false;
+
+        if (modalSearch.trim()) {
+          const q = modalSearch.toLowerCase().trim();
+          const matchName = (p.name || "").toLowerCase().includes(q);
+          const matchId = (p.studentId || "").toLowerCase().includes(q);
+          const matchDate = (p.paidDate || "").toLowerCase().includes(q);
+          if (!matchName && !matchId && !matchDate) return false;
+        }
+
+        return true;
+      })
+      .sort((a, b) => {
+        let cmp = 0;
+        switch (modalSortField) {
+          case "name":
+            cmp = (a.name || "").localeCompare(b.name || "");
+            break;
+          case "studentId":
+            cmp = (a.studentId || "").localeCompare(b.studentId || "");
+            break;
+          case "amount":
+            cmp = (a.amount || 0) - (b.amount || 0);
+            break;
+          case "date":
+            cmp = (a.paidDate || "").localeCompare(b.paidDate || "");
+            break;
+          case "status":
+            cmp = (a.status || "").localeCompare(b.status || "");
+            break;
+        }
+        return modalSortDir === "asc" ? cmp : -cmp;
+      });
+  }, [effectivePayments, modalSearch, modalStatusFilter, modalSortField, modalSortDir]);
+
+  const pendingVisibleIds = useMemo(() => {
+    return filteredAndSortedPayments.filter((p) => p.status !== "Paid").map((p) => p.id);
+  }, [filteredAndSortedPayments]);
+
+  const allPendingSelected =
+    pendingVisibleIds.length > 0 &&
+    pendingVisibleIds.every((id) => selectedPaymentIds.includes(id));
+
+  const toggleSelectAll = () => {
+    if (allPendingSelected) {
+      setSelectedPaymentIds((prev) => prev.filter((id) => !pendingVisibleIds.includes(id)));
+    } else {
+      setSelectedPaymentIds((prev) => Array.from(new Set([...prev, ...pendingVisibleIds])));
+    }
+  };
+
+  const toggleSelectPayment = (id: string) => {
+    setSelectedPaymentIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleBatchRecordPayment = async () => {
+    if (selectedPaymentIds.length === 0) return;
+    if (!confirm(`Are you sure you want to mark ${selectedPaymentIds.length} selected student(s) as paid via cash?`)) return;
+    setIsBulkSubmitting(true);
+    const batchIds = [...selectedPaymentIds];
+    try {
+      await bulkRecordPayment(batchIds, "Admin SAO");
+      toast.success(`Successfully recorded payments for ${batchIds.length} student(s)`);
+      setLocalPaidIds((prev) => new Set([...prev, ...batchIds]));
+      setSelectedPaymentIds([]);
+    } catch (err: any) {
+      console.error("Error bulk recording payment:", err);
+      toast.error(err?.message || "Failed to record bulk payments");
+    } finally {
+      setIsBulkSubmitting(false);
+    }
+  };
+
+  const totalModalPages = Math.max(1, Math.ceil(filteredAndSortedPayments.length / modalPerPage));
+  const paginatedPayments = useMemo(() => {
+    const start = (modalPage - 1) * modalPerPage;
+    return filteredAndSortedPayments.slice(start, start + modalPerPage);
+  }, [filteredAndSortedPayments, modalPage, modalPerPage]);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/55" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-[680px] max-h-[90vh] flex flex-col overflow-hidden">
+      <div className="absolute inset-0 bg-black/55 backdrop-blur-xs" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-[820px] max-h-[92vh] flex flex-col overflow-hidden">
         <div className="bg-[#001A4D] px-6 py-4 flex items-center justify-between flex-shrink-0">
           <div>
             <div className="flex items-center gap-2">
               <h3 className="text-white font-bold text-base">{collection.eventName}</h3>
-              <span className="px-2 py-0.5 bg-[#FFD41C] text-[#001A4D] rounded-full text-xs font-bold capitalize">
-                {collection.type?.replace('_', ' ') || 'Collection'}
+              <span className="px-2.5 py-0.5 bg-[#FFD41C] text-[#001A4D] rounded-full text-xs font-bold">
+                {COLLECTION_TYPE_META[detailedType].shortLabel}
               </span>
             </div>
             <p className="text-white/80 text-xs mt-0.5">{collection.eventDate}</p>
@@ -376,68 +762,299 @@ function CollectionDetailModal({
 
           {/* Payment breakdown */}
           <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-xs">
-            <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
-              <p className="text-[#001A4D] text-xs font-bold uppercase tracking-wide">Individual Student Payment Records</p>
-              <div className="flex items-center gap-2">
-                <span className="flex items-center gap-1 text-xs text-green-700 font-medium bg-green-50 px-2 py-0.5 rounded-full border border-green-200">
-                  <CheckCircle className="w-3 h-3" />{paid.length} Paid
-                </span>
-                {pending.length > 0 && (
-                  <span className="flex items-center gap-1 text-xs text-amber-700 font-medium bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
-                    <Clock className="w-3 h-3" />{pending.length} Pending
-                  </span>
+            <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+              <div>
+                <p className="text-[#001A4D] text-xs font-bold uppercase tracking-wide">Individual Student Payment Records</p>
+                <p className="text-gray-400 text-[11px] mt-0.5">
+                  {isCustomOrAdmin
+                    ? "Manage student fees, record cash payments, and track transfers"
+                    : "Filter, search, and inspect student payment records"}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {isCustomOrAdmin && selectedPaymentIds.length > 0 && (
+                  <button
+                    onClick={handleBatchRecordPayment}
+                    disabled={isBulkSubmitting}
+                    className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    {isBulkSubmitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
+                    <span>Mark {selectedPaymentIds.length} as Paid</span>
+                  </button>
                 )}
+
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Search student or ID..."
+                    value={modalSearch}
+                    onChange={(e) => {
+                      setModalSearch(e.target.value);
+                      setModalPage(1);
+                    }}
+                    className="pl-7 pr-2.5 py-1 text-xs bg-white border border-gray-300 rounded-lg outline-none focus:ring-1 focus:ring-[#0E4EBD] w-40"
+                  />
+                  {modalSearch && (
+                    <button
+                      onClick={() => setModalSearch("")}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 cursor-pointer"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+
+                <select
+                  value={modalStatusFilter}
+                  onChange={(e) => {
+                    setModalStatusFilter(e.target.value as any);
+                    setModalPage(1);
+                  }}
+                  className="px-2.5 py-1 text-xs bg-white border border-gray-300 rounded-lg outline-none focus:ring-1 focus:ring-[#0E4EBD] font-medium text-gray-700 cursor-pointer"
+                >
+                  <option value="all">All ({collection.payments.length})</option>
+                  <option value="ready">Ready to Transfer ({untransferred.length})</option>
+                  <option value="transferred">Transferred ({alreadyTransferred.length})</option>
+                  <option value="paid">Paid ({paid.length})</option>
+                  <option value="pending">Pending ({pending.length})</option>
+                </select>
               </div>
             </div>
-            <div className="max-h-60 overflow-y-auto">
+
+            <div className="overflow-x-auto">
               <table className="w-full text-left">
-                <thead className="bg-gray-50 sticky top-0 border-b border-gray-200 text-[11px] font-bold text-gray-500 uppercase tracking-wide">
+                <thead className="bg-gray-50 border-b border-gray-200 text-[11px] font-bold text-gray-600 uppercase tracking-wider select-none">
                   <tr>
-                    <th className="px-3.5 py-2">Student</th>
-                    <th className="px-3.5 py-2">Student ID</th>
-                    <th className="px-3.5 py-2">Amount</th>
-                    <th className="px-3.5 py-2">Date Paid</th>
-                    <th className="px-3.5 py-2">Transfer State</th>
+                    {isCustomOrAdmin && (
+                      <th className="w-8 px-3 py-2.5 text-center">
+                        <input
+                          type="checkbox"
+                          checked={allPendingSelected}
+                          onChange={toggleSelectAll}
+                          disabled={pendingVisibleIds.length === 0}
+                          className="rounded border-gray-300 text-[#0E4EBD] focus:ring-[#0E4EBD] cursor-pointer"
+                          title="Select all pending students on this page"
+                        />
+                      </th>
+                    )}
+                    <th
+                      onClick={() => handleSort("name")}
+                      className="px-3.5 py-2.5 cursor-pointer hover:bg-gray-100 transition-colors"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span>Student</span>
+                        {modalSortField === "name" ? (
+                          modalSortDir === "asc" ? <ArrowUp className="w-3 h-3 text-[#0E4EBD]" /> : <ArrowDown className="w-3 h-3 text-[#0E4EBD]" />
+                        ) : (
+                          <ArrowUpDown className="w-3 h-3 text-gray-300" />
+                        )}
+                      </div>
+                    </th>
+                    <th
+                      onClick={() => handleSort("studentId")}
+                      className="px-3.5 py-2.5 cursor-pointer hover:bg-gray-100 transition-colors"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span>Student ID</span>
+                        {modalSortField === "studentId" ? (
+                          modalSortDir === "asc" ? <ArrowUp className="w-3 h-3 text-[#0E4EBD]" /> : <ArrowDown className="w-3 h-3 text-[#0E4EBD]" />
+                        ) : (
+                          <ArrowUpDown className="w-3 h-3 text-gray-300" />
+                        )}
+                      </div>
+                    </th>
+                    <th
+                      onClick={() => handleSort("amount")}
+                      className="px-3.5 py-2.5 cursor-pointer hover:bg-gray-100 transition-colors"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span>Amount</span>
+                        {modalSortField === "amount" ? (
+                          modalSortDir === "asc" ? <ArrowUp className="w-3 h-3 text-[#0E4EBD]" /> : <ArrowDown className="w-3 h-3 text-[#0E4EBD]" />
+                        ) : (
+                          <ArrowUpDown className="w-3 h-3 text-gray-300" />
+                        )}
+                      </div>
+                    </th>
+                    <th
+                      onClick={() => handleSort("date")}
+                      className="px-3.5 py-2.5 cursor-pointer hover:bg-gray-100 transition-colors"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span>Date Paid</span>
+                        {modalSortField === "date" ? (
+                          modalSortDir === "asc" ? <ArrowUp className="w-3 h-3 text-[#0E4EBD]" /> : <ArrowDown className="w-3 h-3 text-[#0E4EBD]" />
+                        ) : (
+                          <ArrowUpDown className="w-3 h-3 text-gray-300" />
+                        )}
+                      </div>
+                    </th>
+                    <th
+                      onClick={() => handleSort("status")}
+                      className="px-3.5 py-2.5 cursor-pointer hover:bg-gray-100 transition-colors"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span>Transfer State</span>
+                        {modalSortField === "status" ? (
+                          modalSortDir === "asc" ? <ArrowUp className="w-3 h-3 text-[#0E4EBD]" /> : <ArrowDown className="w-3 h-3 text-[#0E4EBD]" />
+                        ) : (
+                          <ArrowUpDown className="w-3 h-3 text-gray-300" />
+                        )}
+                      </div>
+                    </th>
+                    {isCustomOrAdmin && (
+                      <th className="px-3.5 py-2.5 text-right whitespace-nowrap">Payment Action</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 text-xs">
-                  {collection.payments.map((p) => {
-                    const isStudentPaid = p.status === "Paid";
-                    return (
-                      <tr key={p.id} className={!isStudentPaid ? "bg-amber-50/30" : "hover:bg-gray-50"}>
-                        <td className="px-3.5 py-2.5 text-[#001A4D] font-medium">{p.name}</td>
-                        <td className="px-3.5 py-2.5 text-gray-500 font-mono">{p.studentId}</td>
-                        <td className="px-3.5 py-2.5">
-                          <span className={`font-bold ${isStudentPaid ? "text-green-600" : "text-gray-400"}`}>
-                            {isStudentPaid ? formatCurrency(p.amount) : "—"}
-                          </span>
-                        </td>
-                        <td className="px-3.5 py-2.5 text-gray-500 whitespace-nowrap">{p.paidDate}</td>
-                        <td className="px-3.5 py-2.5">
-                          {isStudentPaid && p.transferredToBudget ? (
-                            <span className="px-2 py-0.5 text-[11px] rounded-full font-bold bg-blue-100 text-blue-700 inline-flex items-center gap-1">
-                              <CheckCircle className="w-2.5 h-2.5" /> Transferred {p.transferredAt ? `(${p.transferredAt})` : ''}
-                            </span>
-                          ) : isStudentPaid && (p.transferredAmount || 0) > 0 ? (
-                            <span className="px-2 py-0.5 text-[11px] rounded-full font-bold bg-indigo-100 text-indigo-700 inline-flex items-center gap-1">
-                              <Clock className="w-2.5 h-2.5" /> Partially Transferred (+{formatCurrency(p.untransferredAmount || 0)} new)
-                            </span>
-                          ) : isStudentPaid ? (
-                            <span className="px-2 py-0.5 text-[11px] rounded-full font-bold bg-green-100 text-green-700 inline-flex items-center gap-1">
-                              <Clock className="w-2.5 h-2.5" /> Newly Paid · Ready to Transfer
-                            </span>
-                          ) : (
-                            <span className="px-2 py-0.5 text-[11px] rounded-full font-medium bg-amber-100 text-amber-700">
-                              Pending Payment
-                            </span>
+                  {paginatedPayments.length === 0 ? (
+                    <tr>
+                      <td colSpan={isCustomOrAdmin ? 7 : 5} className="px-4 py-8 text-center text-gray-400">
+                        No student payment records found matching your filters.
+                      </td>
+                    </tr>
+                  ) : (
+                    paginatedPayments.map((p) => {
+                      const isStudentPaid = p.status === "Paid";
+                      return (
+                        <tr key={p.id} className={!isStudentPaid ? "bg-amber-50/30 hover:bg-amber-50/50" : "hover:bg-gray-50"}>
+                          {isCustomOrAdmin && (
+                            <td className="px-3 py-2.5 text-center">
+                              {!isStudentPaid ? (
+                                <input
+                                  type="checkbox"
+                                  checked={selectedPaymentIds.includes(p.id)}
+                                  onChange={() => toggleSelectPayment(p.id)}
+                                  className="rounded border-gray-300 text-[#0E4EBD] focus:ring-[#0E4EBD] cursor-pointer"
+                                />
+                              ) : (
+                                <span className="text-gray-300 text-xs select-none">—</span>
+                              )}
+                            </td>
                           )}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                          <td className="px-3.5 py-2.5 text-[#001A4D] font-medium">{p.name}</td>
+                          <td className="px-3.5 py-2.5 text-gray-500 font-mono">{p.studentId}</td>
+                          <td className="px-3.5 py-2.5">
+                            <span className={`font-bold ${isStudentPaid ? "text-green-600" : "text-gray-400"}`}>
+                              {isStudentPaid ? formatCurrency(p.amount) : "—"}
+                            </span>
+                          </td>
+                          <td className="px-3.5 py-2.5 text-gray-500 whitespace-nowrap">{p.paidDate}</td>
+                          <td className="px-3.5 py-2.5">
+                            {isStudentPaid && p.transferredToBudget ? (
+                              <span className="px-2 py-0.5 text-[11px] rounded-full font-bold bg-blue-100 text-blue-700 inline-flex items-center gap-1">
+                                <CheckCircle className="w-2.5 h-2.5" /> Transferred {p.transferredAt ? `(${p.transferredAt})` : ''}
+                              </span>
+                            ) : isStudentPaid && (p.transferredAmount || 0) > 0 ? (
+                              <span className="px-2 py-0.5 text-[11px] rounded-full font-bold bg-indigo-100 text-indigo-700 inline-flex items-center gap-1">
+                                <Clock className="w-2.5 h-2.5" /> Partially Transferred (+{formatCurrency(p.untransferredAmount || 0)} new)
+                              </span>
+                            ) : isStudentPaid ? (
+                              <span className="px-2 py-0.5 text-[11px] rounded-full font-bold bg-green-100 text-green-700 inline-flex items-center gap-1">
+                                <Clock className="w-2.5 h-2.5" /> Newly Paid · Ready to Transfer
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 text-[11px] rounded-full font-medium bg-amber-100 text-amber-700">
+                                Pending Payment
+                              </span>
+                            )}
+                          </td>
+                          {isCustomOrAdmin && (
+                            <td className="px-3.5 py-2.5 text-right whitespace-nowrap">
+                              {!isStudentPaid ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setPaymentModalStudent(p)}
+                                  className="px-2.5 py-1 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold text-[11px] inline-flex items-center gap-1 shadow-2xs cursor-pointer transition-colors"
+                                  title="Record cash or electronic payment for this student"
+                                >
+                                  <CreditCard className="w-3 h-3" />
+                                  <span>Record Payment</span>
+                                </button>
+                              ) : (
+                                <span className="text-[11px] font-semibold text-green-700 bg-green-50 border border-green-200 px-2 py-0.5 rounded-md inline-flex items-center gap-1 select-none">
+                                  <CheckCircle className="w-3 h-3 text-green-600" />
+                                  <span>Paid</span>
+                                </span>
+                              )}
+                            </td>
+                          )}
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>
+
+            {/* Modal Pagination */}
+            {filteredAndSortedPayments.length > 0 && (
+              <div className="px-4 py-2.5 bg-gray-50/80 border-t border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-gray-500">
+                <div className="flex items-center gap-2">
+                  <span>
+                    Showing <strong className="text-gray-800">{(modalPage - 1) * modalPerPage + 1}</strong> to{" "}
+                    <strong className="text-gray-800">{Math.min(modalPage * modalPerPage, filteredAndSortedPayments.length)}</strong> of{" "}
+                    <strong className="text-gray-800">{filteredAndSortedPayments.length}</strong> records
+                  </span>
+                  <div className="flex items-center gap-1 ml-2">
+                    <span className="text-[11px] text-gray-400">Rows:</span>
+                    <select
+                      value={modalPerPage}
+                      onChange={(e) => {
+                        setModalPerPage(Number(e.target.value));
+                        setModalPage(1);
+                      }}
+                      className="bg-white border border-gray-200 rounded px-1.5 py-0.5 text-xs text-gray-700 cursor-pointer"
+                    >
+                      {[5, 10, 25, 50].map((sz) => (
+                        <option key={sz} value={sz}>{sz}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {totalModalPages > 1 && (
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setModalPage((p) => Math.max(1, p - 1))}
+                      disabled={modalPage === 1}
+                      className="px-2 py-1 border border-gray-200 rounded bg-white font-medium text-gray-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-100 cursor-pointer"
+                    >
+                      Prev
+                    </button>
+                    {Array.from({ length: totalModalPages }, (_, i) => i + 1)
+                      .filter((p) => p === 1 || p === totalModalPages || Math.abs(p - modalPage) <= 1)
+                      .map((p, idx, arr) => {
+                        const prev = arr[idx - 1];
+                        return (
+                          <span key={p} className="flex items-center gap-1">
+                            {prev && p - prev > 1 && <span className="text-gray-400 text-xs px-0.5">...</span>}
+                            <button
+                              onClick={() => setModalPage(p)}
+                              className={`w-6 h-6 rounded text-xs font-bold transition-all cursor-pointer ${
+                                modalPage === p
+                                  ? "bg-[#001A4D] text-white"
+                                  : "border border-gray-200 text-gray-600 hover:bg-white bg-gray-50"
+                              }`}
+                            >
+                              {p}
+                            </button>
+                          </span>
+                        );
+                      })}
+                    <button
+                      onClick={() => setModalPage((p) => Math.min(totalModalPages, p + 1))}
+                      disabled={modalPage === totalModalPages}
+                      className="px-2 py-1 border border-gray-200 rounded bg-white font-medium text-gray-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-100 cursor-pointer"
+                    >
+                      Next
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {untransferredAmount > 0 && alreadyTransferredAmount > 0 && (
@@ -484,6 +1101,22 @@ function CollectionDetailModal({
           )}
         </div>
       </div>
+
+      {paymentModalStudent && (
+        <RecordCustomPaymentModal
+          isOpen={true}
+          onClose={() => setPaymentModalStudent(null)}
+          onSuccess={(paidId) => {
+            setLocalPaidIds((prev) => new Set([...prev, paidId]));
+            setSelectedPaymentIds((prev) => prev.filter((id) => id !== paidId));
+          }}
+          studentName={paymentModalStudent.name}
+          studentId={paymentModalStudent.studentId}
+          payableTitle={collection.eventName}
+          defaultAmount={collection.payablePerStudent}
+          payableId={paymentModalStudent.id}
+        />
+      )}
     </div>
   );
 }
@@ -691,6 +1324,45 @@ const sourceLabel: Record<TransactionSource, string> = {
   liquidation_deficit: "Liquidation Deficit Expense",
 };
 
+export type CollectionStatus = "ready" | "partial" | "transferred" | "no_payments";
+export type CollectionSortField =
+  | "name"
+  | "type"
+  | "fee"
+  | "students"
+  | "paid"
+  | "collected"
+  | "status"
+  | "date";
+
+function getCollectionStatus(c: StudentEventCollectionGroup): CollectionStatus {
+  const untransferred = c.untransferredAmount || 0;
+  const hasTransferred = (c.transferredAmount || 0) > 0;
+  const paidCount = (c.payments || []).filter((p) => p.status === "Paid").length;
+
+  if (untransferred > 0 && hasTransferred) return "partial";
+  if (untransferred > 0) return "ready";
+  if (c.transferredToBudget || (hasTransferred && untransferred === 0)) return "transferred";
+  if (paidCount === 0) return "no_payments";
+  return "no_payments";
+}
+
+function getCollectionTimestamp(c: StudentEventCollectionGroup): number {
+  if (c.eventDate) {
+    const t = Date.parse(c.eventDate);
+    if (!isNaN(t)) return t;
+  }
+  if (c.payments && c.payments.length > 0) {
+    for (const p of c.payments) {
+      if (p.paidDate) {
+        const t = Date.parse(p.paidDate);
+        if (!isNaN(t)) return t;
+      }
+    }
+  }
+  return 0;
+}
+
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 export function BudgetFundSettings() {
   const [tab, setTab] = useState<MainTab>("ledger");
@@ -704,7 +1376,11 @@ export function BudgetFundSettings() {
   const [showAddBudget, setShowAddBudget] = useState(false);
   const [showAddExpense, setShowAddExpense] = useState(false);
   const [showAddPayable, setShowAddPayable] = useState(false);
-  const [viewCollection, setViewCollection] = useState<StudentEventCollectionGroup | null>(null);
+  const [viewCollectionId, setViewCollectionId] = useState<string | null>(null);
+  const viewCollection = useMemo(() => {
+    if (!viewCollectionId) return null;
+    return collections.find((c) => c.id === viewCollectionId) || null;
+  }, [collections, viewCollectionId]);
   const [selectedTxForDetail, setSelectedTxForDetail] = useState<SaoLedgerDocument | null>(null);
   
   const [txFilter, setTxFilter] = useState<"all" | "income" | "expense">("all");
@@ -776,15 +1452,164 @@ export function BudgetFundSettings() {
     setLedgerPage(1);
   }, [txFilter, sourceFilter, semesterFilter, searchQuery]);
 
-  // Pagination for Student Collections (8 per page)
+  // ─── Filter, Sort & Pagination for Student Collections & Payables ─────────────
+  const [collectionsSearchQuery, setCollectionsSearchQuery] = useState("");
+  const [collectionsTypeFilter, setCollectionsTypeFilter] = useState<string>("all");
+  const [collectionsStatusFilter, setCollectionsStatusFilter] = useState<string>("all");
+  const [collectionsSortField, setCollectionsSortField] = useState<CollectionSortField>("date");
+  const [collectionsSortDirection, setCollectionsSortDirection] = useState<"asc" | "desc">("desc");
   const [collectionsPage, setCollectionsPage] = useState(1);
-  const COLLECTIONS_PER_PAGE = 8;
-  const totalCollectionsPages = Math.max(1, Math.ceil(collections.length / COLLECTIONS_PER_PAGE));
+  const [collectionsPerPage, setCollectionsPerPage] = useState(8);
 
+  const handleCollectionsSort = (field: CollectionSortField) => {
+    if (collectionsSortField === field) {
+      setCollectionsSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setCollectionsSortField(field);
+      setCollectionsSortDirection(field === "name" || field === "type" ? "asc" : "desc");
+    }
+    setCollectionsPage(1);
+  };
+
+  const collectionCounts = useMemo(() => {
+    let ready = 0;
+    let partial = 0;
+    let transferred = 0;
+    let noPayments = 0;
+
+    collections.forEach((c) => {
+      const st = getCollectionStatus(c);
+      if (st === "ready") ready++;
+      else if (st === "partial") partial++;
+      else if (st === "transferred") transferred++;
+      else if (st === "no_payments") noPayments++;
+    });
+
+    return {
+      all: collections.length,
+      ready,
+      partial,
+      transferred,
+      no_payments: noPayments,
+    };
+  }, [collections]);
+
+  const filteredAndSortedCollections = useMemo(() => {
+    return collections
+      .filter((c) => {
+        // 1. Search Query
+        if (collectionsSearchQuery.trim()) {
+          const q = collectionsSearchQuery.toLowerCase().trim();
+          const detailedType = getCollectionDetailedType(c);
+          const typeMeta = COLLECTION_TYPE_META[detailedType];
+          const matchName = (c.eventName || "").toLowerCase().includes(q);
+          const matchId = (c.eventId || "").toLowerCase().includes(q);
+          const matchDate = (c.eventDate || "").toLowerCase().includes(q);
+          const matchType =
+            (c.type || "").toLowerCase().replace("_", " ").includes(q) ||
+            typeMeta.label.toLowerCase().includes(q) ||
+            typeMeta.shortLabel.toLowerCase().includes(q);
+          const matchStudent = (c.payments || []).some(
+            (p) => (p.name || "").toLowerCase().includes(q) || (p.studentId || "").toLowerCase().includes(q)
+          );
+
+          if (!matchName && !matchId && !matchDate && !matchType && !matchStudent) {
+            return false;
+          }
+        }
+
+        // 2. Type Filter
+        if (collectionsTypeFilter !== "all") {
+          const detailedType = getCollectionDetailedType(c);
+          if (detailedType !== collectionsTypeFilter) {
+            return false;
+          }
+        }
+
+        // 3. Status Filter
+        if (collectionsStatusFilter !== "all") {
+          const st = getCollectionStatus(c);
+          if (st !== collectionsStatusFilter) {
+            return false;
+          }
+        }
+
+        return true;
+      })
+      .sort((a, b) => {
+        let cmp = 0;
+        switch (collectionsSortField) {
+          case "name":
+            cmp = (a.eventName || "").localeCompare(b.eventName || "");
+            break;
+          case "type": {
+            const aLabel = COLLECTION_TYPE_META[getCollectionDetailedType(a)].shortLabel;
+            const bLabel = COLLECTION_TYPE_META[getCollectionDetailedType(b)].shortLabel;
+            cmp = aLabel.localeCompare(bLabel);
+            break;
+          }
+          case "fee":
+            cmp = (a.payablePerStudent || 0) - (b.payablePerStudent || 0);
+            break;
+          case "students":
+            cmp = (a.totalStudents || 0) - (b.totalStudents || 0);
+            break;
+          case "paid": {
+            const aPaid = (a.payments || []).filter((p) => p.status === "Paid").length;
+            const bPaid = (b.payments || []).filter((p) => p.status === "Paid").length;
+            cmp = aPaid - bPaid;
+            break;
+          }
+          case "collected": {
+            const aColl = a.totalCollected ?? (a.payments || []).filter((p) => p.status === "Paid").reduce((s, p) => s + p.amount, 0);
+            const bColl = b.totalCollected ?? (b.payments || []).filter((p) => p.status === "Paid").reduce((s, p) => s + p.amount, 0);
+            cmp = aColl - bColl;
+            break;
+          }
+          case "status": {
+            const statusOrder: Record<CollectionStatus, number> = { ready: 1, partial: 2, transferred: 3, no_payments: 4 };
+            cmp = (statusOrder[getCollectionStatus(a)] || 99) - (statusOrder[getCollectionStatus(b)] || 99);
+            break;
+          }
+          case "date":
+          default:
+            cmp = getCollectionTimestamp(a) - getCollectionTimestamp(b);
+            break;
+        }
+        return collectionsSortDirection === "asc" ? cmp : -cmp;
+      });
+  }, [
+    collections,
+    collectionsSearchQuery,
+    collectionsTypeFilter,
+    collectionsStatusFilter,
+    collectionsSortField,
+    collectionsSortDirection,
+  ]);
+
+  const totalCollectionsPages = Math.max(1, Math.ceil(filteredAndSortedCollections.length / collectionsPerPage));
   const paginatedCollections = useMemo(() => {
-    const start = (collectionsPage - 1) * COLLECTIONS_PER_PAGE;
-    return collections.slice(start, start + COLLECTIONS_PER_PAGE);
-  }, [collections, collectionsPage]);
+    const start = (collectionsPage - 1) * collectionsPerPage;
+    return filteredAndSortedCollections.slice(start, start + collectionsPerPage);
+  }, [filteredAndSortedCollections, collectionsPage, collectionsPerPage]);
+
+  useEffect(() => {
+    setCollectionsPage(1);
+  }, [collectionsSearchQuery, collectionsTypeFilter, collectionsStatusFilter, collectionsPerPage]);
+
+  const hasActiveCollectionFilters =
+    collectionsSearchQuery.trim() !== "" ||
+    collectionsTypeFilter !== "all" ||
+    collectionsStatusFilter !== "all";
+
+  const handleResetCollectionFilters = () => {
+    setCollectionsSearchQuery("");
+    setCollectionsTypeFilter("all");
+    setCollectionsStatusFilter("all");
+    setCollectionsSortField("date");
+    setCollectionsSortDirection("desc");
+    setCollectionsPage(1);
+  };
 
   // Export filtered budget tracker transactions to CSV
   const handleExportCSV = () => {
@@ -1185,14 +2010,20 @@ export function BudgetFundSettings() {
           </div>
 
           <div className="bg-white border border-[#E0E0E0] rounded-2xl overflow-hidden shadow-xs">
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+            {/* Header & Action Toolbar */}
+            <div className="px-6 py-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="border-l-4 border-[#0E4EBD] pl-3">
-                <h3 className="text-[#001A4D] font-bold text-base">Student Collections & Payables</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-[#001A4D] font-bold text-base">Student Collections & Payables</h3>
+                  <span className="px-2 py-0.5 bg-blue-50 text-[#0E4EBD] border border-blue-200 rounded-full text-xs font-semibold">
+                    {filteredAndSortedCollections.length} record{filteredAndSortedCollections.length === 1 ? "" : "s"}
+                  </span>
+                </div>
                 <p className="text-gray-500 text-xs mt-0.5">Event registration fees, fines, and activities</p>
               </div>
               <div className="flex items-center gap-3">
                 {pendingTotal > 0 && (
-                  <span className="px-3 py-1 bg-amber-100 text-amber-800 rounded-lg text-xs font-bold flex items-center gap-1.5">
+                  <span className="px-3 py-1.5 bg-amber-100 text-amber-800 rounded-xl text-xs font-bold flex items-center gap-1.5 border border-amber-200">
                     <Clock className="w-3.5 h-3.5 text-amber-600" />
                     Ready to Transfer: {formatCurrency(pendingTotal)}
                   </span>
@@ -1206,50 +2037,367 @@ export function BudgetFundSettings() {
                 </button>
               </div>
             </div>
+
+            {/* Filter Toolbar */}
+            <div className="p-4 border-b border-gray-100 bg-gray-50/40 space-y-3">
+              {/* Search & Select Controls */}
+              <div className="flex flex-wrap items-center gap-2.5">
+                {/* Search Box */}
+                <div className="relative flex-1 min-w-[220px] max-w-sm">
+                  <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Search payable name, event, student..."
+                    value={collectionsSearchQuery}
+                    onChange={(e) => setCollectionsSearchQuery(e.target.value)}
+                    className="w-full pl-8 pr-8 py-2 rounded-xl text-xs bg-white border border-gray-200 text-gray-700 outline-none focus:ring-2 focus:ring-[#0E4EBD]/20 focus:border-[#0E4EBD] transition-all"
+                  />
+                  {collectionsSearchQuery && (
+                    <button
+                      onClick={() => setCollectionsSearchQuery("")}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 cursor-pointer p-0.5"
+                      title="Clear search"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Type Filter */}
+                <div className="flex items-center gap-1.5">
+                  <select
+                    value={collectionsTypeFilter}
+                    onChange={(e) => setCollectionsTypeFilter(e.target.value)}
+                    className="px-3 py-2 rounded-xl text-xs font-medium bg-white border border-gray-200 text-gray-700 outline-none focus:ring-2 focus:ring-[#0E4EBD]/20 cursor-pointer hover:border-gray-300 transition-colors"
+                  >
+                    <option value="all">All Types</option>
+                    <option value="event_fee">Event Fees</option>
+                    <option value="event_fine">Event Fines</option>
+                    <option value="institutional_fee">Institutional Fees</option>
+                    <option value="admin_fine">Administrative Fines</option>
+                  </select>
+                </div>
+
+                {/* Date Sort Toggle */}
+                <button
+                  onClick={() => handleCollectionsSort("date")}
+                  className={`px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer border ${
+                    collectionsSortField === "date"
+                      ? "bg-[#001A4D] text-[#FFD41C] border-[#001A4D] shadow-2xs"
+                      : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+                  }`}
+                  title="Toggle sorting by creation date"
+                >
+                  <Clock className="w-3.5 h-3.5" />
+                  <span>
+                    Date: {collectionsSortField === "date" ? (collectionsSortDirection === "desc" ? "Newest First" : "Oldest First") : "Sort by Date"}
+                  </span>
+                  {collectionsSortField === "date" ? (
+                    collectionsSortDirection === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
+                  ) : null}
+                </button>
+
+                {/* Reset Filters Button */}
+                {hasActiveCollectionFilters && (
+                  <button
+                    onClick={handleResetCollectionFilters}
+                    className="px-3 py-2 text-xs font-semibold text-gray-600 bg-white border border-gray-200 hover:bg-gray-100 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
+                    title="Reset all filters and search"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5 text-gray-500" />
+                    <span>Reset Filters</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Quick Status Filter Tabs */}
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-gray-100">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {[
+                    { id: "all", label: "All", count: collectionCounts.all },
+                    { id: "ready", label: "Ready to Transfer", count: collectionCounts.ready, color: "text-amber-700 bg-amber-50 border-amber-200" },
+                    { id: "partial", label: "Partially Transferred", count: collectionCounts.partial, color: "text-indigo-700 bg-indigo-50 border-indigo-200" },
+                    { id: "transferred", label: "Fully Transferred", count: collectionCounts.transferred, color: "text-green-700 bg-green-50 border-green-200" },
+                    { id: "no_payments", label: "No Payments", count: collectionCounts.no_payments, color: "text-gray-600 bg-gray-100 border-gray-200" },
+                  ].map((filterTab) => {
+                    const isActive = collectionsStatusFilter === filterTab.id;
+                    return (
+                      <button
+                        key={filterTab.id}
+                        onClick={() => setCollectionsStatusFilter(filterTab.id)}
+                        className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer border ${
+                          isActive
+                            ? "bg-[#001A4D] text-[#FFD41C] border-[#001A4D] shadow-2xs"
+                            : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                        }`}
+                      >
+                        <span>{filterTab.label}</span>
+                        <span
+                          className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                            isActive
+                              ? "bg-[#FFD41C] text-[#001A4D]"
+                              : filterTab.color || "bg-gray-100 text-gray-600"
+                          }`}
+                        >
+                          {filterTab.count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="text-[11px] text-gray-500 font-medium">
+                  Sorted by: <span className="font-bold text-[#001A4D] capitalize">{collectionsSortField === "date" ? "Date Created" : collectionsSortField}</span> ({collectionsSortField === "date" ? (collectionsSortDirection === "desc" ? "Newest First ↓" : "Oldest First ↑") : (collectionsSortDirection === "asc" ? "Ascending ↑" : "Descending ↓")})
+                </div>
+              </div>
+            </div>
             
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50">
+            {/* Table */}
+            <div className="overflow-x-auto relative">
+              <table className="w-full text-left">
+                <thead className="bg-gray-50/90 border-b border-[#E0E0E0] text-xs font-bold text-gray-500 uppercase tracking-wide select-none">
                   <tr>
-                    {["Event / Payable Name", "Type", "Fee / Student", "Students", "Paid", "Total Collected", "Status", "Action"].map((col) => (
-                      <th key={col} className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide border-b border-[#E0E0E0]">{col}</th>
-                    ))}
+                    {/* Event / Payable Name */}
+                    <th
+                      onClick={() => handleCollectionsSort("name")}
+                      className={`px-4 py-3.5 cursor-pointer hover:bg-gray-100 transition-colors ${
+                        collectionsSortField === "name" ? "bg-blue-50/50 text-[#001A4D]" : ""
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span>Event / Payable Name</span>
+                        {collectionsSortField === "name" ? (
+                          collectionsSortDirection === "asc" ? (
+                            <ArrowUp className="w-3.5 h-3.5 text-[#0E4EBD]" />
+                          ) : (
+                            <ArrowDown className="w-3.5 h-3.5 text-[#0E4EBD]" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="w-3.5 h-3.5 text-gray-300 hover:text-gray-500" />
+                        )}
+                      </div>
+                    </th>
+
+                    {/* Date Created */}
+                    <th
+                      onClick={() => handleCollectionsSort("date")}
+                      className={`px-4 py-3.5 cursor-pointer hover:bg-gray-100 transition-colors whitespace-nowrap ${
+                        collectionsSortField === "date" ? "bg-blue-50/50 text-[#001A4D]" : ""
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span>Date Created</span>
+                        {collectionsSortField === "date" ? (
+                          collectionsSortDirection === "asc" ? (
+                            <ArrowUp className="w-3.5 h-3.5 text-[#0E4EBD]" />
+                          ) : (
+                            <ArrowDown className="w-3.5 h-3.5 text-[#0E4EBD]" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="w-3.5 h-3.5 text-gray-300 hover:text-gray-500" />
+                        )}
+                      </div>
+                    </th>
+
+                    {/* Type */}
+                    <th
+                      onClick={() => handleCollectionsSort("type")}
+                      className={`px-4 py-3.5 cursor-pointer hover:bg-gray-100 transition-colors ${
+                        collectionsSortField === "type" ? "bg-blue-50/50 text-[#001A4D]" : ""
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span>Type</span>
+                        {collectionsSortField === "type" ? (
+                          collectionsSortDirection === "asc" ? (
+                            <ArrowUp className="w-3.5 h-3.5 text-[#0E4EBD]" />
+                          ) : (
+                            <ArrowDown className="w-3.5 h-3.5 text-[#0E4EBD]" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="w-3.5 h-3.5 text-gray-300 hover:text-gray-500" />
+                        )}
+                      </div>
+                    </th>
+
+                    {/* Fee / Student */}
+                    <th
+                      onClick={() => handleCollectionsSort("fee")}
+                      className={`px-4 py-3.5 cursor-pointer hover:bg-gray-100 transition-colors ${
+                        collectionsSortField === "fee" ? "bg-blue-50/50 text-[#001A4D]" : ""
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span>Fee / Student</span>
+                        {collectionsSortField === "fee" ? (
+                          collectionsSortDirection === "asc" ? (
+                            <ArrowUp className="w-3.5 h-3.5 text-[#0E4EBD]" />
+                          ) : (
+                            <ArrowDown className="w-3.5 h-3.5 text-[#0E4EBD]" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="w-3.5 h-3.5 text-gray-300 hover:text-gray-500" />
+                        )}
+                      </div>
+                    </th>
+
+                    {/* Students */}
+                    <th
+                      onClick={() => handleCollectionsSort("students")}
+                      className={`px-4 py-3.5 cursor-pointer hover:bg-gray-100 transition-colors ${
+                        collectionsSortField === "students" ? "bg-blue-50/50 text-[#001A4D]" : ""
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span>Students</span>
+                        {collectionsSortField === "students" ? (
+                          collectionsSortDirection === "asc" ? (
+                            <ArrowUp className="w-3.5 h-3.5 text-[#0E4EBD]" />
+                          ) : (
+                            <ArrowDown className="w-3.5 h-3.5 text-[#0E4EBD]" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="w-3.5 h-3.5 text-gray-300 hover:text-gray-500" />
+                        )}
+                      </div>
+                    </th>
+
+                    {/* Paid */}
+                    <th
+                      onClick={() => handleCollectionsSort("paid")}
+                      className={`px-4 py-3.5 cursor-pointer hover:bg-gray-100 transition-colors ${
+                        collectionsSortField === "paid" ? "bg-blue-50/50 text-[#001A4D]" : ""
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span>Paid</span>
+                        {collectionsSortField === "paid" ? (
+                          collectionsSortDirection === "asc" ? (
+                            <ArrowUp className="w-3.5 h-3.5 text-[#0E4EBD]" />
+                          ) : (
+                            <ArrowDown className="w-3.5 h-3.5 text-[#0E4EBD]" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="w-3.5 h-3.5 text-gray-300 hover:text-gray-500" />
+                        )}
+                      </div>
+                    </th>
+
+                    {/* Total Collected */}
+                    <th
+                      onClick={() => handleCollectionsSort("collected")}
+                      className={`px-4 py-3.5 cursor-pointer hover:bg-gray-100 transition-colors ${
+                        collectionsSortField === "collected" ? "bg-blue-50/50 text-[#001A4D]" : ""
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span>Total Collected</span>
+                        {collectionsSortField === "collected" ? (
+                          collectionsSortDirection === "asc" ? (
+                            <ArrowUp className="w-3.5 h-3.5 text-[#0E4EBD]" />
+                          ) : (
+                            <ArrowDown className="w-3.5 h-3.5 text-[#0E4EBD]" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="w-3.5 h-3.5 text-gray-300 hover:text-gray-500" />
+                        )}
+                      </div>
+                    </th>
+
+                    {/* Status */}
+                    <th
+                      onClick={() => handleCollectionsSort("status")}
+                      className={`px-4 py-3.5 cursor-pointer hover:bg-gray-100 transition-colors ${
+                        collectionsSortField === "status" ? "bg-blue-50/50 text-[#001A4D]" : ""
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span>Status</span>
+                        {collectionsSortField === "status" ? (
+                          collectionsSortDirection === "asc" ? (
+                            <ArrowUp className="w-3.5 h-3.5 text-[#0E4EBD]" />
+                          ) : (
+                            <ArrowDown className="w-3.5 h-3.5 text-[#0E4EBD]" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="w-3.5 h-3.5 text-gray-300 hover:text-gray-500" />
+                        )}
+                      </div>
+                    </th>
+
+                    {/* Action */}
+                    <th className="px-4 py-3.5 text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {paginatedCollections.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="px-4 py-8 text-center text-gray-500 text-sm">
-                        No student payable collections found.
+                      <td colSpan={9} className="px-4 py-12 text-center text-gray-400">
+                        <div className="max-w-xs mx-auto space-y-2">
+                          <Filter className="w-8 h-8 text-gray-300 mx-auto" />
+                          <p className="text-sm font-semibold text-gray-600">No collections found</p>
+                          <p className="text-xs text-gray-400">
+                            {hasActiveCollectionFilters
+                              ? "No collections match your search and filter criteria."
+                              : "No student payable collections available in the system."}
+                          </p>
+                          {hasActiveCollectionFilters && (
+                            <button
+                              onClick={handleResetCollectionFilters}
+                              className="mt-2 px-3 py-1.5 bg-[#001A4D] text-[#FFD41C] text-xs font-bold rounded-lg cursor-pointer hover:bg-[#0E4EBD] transition-colors"
+                            >
+                              Clear All Filters
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ) : (
                     paginatedCollections.map((c) => {
-                      const paid = c.payments.filter((p) => p.status === "Paid");
-                      const totalCollected = paid.reduce((s, p) => s + p.amount, 0);
+                      const paid = (c.payments || []).filter((p) => p.status === "Paid");
+                      const totalCollected = c.totalCollected ?? paid.reduce((s, p) => s + p.amount, 0);
                       const pct = c.totalStudents > 0 ? Math.round((paid.length / c.totalStudents) * 100) : 0;
                       const untransferred = c.untransferredAmount || 0;
                       const hasTransferred = (c.transferredAmount || 0) > 0;
 
                       return (
-                        <tr key={c.id} className="hover:bg-gray-50 transition-colors">
+                        <tr key={c.id} className="hover:bg-gray-50/80 transition-colors">
                           <td className="px-4 py-3">
-                            <p className="text-[#001A4D] font-medium text-sm">{c.eventName}</p>
-                            <p className="text-gray-400 text-xs">{c.eventDate}</p>
+                            <p className="text-[#001A4D] font-bold text-sm">{c.eventName}</p>
+                            {c.eventId && c.eventId !== "unassigned" ? (
+                              <p className="text-gray-400 text-[11px] font-mono mt-0.5">ID: {c.eventId}</p>
+                            ) : null}
+                          </td>
+                          <td className="px-4 py-3 text-gray-600 text-xs font-medium whitespace-nowrap">
+                            {c.eventDate || "—"}
                           </td>
                           <td className="px-4 py-3">
-                            <span className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded-full text-xs font-medium capitalize">
-                              {c.type?.replace('_', ' ') || 'Event Fee'}
-                            </span>
+                            {(() => {
+                              const detailedType = getCollectionDetailedType(c);
+                              const meta = COLLECTION_TYPE_META[detailedType];
+                              return (
+                                <span
+                                  className={`px-2.5 py-1 rounded-full text-xs font-bold whitespace-nowrap inline-flex items-center gap-1.5 shadow-2xs ${meta.badgeClass}`}
+                                >
+                                  {meta.shortLabel}
+                                </span>
+                              );
+                            })()}
                           </td>
-                          <td className="px-4 py-3 text-gray-700 text-sm font-medium">{formatCurrency(c.payablePerStudent)}</td>
-                          <td className="px-4 py-3 text-gray-600 text-sm">{c.totalStudents}</td>
+                          <td className="px-4 py-3 text-gray-700 text-sm font-semibold">
+                            {formatCurrency(c.payablePerStudent)}
+                          </td>
+                          <td className="px-4 py-3 text-gray-600 text-sm font-medium">
+                            {c.totalStudents}
+                          </td>
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2">
                               <div className="h-1.5 w-16 bg-gray-100 rounded-full overflow-hidden">
                                 <div className="h-full bg-green-500 rounded-full" style={{ width: `${pct}%` }} />
                               </div>
-                              <span className="text-green-600 text-sm font-medium">{paid.length}</span>
+                              <span className="text-green-600 text-xs font-bold whitespace-nowrap">
+                                {paid.length} <span className="text-gray-400 font-normal">({pct}%)</span>
+                              </span>
                             </div>
                           </td>
                           <td className="px-4 py-3">
@@ -1257,30 +2405,30 @@ export function BudgetFundSettings() {
                           </td>
                           <td className="px-4 py-3">
                             {untransferred > 0 && hasTransferred ? (
-                              <span className="flex items-center gap-1 text-xs text-amber-800 bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-full font-bold whitespace-nowrap">
+                              <span className="inline-flex items-center gap-1 text-xs text-amber-800 bg-amber-100 border border-amber-200 px-2.5 py-0.5 rounded-full font-bold whitespace-nowrap">
                                 <Clock className="w-3 h-3 text-amber-600" />
                                 Partially Transferred (+{formatCurrency(untransferred)} new)
                               </span>
                             ) : untransferred > 0 ? (
-                              <span className="flex items-center gap-1 text-xs text-amber-800 bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-full font-bold whitespace-nowrap">
+                              <span className="inline-flex items-center gap-1 text-xs text-amber-800 bg-amber-100 border border-amber-200 px-2.5 py-0.5 rounded-full font-bold whitespace-nowrap">
                                 <Clock className="w-3 h-3 text-amber-600" />
                                 Ready to Transfer ({formatCurrency(untransferred)})
                               </span>
-                            ) : c.transferredToBudget ? (
-                              <span className="flex items-center gap-1 text-xs text-green-700 bg-green-100 border border-green-200 px-2 py-0.5 rounded-full font-bold whitespace-nowrap">
+                            ) : c.transferredToBudget || (hasTransferred && untransferred === 0) ? (
+                              <span className="inline-flex items-center gap-1 text-xs text-green-700 bg-green-100 border border-green-200 px-2.5 py-0.5 rounded-full font-bold whitespace-nowrap">
                                 <CheckCircle className="w-3 h-3" />
                                 Fully Transferred
                               </span>
                             ) : (
-                              <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+                              <span className="text-xs text-gray-400 bg-gray-100 px-2.5 py-0.5 rounded-full font-medium whitespace-nowrap">
                                 No Payments
                               </span>
                             )}
                           </td>
-                          <td className="px-4 py-3">
+                          <td className="px-4 py-3 text-right">
                             <button
-                              onClick={() => setViewCollection(c)}
-                              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#001A4D] hover:bg-[#0E4EBD] text-white text-xs rounded-lg font-medium transition-colors whitespace-nowrap cursor-pointer shadow-xs"
+                              onClick={() => setViewCollectionId(c.id)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#001A4D] hover:bg-[#0E4EBD] text-white text-xs rounded-lg font-semibold transition-colors whitespace-nowrap cursor-pointer shadow-2xs"
                             >
                               <Eye className="w-3.5 h-3.5" />
                               View & Transfer
@@ -1295,38 +2443,74 @@ export function BudgetFundSettings() {
               </table>
             </div>
 
-            {/* Collections Pagination Bar */}
-            {collections.length > 0 && (
+            {/* Complete Pagination Bar */}
+            {filteredAndSortedCollections.length > 0 && (
               <div className="px-6 py-4 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-3 bg-gray-50/50">
-                <div className="text-xs text-gray-500 font-medium">
-                  Showing <span className="font-bold text-gray-800">{(collectionsPage - 1) * COLLECTIONS_PER_PAGE + 1}</span> to{" "}
-                  <span className="font-bold text-gray-800">{Math.min(collectionsPage * COLLECTIONS_PER_PAGE, collections.length)}</span> of{" "}
-                  <span className="font-bold text-gray-800">{collections.length}</span> collection groups
+                {/* Result count & Rows Per Page */}
+                <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500 font-medium">
+                  <div>
+                    Showing <span className="font-bold text-gray-800">{(collectionsPage - 1) * collectionsPerPage + 1}</span> to{" "}
+                    <span className="font-bold text-gray-800">{Math.min(collectionsPage * collectionsPerPage, filteredAndSortedCollections.length)}</span> of{" "}
+                    <span className="font-bold text-gray-800">{filteredAndSortedCollections.length}</span> collection groups
+                    {collections.length !== filteredAndSortedCollections.length && (
+                      <span className="text-gray-400 ml-1">(filtered from {collections.length} total)</span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-1.5 border-l border-gray-200 pl-3">
+                    <span className="text-gray-400">Rows per page:</span>
+                    <select
+                      value={collectionsPerPage}
+                      onChange={(e) => {
+                        setCollectionsPerPage(Number(e.target.value));
+                        setCollectionsPage(1);
+                      }}
+                      className="px-2 py-1 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-gray-700 outline-none focus:ring-1 focus:ring-[#0E4EBD] cursor-pointer"
+                    >
+                      {[5, 8, 10, 20, 50].map((num) => (
+                        <option key={num} value={num}>{num}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
+                {/* Pagination Controls */}
                 {totalCollectionsPages > 1 && (
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1">
+                    {/* First Page */}
+                    <button
+                      onClick={() => setCollectionsPage(1)}
+                      disabled={collectionsPage === 1}
+                      className="p-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                      title="First Page"
+                    >
+                      <ChevronsLeft className="w-3.5 h-3.5" />
+                    </button>
+
+                    {/* Previous Page */}
                     <button
                       onClick={() => setCollectionsPage((p) => Math.max(1, p - 1))}
                       disabled={collectionsPage === 1}
-                      className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                      className="px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                      title="Previous Page"
                     >
                       Previous
                     </button>
 
+                    {/* Page Numbers */}
                     {Array.from({ length: totalCollectionsPages }, (_, i) => i + 1)
                       .filter((p) => p === 1 || p === totalCollectionsPages || Math.abs(p - collectionsPage) <= 1)
                       .map((p, idx, arr) => {
                         const prev = arr[idx - 1];
                         return (
                           <span key={p} className="flex items-center gap-1">
-                            {prev && p - prev > 1 && <span className="text-gray-400 text-xs px-1">...</span>}
+                            {prev && p - prev > 1 && <span className="text-gray-400 text-xs px-0.5">...</span>}
                             <button
                               onClick={() => setCollectionsPage(p)}
                               className={`w-7 h-7 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                                 collectionsPage === p
                                   ? "bg-[#001A4D] text-white shadow-xs"
-                                  : "border border-gray-200 text-gray-600 hover:bg-white"
+                                  : "border border-gray-200 text-gray-600 hover:bg-white bg-white"
                               }`}
                             >
                               {p}
@@ -1335,12 +2519,24 @@ export function BudgetFundSettings() {
                         );
                       })}
 
+                    {/* Next Page */}
                     <button
                       onClick={() => setCollectionsPage((p) => Math.min(totalCollectionsPages, p + 1))}
                       disabled={collectionsPage === totalCollectionsPages}
-                      className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                      className="px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                      title="Next Page"
                     >
                       Next
+                    </button>
+
+                    {/* Last Page */}
+                    <button
+                      onClick={() => setCollectionsPage(totalCollectionsPages)}
+                      disabled={collectionsPage === totalCollectionsPages}
+                      className="p-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                      title="Last Page"
+                    >
+                      <ChevronsRight className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 )}
@@ -1371,7 +2567,7 @@ export function BudgetFundSettings() {
       {viewCollection && (
         <CollectionDetailModal
           collection={viewCollection}
-          onClose={() => setViewCollection(null)}
+          onClose={() => setViewCollectionId(null)}
           onTransfer={() => handleTransferCollection(viewCollection)}
         />
       )}
