@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { GraduationCap, Download, Eye, RotateCcw, Trash2, Search, Loader2 } from 'lucide-react';
 import { StudentDocument } from '../../../modules/students/types/student.types';
 import { formatTimestampDate } from '../../../modules/students/utils/date.utils';
@@ -7,6 +7,7 @@ import StudentDetailModal from '../../../modules/students/components/StudentDeta
 import DeleteStudentModal from '../../../modules/students/components/DeleteStudentModal';
 import { restoreStudent } from '../../../modules/students/services/student.service';
 import { useAdviserProfile } from '../../../modules/auth/hooks/useAdviserProfile';
+import { TablePagination } from '../../../components/common/TablePagination';
 
 interface ArchivedGraduatesProps {
   students: StudentDocument[];
@@ -31,6 +32,20 @@ export default function ArchivedGraduates({ students: archivedStudents }: Archiv
       return fullName.includes(q) || studentId.includes(q) || course.includes(q);
     });
   }, [archivedStudents, searchQuery]);
+
+  // Pagination State (8 rows per page standard)
+  const PER_PAGE = 8;
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredStudents.length / PER_PAGE));
+  const paginatedStudents = useMemo(() => {
+    const start = (currentPage - 1) * PER_PAGE;
+    return filteredStudents.slice(start, start + PER_PAGE);
+  }, [filteredStudents, currentPage]);
 
   const handleRestore = async (student: StudentDocument) => {
     const confirmRestore = window.confirm(
@@ -115,7 +130,7 @@ export default function ArchivedGraduates({ students: archivedStudents }: Archiv
                   </td>
                 </tr>
               ) : (
-                filteredStudents.map((student) => (
+                paginatedStudents.map((student) => (
                   <tr key={student.id} className="hover:bg-gray-50/80 transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
@@ -189,6 +204,16 @@ export default function ArchivedGraduates({ students: archivedStudents }: Archiv
             </tbody>
           </table>
         </div>
+
+        {/* ── Standard Bottom Pagination Bar ── */}
+        <TablePagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={filteredStudents.length}
+          itemsPerPage={PER_PAGE}
+          onPageChange={setCurrentPage}
+          itemName="archived students"
+        />
       </div>
 
       {/* Student Details Inspection Modal */}

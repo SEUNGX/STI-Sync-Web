@@ -12,6 +12,7 @@ import { collection, onSnapshot, query } from 'firebase/firestore';
 import { db } from '../../../../services/firebase';
 import type { OrganizationMemberDocument } from '../../../modules/organizations/types/member.types';
 import type { PayableDocument } from '../../../modules/finance/types/payable.types';
+import { TablePagination } from '../../../components/common/TablePagination';
 
 interface ActiveStudentsProps {
   students: StudentDocument[];
@@ -182,6 +183,20 @@ export default function ActiveStudents({ students: activeStudents }: ActiveStude
       return true;
     });
   }, [activeStudents, searchQuery, selectedCourse, selectedYear, selectedSection]);
+
+  // Pagination State
+  const STUDENTS_PER_PAGE = 8;
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedCourse, selectedYear, selectedSection]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredStudents.length / STUDENTS_PER_PAGE));
+  const paginatedStudents = useMemo(() => {
+    const start = (currentPage - 1) * STUDENTS_PER_PAGE;
+    return filteredStudents.slice(start, start + STUDENTS_PER_PAGE);
+  }, [filteredStudents, currentPage]);
 
   // Live Summary Statistics
   const summaryStats = useMemo(() => {
@@ -357,7 +372,7 @@ export default function ActiveStudents({ students: activeStudents }: ActiveStude
                   </td>
                 </tr>
               ) : (
-                filteredStudents.map((student) => {
+                paginatedStudents.map((student) => {
                   const orgs = getStudentClubs(student);
                   const pInfo = studentPayablesMap.get(student.id) || (student.studentId ? studentPayablesMap.get(student.studentId) : null);
                   const isMenuOpen = activeMenuStudentId === student.id;
@@ -484,6 +499,16 @@ export default function ActiveStudents({ students: activeStudents }: ActiveStude
             </tbody>
           </table>
         </div>
+
+        {/* ── Standard Bottom Pagination Bar ── */}
+        <TablePagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={filteredStudents.length}
+          itemsPerPage={STUDENTS_PER_PAGE}
+          onPageChange={setCurrentPage}
+          itemName="students"
+        />
       </div>
 
       {/* Add Student Manually Modal */}

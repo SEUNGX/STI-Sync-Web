@@ -1,12 +1,12 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Shield, AlertTriangle, Search, Download, Filter, Calendar, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
-import { useAuditLogs } from "../../modules/audit/hooks/useAuditStream";
 import { AuditActionType } from "../../modules/audit/types/audit.types";
+import { TablePagination } from "../../components/common/TablePagination";
 
 export function AuditLogs() {
   const { data: auditLogs = [], loading } = useAuditLogs(200);
@@ -31,6 +31,20 @@ export function AuditLogs() {
       return true;
     });
   }, [auditLogs, selectedType, searchQuery]);
+
+  // Pagination State
+  const [logsPerPage, setLogsPerPage] = useState(8);
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedType]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredLogs.length / logsPerPage));
+  const paginatedLogs = useMemo(() => {
+    const start = (currentPage - 1) * logsPerPage;
+    return filteredLogs.slice(start, start + logsPerPage);
+  }, [filteredLogs, currentPage, logsPerPage]);
 
   const stats = useMemo(() => {
     const total = auditLogs.length;
@@ -187,64 +201,81 @@ export function AuditLogs() {
               <p className="text-sm text-gray-500 font-medium">Streaming live audit logs...</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead className="font-bold text-[#001A4D]">Timestamp</TableHead>
-                    <TableHead className="font-bold text-[#001A4D]">User / Role</TableHead>
-                    <TableHead className="font-bold text-[#001A4D]">Action</TableHead>
-                    <TableHead className="font-bold text-[#001A4D]">Type</TableHead>
-                    <TableHead className="font-bold text-[#001A4D]">Details</TableHead>
-                    <TableHead className="font-bold text-[#001A4D]">IP Address</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredLogs.map((log) => {
-                    const formattedDate = log.createdAt?.toDate
-                      ? log.createdAt.toDate().toLocaleString('en-PH', {
-                          month: 'short',
-                          day: 'numeric',
-                          year: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })
-                      : 'Just now';
-
-                    return (
-                      <tr key={log.id} className="hover:bg-blue-50/30 transition-colors border-b border-gray-100">
-                        <TableCell className="font-medium text-xs text-gray-600 whitespace-nowrap">
-                          {formattedDate}
-                        </TableCell>
-                        <TableCell className="text-sm font-semibold text-[#001A4D]">
-                          {log.performedBy}
-                          {log.userRole && (
-                            <span className="block text-[11px] text-gray-400 font-normal">{log.userRole}</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="font-bold text-[#001A4D] text-sm">
-                          {log.action}
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={`${getBadgeStyle(log.actionType)} text-[10px] font-bold border-0`}>
-                            {log.actionType}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-xs text-gray-700 max-w-xs">{log.details}</TableCell>
-                        <TableCell className="text-xs font-mono text-gray-500">{log.ipAddress || '127.0.0.1'}</TableCell>
-                      </tr>
-                    );
-                  })}
-                  {filteredLogs.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center py-12 text-gray-400">
-                        No audit log entries found matching your criteria.
-                      </TableCell>
+            <>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="font-bold text-[#001A4D]">Timestamp</TableHead>
+                      <TableHead className="font-bold text-[#001A4D]">User / Role</TableHead>
+                      <TableHead className="font-bold text-[#001A4D]">Action</TableHead>
+                      <TableHead className="font-bold text-[#001A4D]">Type</TableHead>
+                      <TableHead className="font-bold text-[#001A4D]">Details</TableHead>
+                      <TableHead className="font-bold text-[#001A4D]">IP Address</TableHead>
                     </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedLogs.map((log) => {
+                      const formattedDate = log.createdAt?.toDate
+                        ? log.createdAt.toDate().toLocaleString('en-PH', {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })
+                        : 'Just now';
+
+                      return (
+                        <tr key={log.id} className="hover:bg-blue-50/30 transition-colors border-b border-gray-100">
+                          <TableCell className="font-medium text-xs text-gray-600 whitespace-nowrap">
+                            {formattedDate}
+                          </TableCell>
+                          <TableCell className="text-sm font-semibold text-[#001A4D]">
+                            {log.performedBy}
+                            {log.userRole && (
+                              <span className="block text-[11px] text-gray-400 font-normal">{log.userRole}</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="font-bold text-[#001A4D] text-sm">
+                            {log.action}
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={`${getBadgeStyle(log.actionType)} text-[10px] font-bold border-0`}>
+                              {log.actionType}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-xs text-gray-700 max-w-xs">{log.details}</TableCell>
+                          <TableCell className="text-xs font-mono text-gray-500">{log.ipAddress || '127.0.0.1'}</TableCell>
+                        </tr>
+                      );
+                    })}
+                    {filteredLogs.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center py-12 text-gray-400">
+                          No audit log entries found matching your criteria.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* ── Standard Bottom Pagination Bar ── */}
+              <TablePagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                totalItems={filteredLogs.length}
+                itemsPerPage={logsPerPage}
+                onPageChange={setCurrentPage}
+                itemName="audit logs"
+                pageSizeOptions={[10, 15, 25, 50]}
+                onPageSizeChange={(newSize) => {
+                  setLogsPerPage(newSize);
+                  setCurrentPage(1);
+                }}
+              />
+            </>
           )}
         </CardContent>
       </Card>

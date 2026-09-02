@@ -15,7 +15,7 @@ import {
   Sparkles,
   School,
 } from 'lucide-react';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { StudentDocument, StudentYearLevel } from '../../../modules/students/types/student.types';
 import { SemesterDocument, CourseDocument, SectionDocument } from '../../../modules/academic/types/academic.types';
 import { formatTimestampDate } from '../../../modules/students/utils/date.utils';
@@ -27,6 +27,7 @@ import {
 } from '../../../modules/students/services/student.service';
 import { useCourses, useSections, useDepartments, useActiveAcademicPeriods } from '../../../modules/academic/hooks/useAcademicStream';
 import { exportStudentsToCSV } from '../../../modules/students/utils/export.utils';
+import { TablePagination } from '../../../components/common/TablePagination';
 
 interface ReEnrollmentManagementProps {
   students: StudentDocument[];
@@ -199,6 +200,20 @@ export default function ReEnrollmentManagement({ students, activeSemester: fallb
       return true;
     });
   }, [mappedStudents, trackFilter, filter, selectedCourseCode, selectedYearLevel, selectedSectionName, searchQuery]);
+
+  // Pagination State (8 rows per page standard)
+  const PER_PAGE = 8;
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [trackFilter, filter, selectedCourseCode, selectedYearLevel, selectedSectionName, searchQuery]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredStudents.length / PER_PAGE));
+  const paginatedStudents = useMemo(() => {
+    const start = (currentPage - 1) * PER_PAGE;
+    return filteredStudents.slice(start, start + PER_PAGE);
+  }, [filteredStudents, currentPage]);
 
   // Selectable students (only unconfirmed students: pending or overdue)
   const selectableStudents = useMemo(() => {
@@ -802,7 +817,7 @@ export default function ReEnrollmentManagement({ students, activeSemester: fallb
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {filteredStudents.map((student) => {
+              {paginatedStudents.map((student) => {
                 const isSelected = selectedIds.includes(student.id);
                 return (
                   <tr
@@ -908,6 +923,16 @@ export default function ReEnrollmentManagement({ students, activeSemester: fallb
             </tbody>
           </table>
         </div>
+
+        {/* ── Standard Bottom Pagination Bar ── */}
+        <TablePagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={filteredStudents.length}
+          itemsPerPage={PER_PAGE}
+          onPageChange={setCurrentPage}
+          itemName="students"
+        />
       </div>
 
       {/* Individual Re-enrollment Modal with Course Shifting & Section Hierarchy */}

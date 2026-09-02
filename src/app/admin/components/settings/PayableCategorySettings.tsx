@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   Tag,
   Plus,
@@ -24,6 +24,7 @@ import {
 } from '../../../modules/finance/services/payable-category.service';
 import { formatCurrency } from '../../../utils/currency';
 import { toast } from 'sonner';
+import { TablePagination } from '../../../components/common/TablePagination';
 
 interface PayableCategorySettingsProps {
   onUnsavedChange?: () => void;
@@ -88,15 +89,27 @@ export default function PayableCategorySettings({ onUnsavedChange }: PayableCate
         (activeTab === 'fee' && cat.type !== 'admin_fine');
 
       const q = searchQuery.toLowerCase().trim();
-      const matchesSearch =
-        !q ||
-        cat.name.toLowerCase().includes(q) ||
-        cat.code.toLowerCase().includes(q) ||
-        (cat.description && cat.description.toLowerCase().includes(q));
+      const matchesName = cat.name.toLowerCase().includes(q);
+      const matchesCode = cat.code.toLowerCase().includes(q);
+      const matchesDesc = cat.description && cat.description.toLowerCase().includes(q);
 
-      return matchesTab && matchesSearch;
+      return matchesTab && (!q || matchesName || matchesCode || matchesDesc);
     });
   }, [categories, activeTab, searchQuery]);
+
+  // Pagination State (8 rows per page standard)
+  const PER_PAGE = 8;
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, searchQuery]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredCategories.length / PER_PAGE));
+  const paginatedCategories = useMemo(() => {
+    const start = (currentPage - 1) * PER_PAGE;
+    return filteredCategories.slice(start, start + PER_PAGE);
+  }, [filteredCategories, currentPage]);
 
   // Statistics
   const stats = useMemo(() => {
@@ -308,7 +321,7 @@ export default function PayableCategorySettings({ onUnsavedChange }: PayableCate
                   </td>
                 </tr>
               ) : (
-                filteredCategories.map((cat) => {
+                paginatedCategories.map((cat) => {
                   const isFine = cat.categoryType === 'fine' || cat.type === 'admin_fine';
                   return (
                     <tr key={cat.id} className="hover:bg-gray-50/70 transition-colors">
@@ -383,6 +396,16 @@ export default function PayableCategorySettings({ onUnsavedChange }: PayableCate
             </tbody>
           </table>
         </div>
+
+        {/* ── Standard Bottom Pagination Bar ── */}
+        <TablePagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={filteredCategories.length}
+          itemsPerPage={PER_PAGE}
+          onPageChange={setCurrentPage}
+          itemName="categories"
+        />
       </div>
 
       {/* Add / Edit Modal */}

@@ -34,6 +34,7 @@ import { AppointOfficerModal } from '../components/AppointOfficerModal';
 import { RemoveMemberModal } from '../components/RemoveMemberModal';
 import type { OrganizationMemberDocument } from '../../modules/organizations/types/member.types';
 import { formatTimestampDate } from '../../modules/students/utils/date.utils';
+import { TablePagination } from '../../components/common/TablePagination';
 
 export default function MemberDirectory() {
   const [searchParams] = useSearchParams();
@@ -243,6 +244,20 @@ export default function MemberDirectory() {
   const filteredPendingMembers = useMemo(() => filterAndSortList(rawPendingMembers), [rawPendingMembers, searchQuery, filterDepartment, filterYear, sortBy, sortOrder, studentMap]);
   const filteredOfficers = useMemo(() => filterAndSortList(officers), [officers, searchQuery, filterDepartment, filterYear, sortBy, sortOrder, studentMap]);
   const filteredInactiveMembers = useMemo(() => filterAndSortList(rawInactiveMembers), [rawInactiveMembers, searchQuery, filterDepartment, filterYear, sortBy, sortOrder, studentMap]);
+
+  // Pagination State for Inactive Members Table (8 rows per page standard)
+  const PER_PAGE = 8;
+  const [inactivePage, setInactivePage] = useState(1);
+
+  useEffect(() => {
+    setInactivePage(1);
+  }, [searchQuery, filterDepartment, filterYear]);
+
+  const totalInactivePages = Math.max(1, Math.ceil(filteredInactiveMembers.length / PER_PAGE));
+  const paginatedInactiveMembers = useMemo(() => {
+    const start = (inactivePage - 1) * PER_PAGE;
+    return filteredInactiveMembers.slice(start, start + PER_PAGE);
+  }, [filteredInactiveMembers, inactivePage]);
 
   const getInitials = (name: string) =>
     (name || 'Student')
@@ -806,7 +821,7 @@ export default function MemberDirectory() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#E0E0E0] text-sm">
-                    {filteredInactiveMembers.map((member) => {
+                    {paginatedInactiveMembers.map((member) => {
                       const { fullName, photoUrl } = getMemberDetails(member);
 
                       return (
@@ -851,6 +866,16 @@ export default function MemberDirectory() {
                   </tbody>
                 </table>
               </div>
+
+              {/* ── Standard Bottom Pagination Bar ── */}
+              <TablePagination
+                currentPage={inactivePage}
+                totalPages={totalInactivePages}
+                totalItems={filteredInactiveMembers.length}
+                itemsPerPage={PER_PAGE}
+                onPageChange={setInactivePage}
+                itemName="inactive members"
+              />
             </div>
           )}
         </div>

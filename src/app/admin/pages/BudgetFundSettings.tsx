@@ -61,6 +61,7 @@ import TransactionDetailModal from "../../modules/finance/components/Transaction
 import { useUserNameResolver } from "../../modules/finance/hooks/useUserNameResolver";
 import { uploadToCloudinary } from "../../../services/cloudinary";
 import { AddAdminPayableModal } from "../components/settings/AddAdminPayableModal";
+import { TablePagination } from "../../components/common/TablePagination";
 
 // ─── Helper to extract numeric timestamp for latest-first sorting ───────────────
 function getTxTimestamp(tx: SaoLedgerDocument): number {
@@ -613,7 +614,7 @@ function CollectionDetailModal({
   const [modalSortField, setModalSortField] = useState<"name" | "studentId" | "amount" | "date" | "status">("name");
   const [modalSortDir, setModalSortDir] = useState<"asc" | "desc">("asc");
   const [modalPage, setModalPage] = useState(1);
-  const [modalPerPage, setModalPerPage] = useState(10);
+  const MODAL_PER_PAGE = 8;
 
   const handleSort = (field: "name" | "studentId" | "amount" | "date" | "status") => {
     if (modalSortField === field) {
@@ -710,11 +711,11 @@ function CollectionDetailModal({
     }
   };
 
-  const totalModalPages = Math.max(1, Math.ceil(filteredAndSortedPayments.length / modalPerPage));
+  const totalModalPages = Math.max(1, Math.ceil(filteredAndSortedPayments.length / MODAL_PER_PAGE));
   const paginatedPayments = useMemo(() => {
-    const start = (modalPage - 1) * modalPerPage;
-    return filteredAndSortedPayments.slice(start, start + modalPerPage);
-  }, [filteredAndSortedPayments, modalPage, modalPerPage]);
+    const start = (modalPage - 1) * MODAL_PER_PAGE;
+    return filteredAndSortedPayments.slice(start, start + MODAL_PER_PAGE);
+  }, [filteredAndSortedPayments, modalPage]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -990,71 +991,14 @@ function CollectionDetailModal({
             </div>
 
             {/* Modal Pagination */}
-            {filteredAndSortedPayments.length > 0 && (
-              <div className="px-4 py-2.5 bg-gray-50/80 border-t border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-gray-500">
-                <div className="flex items-center gap-2">
-                  <span>
-                    Showing <strong className="text-gray-800">{(modalPage - 1) * modalPerPage + 1}</strong> to{" "}
-                    <strong className="text-gray-800">{Math.min(modalPage * modalPerPage, filteredAndSortedPayments.length)}</strong> of{" "}
-                    <strong className="text-gray-800">{filteredAndSortedPayments.length}</strong> records
-                  </span>
-                  <div className="flex items-center gap-1 ml-2">
-                    <span className="text-[11px] text-gray-400">Rows:</span>
-                    <select
-                      value={modalPerPage}
-                      onChange={(e) => {
-                        setModalPerPage(Number(e.target.value));
-                        setModalPage(1);
-                      }}
-                      className="bg-white border border-gray-200 rounded px-1.5 py-0.5 text-xs text-gray-700 cursor-pointer"
-                    >
-                      {[5, 10, 25, 50].map((sz) => (
-                        <option key={sz} value={sz}>{sz}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {totalModalPages > 1 && (
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => setModalPage((p) => Math.max(1, p - 1))}
-                      disabled={modalPage === 1}
-                      className="px-2 py-1 border border-gray-200 rounded bg-white font-medium text-gray-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-100 cursor-pointer"
-                    >
-                      Prev
-                    </button>
-                    {Array.from({ length: totalModalPages }, (_, i) => i + 1)
-                      .filter((p) => p === 1 || p === totalModalPages || Math.abs(p - modalPage) <= 1)
-                      .map((p, idx, arr) => {
-                        const prev = arr[idx - 1];
-                        return (
-                          <span key={p} className="flex items-center gap-1">
-                            {prev && p - prev > 1 && <span className="text-gray-400 text-xs px-0.5">...</span>}
-                            <button
-                              onClick={() => setModalPage(p)}
-                              className={`w-6 h-6 rounded text-xs font-bold transition-all cursor-pointer ${
-                                modalPage === p
-                                  ? "bg-[#001A4D] text-white"
-                                  : "border border-gray-200 text-gray-600 hover:bg-white bg-gray-50"
-                              }`}
-                            >
-                              {p}
-                            </button>
-                          </span>
-                        );
-                      })}
-                    <button
-                      onClick={() => setModalPage((p) => Math.min(totalModalPages, p + 1))}
-                      disabled={modalPage === totalModalPages}
-                      className="px-2 py-1 border border-gray-200 rounded bg-white font-medium text-gray-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-100 cursor-pointer"
-                    >
-                      Next
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
+            <TablePagination
+              currentPage={modalPage}
+              totalPages={totalModalPages}
+              totalItems={filteredAndSortedPayments.length}
+              itemsPerPage={MODAL_PER_PAGE}
+              onPageChange={setModalPage}
+              itemName="records"
+            />
           </div>
 
           {untransferredAmount > 0 && alreadyTransferredAmount > 0 && (
@@ -1459,7 +1403,7 @@ export function BudgetFundSettings() {
   const [collectionsSortField, setCollectionsSortField] = useState<CollectionSortField>("date");
   const [collectionsSortDirection, setCollectionsSortDirection] = useState<"asc" | "desc">("desc");
   const [collectionsPage, setCollectionsPage] = useState(1);
-  const [collectionsPerPage, setCollectionsPerPage] = useState(8);
+  const COLLECTIONS_PER_PAGE = 8;
 
   const handleCollectionsSort = (field: CollectionSortField) => {
     if (collectionsSortField === field) {
@@ -1587,15 +1531,15 @@ export function BudgetFundSettings() {
     collectionsSortDirection,
   ]);
 
-  const totalCollectionsPages = Math.max(1, Math.ceil(filteredAndSortedCollections.length / collectionsPerPage));
+  const totalCollectionsPages = Math.max(1, Math.ceil(filteredAndSortedCollections.length / COLLECTIONS_PER_PAGE));
   const paginatedCollections = useMemo(() => {
-    const start = (collectionsPage - 1) * collectionsPerPage;
-    return filteredAndSortedCollections.slice(start, start + collectionsPerPage);
-  }, [filteredAndSortedCollections, collectionsPage, collectionsPerPage]);
+    const start = (collectionsPage - 1) * COLLECTIONS_PER_PAGE;
+    return filteredAndSortedCollections.slice(start, start + COLLECTIONS_PER_PAGE);
+  }, [filteredAndSortedCollections, collectionsPage]);
 
   useEffect(() => {
     setCollectionsPage(1);
-  }, [collectionsSearchQuery, collectionsTypeFilter, collectionsStatusFilter, collectionsPerPage]);
+  }, [collectionsSearchQuery, collectionsTypeFilter, collectionsStatusFilter]);
 
   const hasActiveCollectionFilters =
     collectionsSearchQuery.trim() !== "" ||
@@ -1672,6 +1616,7 @@ export function BudgetFundSettings() {
         semesterId: activeSemester?.id || null,
         recordedByUid: 'Admin SAO',
         collectionName: collectionItem.eventName,
+        payableIds: collectionItem.payments.map((p) => p.id),
       });
 
       if (res.transferredCount > 0) {
@@ -1943,56 +1888,14 @@ export function BudgetFundSettings() {
           </div>
 
           {/* ── Budget Tracker Pagination Bar ── */}
-          {filteredTx.length > 0 && (
-            <div className="px-6 py-4 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-3 bg-gray-50/50">
-              <div className="text-xs text-gray-500 font-medium">
-                Showing <span className="font-bold text-gray-800">{(ledgerPage - 1) * LEDGER_PER_PAGE + 1}</span> to{" "}
-                <span className="font-bold text-gray-800">{Math.min(ledgerPage * LEDGER_PER_PAGE, filteredTx.length)}</span> of{" "}
-                <span className="font-bold text-gray-800">{filteredTx.length}</span> transactions
-              </div>
-
-              {totalLedgerPages > 1 && (
-                <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={() => setLedgerPage((p) => Math.max(1, p - 1))}
-                    disabled={ledgerPage === 1}
-                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
-                  >
-                    Previous
-                  </button>
-
-                  {Array.from({ length: totalLedgerPages }, (_, i) => i + 1)
-                    .filter((p) => p === 1 || p === totalLedgerPages || Math.abs(p - ledgerPage) <= 1)
-                    .map((p, idx, arr) => {
-                      const prev = arr[idx - 1];
-                      return (
-                        <span key={p} className="flex items-center gap-1">
-                          {prev && p - prev > 1 && <span className="text-gray-400 text-xs px-1">...</span>}
-                          <button
-                            onClick={() => setLedgerPage(p)}
-                            className={`w-7 h-7 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                              ledgerPage === p
-                                ? "bg-[#001A4D] text-white shadow-xs"
-                                : "border border-gray-200 text-gray-600 hover:bg-white"
-                            }`}
-                          >
-                            {p}
-                          </button>
-                        </span>
-                      );
-                    })}
-
-                  <button
-                    onClick={() => setLedgerPage((p) => Math.min(totalLedgerPages, p + 1))}
-                    disabled={ledgerPage === totalLedgerPages}
-                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
-                  >
-                    Next
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
+          <TablePagination
+            currentPage={ledgerPage}
+            totalPages={totalLedgerPages}
+            totalItems={filteredTx.length}
+            itemsPerPage={LEDGER_PER_PAGE}
+            onPageChange={setLedgerPage}
+            itemName="transactions"
+          />
         </div>
       )}
 
@@ -2444,104 +2347,14 @@ export function BudgetFundSettings() {
             </div>
 
             {/* Complete Pagination Bar */}
-            {filteredAndSortedCollections.length > 0 && (
-              <div className="px-6 py-4 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-3 bg-gray-50/50">
-                {/* Result count & Rows Per Page */}
-                <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500 font-medium">
-                  <div>
-                    Showing <span className="font-bold text-gray-800">{(collectionsPage - 1) * collectionsPerPage + 1}</span> to{" "}
-                    <span className="font-bold text-gray-800">{Math.min(collectionsPage * collectionsPerPage, filteredAndSortedCollections.length)}</span> of{" "}
-                    <span className="font-bold text-gray-800">{filteredAndSortedCollections.length}</span> collection groups
-                    {collections.length !== filteredAndSortedCollections.length && (
-                      <span className="text-gray-400 ml-1">(filtered from {collections.length} total)</span>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-1.5 border-l border-gray-200 pl-3">
-                    <span className="text-gray-400">Rows per page:</span>
-                    <select
-                      value={collectionsPerPage}
-                      onChange={(e) => {
-                        setCollectionsPerPage(Number(e.target.value));
-                        setCollectionsPage(1);
-                      }}
-                      className="px-2 py-1 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-gray-700 outline-none focus:ring-1 focus:ring-[#0E4EBD] cursor-pointer"
-                    >
-                      {[5, 8, 10, 20, 50].map((num) => (
-                        <option key={num} value={num}>{num}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {/* Pagination Controls */}
-                {totalCollectionsPages > 1 && (
-                  <div className="flex items-center gap-1">
-                    {/* First Page */}
-                    <button
-                      onClick={() => setCollectionsPage(1)}
-                      disabled={collectionsPage === 1}
-                      className="p-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
-                      title="First Page"
-                    >
-                      <ChevronsLeft className="w-3.5 h-3.5" />
-                    </button>
-
-                    {/* Previous Page */}
-                    <button
-                      onClick={() => setCollectionsPage((p) => Math.max(1, p - 1))}
-                      disabled={collectionsPage === 1}
-                      className="px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
-                      title="Previous Page"
-                    >
-                      Previous
-                    </button>
-
-                    {/* Page Numbers */}
-                    {Array.from({ length: totalCollectionsPages }, (_, i) => i + 1)
-                      .filter((p) => p === 1 || p === totalCollectionsPages || Math.abs(p - collectionsPage) <= 1)
-                      .map((p, idx, arr) => {
-                        const prev = arr[idx - 1];
-                        return (
-                          <span key={p} className="flex items-center gap-1">
-                            {prev && p - prev > 1 && <span className="text-gray-400 text-xs px-0.5">...</span>}
-                            <button
-                              onClick={() => setCollectionsPage(p)}
-                              className={`w-7 h-7 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                                collectionsPage === p
-                                  ? "bg-[#001A4D] text-white shadow-xs"
-                                  : "border border-gray-200 text-gray-600 hover:bg-white bg-white"
-                              }`}
-                            >
-                              {p}
-                            </button>
-                          </span>
-                        );
-                      })}
-
-                    {/* Next Page */}
-                    <button
-                      onClick={() => setCollectionsPage((p) => Math.min(totalCollectionsPages, p + 1))}
-                      disabled={collectionsPage === totalCollectionsPages}
-                      className="px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
-                      title="Next Page"
-                    >
-                      Next
-                    </button>
-
-                    {/* Last Page */}
-                    <button
-                      onClick={() => setCollectionsPage(totalCollectionsPages)}
-                      disabled={collectionsPage === totalCollectionsPages}
-                      className="p-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
-                      title="Last Page"
-                    >
-                      <ChevronsRight className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
+            <TablePagination
+              currentPage={collectionsPage}
+              totalPages={totalCollectionsPages}
+              totalItems={filteredAndSortedCollections.length}
+              itemsPerPage={COLLECTIONS_PER_PAGE}
+              onPageChange={setCollectionsPage}
+              itemName="collection groups"
+            />
           </div>
         </div>
       )}

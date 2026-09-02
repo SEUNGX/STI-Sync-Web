@@ -20,6 +20,7 @@ import { RecordPaymentModal } from '../components/RecordPaymentModal';
 import { formatCurrency, formatVariance } from '../../utils/currency';
 import { formatAppDate, formatAppDateTime } from '../../utils/date';
 import { uploadToCloudinary } from '../../../services/cloudinary';
+import { TablePagination } from '../../components/common/TablePagination';
 
 import {
   Building2,
@@ -834,46 +835,14 @@ function BudgetTrackerTab({
         </div>
 
         {/* ── Ledger Bottom Pagination ── */}
-        {filteredRows.length > 0 && (
-          <div className="px-5 py-3 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-2 bg-gray-50">
-            <p className="text-xs text-gray-500">
-              Showing <span className="font-semibold text-gray-700">{((page - 1) * LEDGER_PER_PAGE) + 1}</span> to{" "}
-              <span className="font-semibold text-gray-700">{Math.min(page * LEDGER_PER_PAGE, filteredRows.length)}</span> of{" "}
-              <span className="font-semibold text-gray-700">{filteredRows.length}</span> transactions
-            </p>
-            {totalPages > 1 && (
-              <div className="flex items-center gap-1">
-                <button
-                  disabled={page === 1}
-                  onClick={() => setPage((p) => Math.max(p - 1, 1))}
-                  className="px-2 py-1 text-xs border border-gray-200 rounded-md bg-white text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 cursor-pointer transition-colors"
-                >
-                  <ChevronLeft className="w-3.5 h-3.5" /> Prev
-                </button>
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-                  <button
-                    key={p}
-                    onClick={() => setPage(p)}
-                    className={`w-7 h-7 text-xs rounded-md font-semibold transition-colors cursor-pointer ${
-                      page === p
-                        ? "bg-[#001A4D] text-[#FFD41C]"
-                        : "border border-gray-200 bg-white text-gray-700 hover:bg-gray-100"
-                    }`}
-                  >
-                    {p}
-                  </button>
-                ))}
-                <button
-                  disabled={page === totalPages}
-                  onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
-                  className="px-2 py-1 text-xs border border-gray-200 rounded-md bg-white text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 cursor-pointer transition-colors"
-                >
-                  Next <ChevronRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            )}
-          </div>
-        )}
+        <TablePagination
+          currentPage={page}
+          totalPages={totalPages}
+          totalItems={filteredRows.length}
+          itemsPerPage={LEDGER_PER_PAGE}
+          onPageChange={setPage}
+          itemName="transactions"
+        />
       </div>
 
       {showAddIncome && (
@@ -1590,59 +1559,15 @@ function StudentCollectionsAndPayablesTab({
             </table>
           </div>
 
-          {/* Collection Groups Pagination */}
-          {filteredCollections.length > 0 && (
-            <div className="px-6 py-4 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-3 bg-gray-50/50">
-              <div className="text-xs text-gray-500 font-medium">
-                Showing <span className="font-bold text-gray-800">{(collectionsPage - 1) * PER_PAGE + 1}</span> to{" "}
-                <span className="font-bold text-gray-800">
-                  {Math.min(collectionsPage * PER_PAGE, filteredCollections.length)}
-                </span>{" "}
-                of <span className="font-bold text-gray-800">{filteredCollections.length}</span> collection groups
-              </div>
-
-              {totalCollectionsPages > 1 && (
-                <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={() => setCollectionsPage((p) => Math.max(1, p - 1))}
-                    disabled={collectionsPage === 1}
-                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
-                  >
-                    Previous
-                  </button>
-
-                  {Array.from({ length: totalCollectionsPages }, (_, i) => i + 1)
-                    .filter((p) => p === 1 || p === totalCollectionsPages || Math.abs(p - collectionsPage) <= 1)
-                    .map((p, idx, arr) => {
-                      const prev = arr[idx - 1];
-                      return (
-                        <span key={p} className="flex items-center gap-1">
-                          {prev && p - prev > 1 && <span className="text-gray-400 text-xs px-1">...</span>}
-                          <button
-                            onClick={() => setCollectionsPage(p)}
-                            className={`w-7 h-7 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                              collectionsPage === p
-                                ? "bg-[#001A4D] text-white shadow-xs"
-                                : "border border-gray-200 text-gray-600 hover:bg-white"
-                            }`}
-                          >
-                            {p}
-                          </button>
-                        </span>
-                      );
-                    })}
-
-                  <button
-                    onClick={() => setCollectionsPage((p) => Math.min(totalCollectionsPages, p + 1))}
-                    disabled={collectionsPage === totalCollectionsPages}
-                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
-                  >
-                    Next
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
+        {/* Collection Groups Pagination */}
+        <TablePagination
+          currentPage={collectionsPage}
+          totalPages={totalCollectionsPages}
+          totalItems={filteredCollections.length}
+          itemsPerPage={PER_PAGE}
+          onPageChange={setCollectionsPage}
+          itemName="collection groups"
+        />
         </div>
       )}
 
@@ -1813,57 +1738,15 @@ function StudentCollectionsAndPayablesTab({
             </table>
           </div>
 
-          {/* Member Roster Pagination */}
-          {filteredMembers.length > 0 && (
-            <div className="px-6 py-4 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-3 bg-gray-50/50">
-              <div className="text-xs text-gray-500 font-medium">
-                Showing <span className="font-bold text-gray-800">{(membersPage - 1) * PER_PAGE + 1}</span> to{" "}
-                <span className="font-bold text-gray-800">{Math.min(membersPage * PER_PAGE, filteredMembers.length)}</span>{" "}
-                of <span className="font-bold text-gray-800">{filteredMembers.length}</span> members
-              </div>
-
-              {totalMemberPages > 1 && (
-                <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={() => setMembersPage((p) => Math.max(1, p - 1))}
-                    disabled={membersPage === 1}
-                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
-                  >
-                    Previous
-                  </button>
-
-                  {Array.from({ length: totalMemberPages }, (_, i) => i + 1)
-                    .filter((p) => p === 1 || p === totalMemberPages || Math.abs(p - membersPage) <= 1)
-                    .map((p, idx, arr) => {
-                      const prev = arr[idx - 1];
-                      return (
-                        <span key={p} className="flex items-center gap-1">
-                          {prev && p - prev > 1 && <span className="text-gray-400 text-xs px-1">...</span>}
-                          <button
-                            onClick={() => setMembersPage(p)}
-                            className={`w-7 h-7 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                              membersPage === p
-                                ? "bg-[#001A4D] text-white shadow-xs"
-                                : "border border-gray-200 text-gray-600 hover:bg-white"
-                            }`}
-                          >
-                            {p}
-                          </button>
-                        </span>
-                      );
-                    })}
-
-                  <button
-                    onClick={() => setMembersPage((p) => Math.min(totalMemberPages, p + 1))}
-                    disabled={membersPage === totalMemberPages}
-                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
-                  >
-                    Next
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
+        {/* Member Roster Pagination */}
+        <TablePagination
+          currentPage={membersPage}
+          totalPages={totalMemberPages}
+          totalItems={filteredMembers.length}
+          itemsPerPage={PER_PAGE}
+          onPageChange={setMembersPage}
+          itemName="members"
+        />
         </div>
       )}
 

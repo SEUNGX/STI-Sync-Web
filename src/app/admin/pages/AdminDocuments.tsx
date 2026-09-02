@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from "react";
+import { useState, useRef, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router";
 import {
   Radio, Clock, CheckCircle, XCircle, Send, Building2,
@@ -9,6 +9,7 @@ import { useDocumentCategories } from '../../modules/documents/hooks/useDocument
 import { useIncomingDocuments, useSentDocuments } from '../../modules/documents/hooks/useDocumentStream';
 import { createDocument, reviewDocument, getNextReferenceNumber } from '../../modules/documents/services/document.service';
 import { DocumentPreviewModal } from '../../modules/documents/components/DocumentPreviewModal';
+import { TablePagination } from '../../components/common/TablePagination';
 import { useOrganizationStream } from '../../modules/organizations/hooks/useOrganizationStream';
 import { useOrganizationTypes } from '../../modules/organizations/hooks/useOrganizationTypes';
 import { useAdviserProfile } from '../../modules/auth/hooks/useAdviserProfile';
@@ -495,6 +496,20 @@ function IncomingQueueTab() {
     return list;
   }, [incoming, statusFilter, orgFilter, searchQuery]);
 
+  // Pagination State (8 rows per page standard)
+  const PER_PAGE = 8;
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter, orgFilter, searchQuery]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
+  const paginatedDocs = useMemo(() => {
+    const start = (currentPage - 1) * PER_PAGE;
+    return filtered.slice(start, start + PER_PAGE);
+  }, [filtered, currentPage]);
+
   const handleApprove = async (docId: string, remarks: string) => {
     if (!adminProfile) return;
     await reviewDocument(docId, 'Approved', adminProfile.uid, remarks || null);
@@ -548,92 +563,103 @@ function IncomingQueueTab() {
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b border-[#E0E0E0]">
-                <tr>
-                  <th className="px-4 py-3 w-10">
-                    <input type="checkbox" className="accent-[#0E4EBD]" onChange={(e) => setSelected(e.target.checked ? filtered.map(d => d.id) : [])} />
-                  </th>
-                  {["Reference #", "Document Title", "Organization", "Category", "Submitted By", "Date Submitted", "Status", "Actions"].map((h) => (
-                    <th key={h} className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((doc) => {
-                  const isPending = doc.status === "Pending" || doc.status === "Resubmitted";
-                  const createdDate = toDate(doc.createdAt);
-                  const daysInQueue = createdDate ? Math.floor((Date.now() - createdDate.getTime()) / (1000 * 60 * 60 * 24)) : 0;
-                  return (
-                    <tr key={doc.id} className={`border-b border-[#E0E0E0] hover:bg-[#E8F0FF]/20 transition-colors group ${isPending ? "border-l-4 border-l-[#FFD41C]" : ""}`}>
-                      <td className="px-4 py-3">
-                        <input type="checkbox" checked={selected.includes(doc.id)} onChange={() => toggleSelect(doc.id)} className="accent-[#0E4EBD]" />
-                      </td>
-                      <td className="px-4 py-3 font-mono text-xs text-gray-500 whitespace-nowrap">
-                        <div className="flex items-center gap-2">
-                          {isPending && <span className="w-2 h-2 bg-amber-500 rounded-full animate-pulse flex-shrink-0" />}
-                          {doc.referenceNumber}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 min-w-[180px]">
-                        <p className="text-[#001A4D] font-bold text-sm leading-tight">{doc.title}</p>
-                        <div className="flex items-center gap-1.5 mt-1">
-                          <FileChip type={doc.fileType} />
-                          <span className="text-gray-400 text-xs">{formatBytes(doc.fileSize)}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <div className="w-7 h-7 bg-gradient-to-br from-[#001A4D] to-[#0E4EBD] rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0">{doc.submittedByOrgAcronym?.slice(0, 2) || '??'}</div>
-                          <div>
-                            <p className="text-[#001A4D] text-xs font-medium leading-tight">{doc.submittedByOrgName}</p>
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-[#E0E0E0]">
+                  <tr>
+                    <th className="px-4 py-3 w-10">
+                      <input type="checkbox" className="accent-[#0E4EBD]" onChange={(e) => setSelected(e.target.checked ? filtered.map(d => d.id) : [])} />
+                    </th>
+                    {["Reference #", "Document Title", "Organization", "Category", "Submitted By", "Date Submitted", "Status", "Actions"].map((h) => (
+                      <th key={h} className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedDocs.map((doc) => {
+                    const isPending = doc.status === "Pending" || doc.status === "Resubmitted";
+                    const createdDate = toDate(doc.createdAt);
+                    const daysInQueue = createdDate ? Math.floor((Date.now() - createdDate.getTime()) / (1000 * 60 * 60 * 24)) : 0;
+                    return (
+                      <tr key={doc.id} className={`border-b border-[#E0E0E0] hover:bg-[#E8F0FF]/20 transition-colors group ${isPending ? "border-l-4 border-l-[#FFD41C]" : ""}`}>
+                        <td className="px-4 py-3">
+                          <input type="checkbox" checked={selected.includes(doc.id)} onChange={() => toggleSelect(doc.id)} className="accent-[#0E4EBD]" />
+                        </td>
+                        <td className="px-4 py-3 font-mono text-xs text-gray-500 whitespace-nowrap">
+                          <div className="flex items-center gap-2">
+                            {isPending && <span className="w-2 h-2 bg-amber-500 rounded-full animate-pulse flex-shrink-0" />}
+                            {doc.referenceNumber}
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3"><CategoryPill category={doc.category} /></td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-1.5">
-                          <div className="w-6 h-6 bg-[#E8F0FF] rounded-full flex items-center justify-center text-[#0E4EBD] text-[10px] font-bold flex-shrink-0">
-                            {doc.submittedBy.split(" ").map(n => n[0]).join("").slice(0, 2)}
+                        </td>
+                        <td className="px-4 py-3 min-w-[180px]">
+                          <p className="text-[#001A4D] font-bold text-sm leading-tight">{doc.title}</p>
+                          <div className="flex items-center gap-1.5 mt-1">
+                            <FileChip type={doc.fileType} />
+                            <span className="text-gray-400 text-xs">{formatBytes(doc.fileSize)}</span>
                           </div>
-                          <div>
-                            <p className="text-gray-600 text-xs">{doc.submittedBy}</p>
-                            <span className="px-1 py-0.5 bg-[#E8F0FF] text-[#0E4EBD] text-[9px] rounded font-medium">Officer</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <div className="w-7 h-7 bg-gradient-to-br from-[#001A4D] to-[#0E4EBD] rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0">{doc.submittedByOrgAcronym?.slice(0, 2) || '??'}</div>
+                            <div>
+                              <p className="text-[#001A4D] text-xs font-medium leading-tight">{doc.submittedByOrgName}</p>
+                            </div>
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        {createdDate && (
-                          <>
-                            <p className="text-gray-600 text-xs">{format(createdDate, 'MMM dd, yyyy')}</p>
-                            <p className="text-gray-400 text-[10px] italic">{formatDistanceToNow(createdDate, { addSuffix: true })}</p>
-                            {isPending && daysInQueue > 2 && <p className="text-amber-600 text-[10px] italic">{daysInQueue} days in queue</p>}
-                          </>
-                        )}
-                      </td>
-                      <td className="px-4 py-3"><StatusPill status={doc.status} /></td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-1 relative">
-                          <button onClick={() => setPreviewDoc(doc)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-blue-50 text-blue-600 transition-colors" title="Quick Preview"><Eye className="w-4 h-4" /></button>
-                          <button onClick={() => navigate(`/home/documents/${doc.id}/review`)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[#E8F0FF] text-[#0E4EBD] transition-colors" title="Full Review"><FileText className="w-4 h-4" /></button>
-                          <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer" className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-50 text-[#001A4D] transition-colors" title="Download"><Download className="w-4 h-4" /></a>
-                          {(doc.status === "Pending" || doc.status === "Resubmitted") && (
+                        </td>
+                        <td className="px-4 py-3"><CategoryPill category={doc.category} /></td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-1.5">
+                            <div className="w-6 h-6 bg-[#E8F0FF] rounded-full flex items-center justify-center text-[#0E4EBD] text-[10px] font-bold flex-shrink-0">
+                              {doc.submittedBy.split(" ").map(n => n[0]).join("").slice(0, 2)}
+                            </div>
+                            <div>
+                              <p className="text-gray-600 text-xs">{doc.submittedBy}</p>
+                              <span className="px-1 py-0.5 bg-[#E8F0FF] text-[#0E4EBD] text-[9px] rounded font-medium">Officer</span>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          {createdDate && (
                             <>
-                              <button onClick={() => { setApprovePopover(approvePopover === doc.id ? null : doc.id); setRejectPopover(null); }} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-green-50 text-green-600 transition-colors"><Check className="w-4 h-4" /></button>
-                              <button onClick={() => { setRejectPopover(rejectPopover === doc.id ? null : doc.id); setApprovePopover(null); }} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-red-50 text-red-600 transition-colors"><X className="w-4 h-4" /></button>
+                              <p className="text-gray-600 text-xs">{format(createdDate, 'MMM dd, yyyy')}</p>
+                              <p className="text-gray-400 text-[10px] italic">{formatDistanceToNow(createdDate, { addSuffix: true })}</p>
+                              {isPending && daysInQueue > 2 && <p className="text-amber-600 text-[10px] italic">{daysInQueue} days in queue</p>}
                             </>
                           )}
-                          {approvePopover === doc.id && <QuickApprovePopover doc={doc} onClose={() => setApprovePopover(null)} onApprove={(r) => handleApprove(doc.id, r)} />}
-                          {rejectPopover === doc.id && <QuickRejectPopover doc={doc} onClose={() => setRejectPopover(null)} onReject={(r) => handleReject(doc.id, r)} />}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                        </td>
+                        <td className="px-4 py-3"><StatusBadge status={doc.status} /></td>
+                        <td className="px-4 py-3 relative">
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onClick={() => setPreviewDoc(doc)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-blue-50 text-blue-600 transition-colors" title="View Document"><Eye className="w-4 h-4" /></button>
+                            <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer" className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-50 text-[#001A4D] transition-colors" title="Download"><Download className="w-4 h-4" /></a>
+                            {(doc.status === "Pending" || doc.status === "Resubmitted") && (
+                              <>
+                                <button onClick={() => { setApprovePopover(approvePopover === doc.id ? null : doc.id); setRejectPopover(null); }} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-green-50 text-green-600 transition-colors"><Check className="w-4 h-4" /></button>
+                                <button onClick={() => { setRejectPopover(rejectPopover === doc.id ? null : doc.id); setApprovePopover(null); }} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-red-50 text-red-600 transition-colors"><X className="w-4 h-4" /></button>
+                              </>
+                            )}
+                            {approvePopover === doc.id && <QuickApprovePopover doc={doc} onClose={() => setApprovePopover(null)} onApprove={(r) => handleApprove(doc.id, r)} />}
+                            {rejectPopover === doc.id && <QuickRejectPopover doc={doc} onClose={() => setRejectPopover(null)} onReject={(r) => handleReject(doc.id, r)} />}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* ── Standard Bottom Pagination Bar ── */}
+            <TablePagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalItems={filtered.length}
+              itemsPerPage={PER_PAGE}
+              onPageChange={setCurrentPage}
+              itemName="documents"
+            />
+          </>
         )}
       </div>
 
@@ -656,6 +682,27 @@ function SentTab() {
   const { data: sent, loading } = useSentDocuments();
   const { data: orgs } = useOrganizationStream();
   const [previewDoc, setPreviewDoc] = useState<DocumentDocument | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const filteredSent = useMemo(() => {
+    if (!searchQuery.trim()) return sent;
+    const q = searchQuery.toLowerCase().trim();
+    return sent.filter((d) => d.title.toLowerCase().includes(q) || d.referenceNumber.toLowerCase().includes(q));
+  }, [sent, searchQuery]);
+
+  // Pagination State (8 rows per page standard)
+  const PER_PAGE = 8;
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredSent.length / PER_PAGE));
+  const paginatedSent = useMemo(() => {
+    const start = (currentPage - 1) * PER_PAGE;
+    return filteredSent.slice(start, start + PER_PAGE);
+  }, [filteredSent, currentPage]);
 
   if (loading) return <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 text-[#0E4EBD] animate-spin" /></div>;
 
@@ -664,9 +711,14 @@ function SentTab() {
       <div className="bg-white border border-[#E0E0E0] rounded-xl p-4 flex items-center gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input type="text" placeholder="Search sent documents..." className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD] focus:border-transparent" />
+          <input
+            type="text"
+            placeholder="Search sent documents..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD] focus:border-transparent"
+          />
         </div>
-        <select className="px-3 py-2 border border-gray-300 rounded-lg text-sm"><option>All Categories</option></select>
       </div>
 
       {sent.length === 0 ? (
@@ -686,7 +738,7 @@ function SentTab() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {sent.map((doc) => {
+              {paginatedSent.map((doc) => {
                 const readCount = doc.readBy ? Object.keys(doc.readBy).length : 0;
                 const totalTargets = doc.distribution === 'all' ? orgs.filter(o => o.status === 'active').length : doc.targetOrgIds.length;
                 const createdDate = toDate(doc.createdAt);
@@ -720,6 +772,16 @@ function SentTab() {
               })}
             </tbody>
           </table>
+
+          {/* ── Standard Bottom Pagination Bar ── */}
+          <TablePagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={filteredSent.length}
+            itemsPerPage={PER_PAGE}
+            onPageChange={setCurrentPage}
+            itemName="broadcast documents"
+          />
         </div>
       )}
 

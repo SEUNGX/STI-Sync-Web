@@ -1270,46 +1270,67 @@ export async function transferCollectionGroupToLedger(params: {
   } = params;
 
   const payablesRef = collection(db, PAYABLES_COLLECTION);
-  let qDocs;
+  let eligibleDocs: any[] = [];
 
-  if (eventId && eventId !== 'unassigned') {
-    if (type) {
+  if (payableIds && payableIds.length > 0) {
+    // Fetch directly by document IDs for precision
+    const fetchedDocs = await Promise.all(
+      payableIds.map((id) => getDoc(doc(payablesRef, id)))
+    );
+    eligibleDocs = fetchedDocs
+      .filter((d) => d.exists())
+      .filter((d) => {
+        const data = d.data()!;
+        const isPaidStatus = String(data.status || '').toLowerCase() === 'paid';
+        const hasPaid = (Number(data.paidAmount) || 0) > 0;
+        const assignedAmt = Number(data.assignedAmount) || 0;
+        const effectivePaid = hasPaid ? Number(data.paidAmount) : (isPaidStatus ? assignedAmt : 0);
+        const alreadyTransferred = typeof data.transferredAmount === 'number'
+          ? Math.max(0, data.transferredAmount)
+          : (data.transferredToBudget ? effectivePaid : 0);
+        const untransferredDelta = Math.max(0, effectivePaid - alreadyTransferred);
+        return untransferredDelta > 0;
+      }) as any;
+  } else {
+    let qDocs;
+    if (eventId && eventId !== 'unassigned') {
+      if (type) {
+        qDocs = query(
+          payablesRef,
+          where('eventId', '==', eventId),
+          where('type', '==', type)
+        );
+      } else {
+        qDocs = query(payablesRef, where('eventId', '==', eventId));
+      }
+    } else if (organizationId && type === 'membership_due') {
       qDocs = query(
         payablesRef,
-        where('eventId', '==', eventId),
-        where('type', '==', type)
+        where('organizationId', '==', organizationId),
+        where('type', '==', 'membership_due')
       );
+    } else if (organizationId) {
+      qDocs = query(payablesRef, where('organizationId', '==', organizationId));
+    } else if (type) {
+      qDocs = query(payablesRef, where('type', '==', type));
     } else {
-      qDocs = query(payablesRef, where('eventId', '==', eventId));
+      qDocs = query(payablesRef, where('type', 'in', ['admin_fine', 'event_fee', 'custom']));
     }
-  } else if (organizationId && type === 'membership_due') {
-    qDocs = query(
-      payablesRef,
-      where('organizationId', '==', organizationId),
-      where('type', '==', 'membership_due')
-    );
-  } else if (organizationId) {
-    qDocs = query(payablesRef, where('organizationId', '==', organizationId));
-  } else {
-    qDocs = query(payablesRef, where('type', 'in', ['admin_fine', 'event_fee']));
-  }
 
-  const snap = await getDocs(qDocs);
-  let eligibleDocs = snap.docs.filter((d) => {
-    if (payableIds && payableIds.length > 0 && !payableIds.includes(d.id)) {
-      return false;
-    }
-    const data = d.data();
-    const isPaidStatus = String(data.status || '').toLowerCase() === 'paid';
-    const hasPaid = (Number(data.paidAmount) || 0) > 0;
-    const assignedAmt = Number(data.assignedAmount) || 0;
-    const effectivePaid = hasPaid ? Number(data.paidAmount) : (isPaidStatus ? assignedAmt : 0);
-    const alreadyTransferred = typeof data.transferredAmount === 'number'
-      ? Math.max(0, data.transferredAmount)
-      : (data.transferredToBudget ? effectivePaid : 0);
-    const untransferredDelta = Math.max(0, effectivePaid - alreadyTransferred);
-    return untransferredDelta > 0;
-  });
+    const snap = await getDocs(qDocs);
+    eligibleDocs = snap.docs.filter((d) => {
+      const data = d.data();
+      const isPaidStatus = String(data.status || '').toLowerCase() === 'paid';
+      const hasPaid = (Number(data.paidAmount) || 0) > 0;
+      const assignedAmt = Number(data.assignedAmount) || 0;
+      const effectivePaid = hasPaid ? Number(data.paidAmount) : (isPaidStatus ? assignedAmt : 0);
+      const alreadyTransferred = typeof data.transferredAmount === 'number'
+        ? Math.max(0, data.transferredAmount)
+        : (data.transferredToBudget ? effectivePaid : 0);
+      const untransferredDelta = Math.max(0, effectivePaid - alreadyTransferred);
+      return untransferredDelta > 0;
+    });
+  }
 
   // Fallback: If no docs matched query, check if collectionGroupId is a direct payable document ID
   if (eligibleDocs.length === 0 && collectionGroupId && collectionGroupId !== 'unassigned') {

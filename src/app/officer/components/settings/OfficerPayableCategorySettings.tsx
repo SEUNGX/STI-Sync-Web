@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   Plus,
   Edit2,
@@ -28,6 +28,7 @@ import {
 } from '../../../modules/finance/services/payable-category.service';
 import { formatCurrency } from '../../../utils/currency';
 import { toast } from 'sonner';
+import { TablePagination } from '../../../components/common/TablePagination';
 
 interface OfficerPayableCategorySettingsProps {
   organizationId: string;
@@ -87,6 +88,20 @@ export default function OfficerPayableCategorySettings({
       return matchesTab && matchesSearch;
     });
   }, [allCategories, activeTab, searchQuery]);
+
+  // Pagination State (8 rows per page standard)
+  const PER_PAGE = 8;
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, searchQuery]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredCategories.length / PER_PAGE));
+  const paginatedCategories = useMemo(() => {
+    const start = (currentPage - 1) * PER_PAGE;
+    return filteredCategories.slice(start, start + PER_PAGE);
+  }, [filteredCategories, currentPage]);
 
   // Statistics
   const stats = useMemo(() => {
@@ -372,7 +387,7 @@ export default function OfficerPayableCategorySettings({
                 </td>
               </tr>
             ) : (
-              filteredCategories.map((cat) => {
+              paginatedCategories.map((cat) => {
                 const isClubCategory = cat.organizationId === organizationId;
                 const isFine = cat.categoryType === 'fine' || cat.type === 'org_fine' || cat.type === 'admin_fine';
 
@@ -467,6 +482,16 @@ export default function OfficerPayableCategorySettings({
             )}
           </tbody>
         </table>
+
+        {/* ── Standard Bottom Pagination Bar ── */}
+        <TablePagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={filteredCategories.length}
+          itemsPerPage={PER_PAGE}
+          onPageChange={setCurrentPage}
+          itemName="categories"
+        />
       </div>
 
       {/* Add / Edit Category Modal */}

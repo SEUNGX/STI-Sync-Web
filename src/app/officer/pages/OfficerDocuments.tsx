@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from "react";
+import React, { useState, useRef, useMemo, useEffect } from "react";
 import {
   Upload, Clock, CheckCircle, XCircle, Mail, ArrowUp, ArrowDown,
   Eye, Download, RefreshCw, Trash2, Search, Send, Save,
@@ -9,6 +9,7 @@ import { useDocumentCategories } from '../../modules/documents/hooks/useDocument
 import { useOfficerSubmissions, useOfficerInbox } from '../../modules/documents/hooks/useDocumentStream';
 import { createDocument, getNextReferenceNumber, markDocumentRead } from '../../modules/documents/services/document.service';
 import { DocumentPreviewModal } from '../../modules/documents/components/DocumentPreviewModal';
+import { TablePagination } from '../../components/common/TablePagination';
 import { useOfficerProfile } from '../../auth/hooks/useOfficerProfile';
 import { useOrganizationStream } from '../../modules/organizations/hooks/useOrganizationStream';
 import { useSemesters } from '../../modules/academic/hooks/useAcademicStream';
@@ -597,6 +598,20 @@ function SubmissionsTab({ orgId, orgName, orgAcronym, orgTypeId, officerName, of
     return list;
   }, [submissions, statusFilter, categoryFilter, searchQuery]);
 
+  // Pagination State (8 rows per page standard)
+  const PER_PAGE = 8;
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter, categoryFilter, searchQuery]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
+  const paginatedSubmissions = useMemo(() => {
+    const start = (currentPage - 1) * PER_PAGE;
+    return filtered.slice(start, start + PER_PAGE);
+  }, [filtered, currentPage]);
+
   const uniqueCategories = useMemo(() => [...new Set(submissions.map(d => d.category))], [submissions]);
 
   if (loading) return <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 text-[#0E4EBD] animate-spin" /></div>;
@@ -630,7 +645,8 @@ function SubmissionsTab({ orgId, orgName, orgAcronym, orgTypeId, officerName, of
             <p className="text-gray-500 text-sm">Documents you submit to SAS will appear here.</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+            <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-[#E0E0E0]">
                 <tr>
@@ -640,7 +656,7 @@ function SubmissionsTab({ orgId, orgName, orgAcronym, orgTypeId, officerName, of
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((doc) => {
+                {paginatedSubmissions.map((doc) => {
                   const createdDate = toDate(doc.createdAt);
                   const updatedDate = toDate(doc.updatedAt);
                   return (
@@ -697,7 +713,18 @@ function SubmissionsTab({ orgId, orgName, orgAcronym, orgTypeId, officerName, of
               </tbody>
             </table>
           </div>
-        )}
+
+          {/* ── Standard Bottom Pagination Bar ── */}
+          <TablePagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={filtered.length}
+            itemsPerPage={PER_PAGE}
+            onPageChange={setCurrentPage}
+            itemName="submitted documents"
+          />
+        </>
+      )}
       </div>
 
       {resubmitDoc && <ResubmitModal doc={resubmitDoc} onClose={() => setResubmitDoc(null)} orgId={orgId} orgName={orgName} orgAcronym={orgAcronym} orgTypeId={orgTypeId} officerName={officerName} officerEmail={officerEmail} />}
@@ -722,6 +749,20 @@ function InboxTab({ orgId }: { orgId: string }) {
     }
     return list;
   }, [inbox, showUnreadOnly, searchQuery, orgId]);
+
+  // Pagination State (8 rows per page standard)
+  const PER_PAGE = 8;
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [showUnreadOnly, searchQuery]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
+  const paginatedInbox = useMemo(() => {
+    const start = (currentPage - 1) * PER_PAGE;
+    return filtered.slice(start, start + PER_PAGE);
+  }, [filtered, currentPage]);
 
   const unreadCount = inbox.filter(d => !d.readBy?.[orgId]).length;
 
@@ -780,7 +821,7 @@ function InboxTab({ orgId }: { orgId: string }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#E0E0E0]">
-                {filtered.map((doc) => {
+                {paginatedInbox.map((doc) => {
                   const isRead = !!doc.readBy?.[orgId];
                   const createdDate = toDate(doc.createdAt);
                   return (
@@ -843,6 +884,16 @@ function InboxTab({ orgId }: { orgId: string }) {
               </tbody>
             </table>
           </div>
+
+          {/* ── Standard Bottom Pagination Bar ── */}
+          <TablePagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={filtered.length}
+            itemsPerPage={PER_PAGE}
+            onPageChange={setCurrentPage}
+            itemName="inbox documents"
+          />
         </div>
       )}
 

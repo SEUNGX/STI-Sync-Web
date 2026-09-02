@@ -24,6 +24,7 @@ import type { LiquidationDocument, LiquidationStatus } from '../../modules/finan
 import { formatCurrency, formatVariance } from '../../utils/currency';
 import { formatAppDateTime } from '../../utils/date';
 import { toast } from 'sonner';
+import { TablePagination } from '../../components/common/TablePagination';
 
 type FilterTab = 'all' | 'pending' | 'approved' | 'returned' | 'draft';
 const ITEMS_PER_PAGE = 8;
@@ -501,52 +502,14 @@ export default function FinancialLiquidation() {
           )}
         </div>
 
-        {/* ── Bottom Pagination Bar ── */}
-        <div className="p-3.5 bg-gray-50/60 border-t border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-gray-500">
-          <div>
-            {filteredReports.length === 0 ? (
-              'Showing 0 reports'
-            ) : (
-              <span>
-                Showing <strong className="text-gray-900 font-bold">{(currentPage - 1) * ITEMS_PER_PAGE + 1}</strong> to{' '}
-                <strong className="text-gray-900 font-bold">{Math.min(currentPage * ITEMS_PER_PAGE, filteredReports.length)}</strong> of{' '}
-                <strong className="text-gray-900 font-bold">{filteredReports.length}</strong> reports
-              </span>
-            )}
-          </div>
-
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-              className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed font-semibold transition-colors cursor-pointer"
-            >
-              Previous
-            </button>
-
-            {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
-              <button
-                key={pageNum}
-                onClick={() => setCurrentPage(pageNum)}
-                className={`w-7 h-7 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                  currentPage === pageNum
-                    ? 'bg-[#001A4D] text-white'
-                    : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100'
-                }`}
-              >
-                {pageNum}
-              </button>
-            ))}
-
-            <button
-              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages || totalPages === 0}
-              className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed font-semibold transition-colors cursor-pointer"
-            >
-              Next
-            </button>
-          </div>
-        </div>
+        <TablePagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={filteredReports.length}
+          itemsPerPage={ITEMS_PER_PAGE}
+          onPageChange={setCurrentPage}
+          itemName="reports"
+        />
       </div>
 
       {/* Create / Edit Modal */}

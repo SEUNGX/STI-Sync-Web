@@ -33,6 +33,7 @@ import { AttendanceExportPreviewModal } from '../../modules/attendance/component
 import { EventFinesGenerationModal } from '../../modules/finance/components/EventFinesGenerationModal';
 import { EventFinesRosterView } from '../../modules/finance/components/EventFinesRosterView';
 import type { AttendanceFilterState, EnrichedAttendanceRecord } from '../../modules/attendance/types/attendance.types';
+import { TablePagination } from '../../components/common/TablePagination';
 
 interface OfficerMappedEvent {
   id: string;
@@ -306,6 +307,20 @@ export default function AttendanceLogs() {
     });
   }, [currentEvent, filterState]);
 
+  // Pagination State
+  const ATTENDANCE_PER_PAGE = 8;
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterState, selectedEventId]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredRecords.length / ATTENDANCE_PER_PAGE));
+  const paginatedRecords = useMemo(() => {
+    const start = (currentPage - 1) * ATTENDANCE_PER_PAGE;
+    return filteredRecords.slice(start, start + ATTENDANCE_PER_PAGE);
+  }, [filteredRecords, currentPage]);
+
   // Flagged records for current event
   const flaggedEntries = useMemo(() => {
     if (!currentEvent) return [];
@@ -503,7 +518,7 @@ export default function AttendanceLogs() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 font-medium text-gray-800">
-                      {filteredRecords.map((rec, idx) => (
+                      {paginatedRecords.map((rec, idx) => (
                         <tr
                           key={rec.id || idx}
                           className={`hover:bg-blue-50/40 transition-colors ${
@@ -512,7 +527,9 @@ export default function AttendanceLogs() {
                             rec.status === 'Late' ? 'bg-orange-50/20' : ''
                           }`}
                         >
-                          <td className="px-4 py-3 text-center text-gray-400 font-mono">{idx + 1}</td>
+                          <td className="px-4 py-3 text-center text-gray-400 font-mono">
+                            {(currentPage - 1) * ATTENDANCE_PER_PAGE + idx + 1}
+                          </td>
                           <td className="px-4 py-3 font-mono text-gray-600">{rec.studentId || 'N/A'}</td>
                           <td className="px-4 py-3 font-bold text-[#001A4D]">{rec.name}</td>
                           <td className="px-4 py-3">
@@ -549,10 +566,15 @@ export default function AttendanceLogs() {
                   </table>
                 </div>
 
-                <div className="px-6 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
-                  <span>Showing <strong>{filteredRecords.length}</strong> of <strong>{currentEvent.records.length}</strong> attendance records</span>
-                  <span>Event: <strong>{currentEvent.title}</strong></span>
-                </div>
+                {/* Standard Table Pagination Footer */}
+                <TablePagination
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  totalItems={filteredRecords.length}
+                  itemsPerPage={ATTENDANCE_PER_PAGE}
+                  onPageChange={setCurrentPage}
+                  itemName="attendance records"
+                />
               </div>
 
               {/* Flagged Section Accordion */}

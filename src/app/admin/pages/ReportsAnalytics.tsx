@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   BarChart3,
   TrendingUp,
@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
+import { TablePagination } from "../../components/common/TablePagination";
 import {
   LineChart,
   Line,
@@ -71,6 +72,19 @@ export function ReportsAnalytics() {
   const [scope, setScope] = useState<ReportScope>("ALL");
   const [selectedTermId, setSelectedTermId] = useState<string>("ACTIVE");
   const [previewReport, setPreviewReport] = useState<GeneratedReportData | null>(null);
+  const [reportPage, setReportPage] = useState(1);
+  const REPORT_PER_PAGE = 8;
+
+  useEffect(() => {
+    setReportPage(1);
+  }, [previewReport]);
+
+  const totalReportPages = Math.max(1, Math.ceil((previewReport?.rows.length || 0) / REPORT_PER_PAGE));
+  const paginatedReportRows = useMemo(() => {
+    if (!previewReport) return [];
+    const start = (reportPage - 1) * REPORT_PER_PAGE;
+    return previewReport.rows.slice(start, start + REPORT_PER_PAGE);
+  }, [previewReport, reportPage]);
 
   // Live Streams
   const { data: students = [] } = useStudents();
@@ -574,7 +588,7 @@ export function ReportsAnalytics() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {previewReport.rows.map((row, idx) => (
+                      {paginatedReportRows.map((row, idx) => (
                         <tr key={idx} className="hover:bg-blue-50/40">
                           {previewReport.columns.map((c) => (
                             <td key={c.key} className="px-4 py-2.5 whitespace-nowrap text-gray-700">
@@ -593,6 +607,16 @@ export function ReportsAnalytics() {
                     </tbody>
                   </table>
                 </div>
+
+                {/* ── Standard Bottom Pagination Bar ── */}
+                <TablePagination
+                  currentPage={reportPage}
+                  totalPages={totalReportPages}
+                  totalItems={previewReport.rows.length}
+                  itemsPerPage={REPORT_PER_PAGE}
+                  onPageChange={setReportPage}
+                  itemName="records"
+                />
               </div>
 
               {/* Official Signatories Block Preview */}

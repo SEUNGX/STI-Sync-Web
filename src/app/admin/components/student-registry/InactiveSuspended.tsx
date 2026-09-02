@@ -5,6 +5,7 @@ import { formatTimestampDate } from '../../../modules/students/utils/date.utils'
 import { exportStudentsToCSV } from '../../../modules/students/utils/export.utils';
 import StudentDetailModal from '../../../modules/students/components/StudentDetailModal';
 import { updateStudentStatus } from '../../../modules/students/services/student.service';
+import { TablePagination } from '../../../components/common/TablePagination';
 
 interface InactiveSuspendedProps {
   inactiveStudents: StudentDocument[];
@@ -14,6 +15,12 @@ interface InactiveSuspendedProps {
 export default function InactiveSuspended({ inactiveStudents }: InactiveSuspendedProps) {
   const [selectedStudentForDetail, setSelectedStudentForDetail] = useState<StudentDocument | null>(null);
   const [reactivatingId, setReactivatingId] = useState<string | null>(null);
+
+  // Pagination State (8 rows per page standard)
+  const PER_PAGE = 8;
+  const [currentPage, setCurrentPage] = useState(1);
+  const totalPages = Math.max(1, Math.ceil(inactiveStudents.length / PER_PAGE));
+  const paginatedStudents = inactiveStudents.slice((currentPage - 1) * PER_PAGE, currentPage * PER_PAGE);
 
   const handleReactivate = async (student: StudentDocument) => {
     const confirm = window.confirm(`Reactivate ${student.firstName} ${student.lastName} back to ACTIVE status?`);
@@ -84,7 +91,7 @@ export default function InactiveSuspended({ inactiveStudents }: InactiveSuspende
                   </td>
                 </tr>
               ) : (
-                inactiveStudents.map((student) => (
+                paginatedStudents.map((student) => (
                   <tr key={student.id} className="hover:bg-gray-50/80 transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
@@ -145,6 +152,16 @@ export default function InactiveSuspended({ inactiveStudents }: InactiveSuspende
             </tbody>
           </table>
         </div>
+
+        {/* ── Standard Bottom Pagination Bar ── */}
+        <TablePagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={inactiveStudents.length}
+          itemsPerPage={PER_PAGE}
+          onPageChange={setCurrentPage}
+          itemName="inactive students"
+        />
       </div>
 
       {/* Student Details Inspection Modal */}
