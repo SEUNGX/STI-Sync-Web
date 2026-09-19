@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, CheckCircle, Lock, Unlock, Loader2, Coins } from 'lucide-react';
+import { X, CheckCircle, Lock, Unlock, Loader2, Coins, AlertCircle } from 'lucide-react';
 import type { PayableDocument } from '../types/payable.types';
 import { recordPayment } from '../services/payable.service';
 import { formatCurrency } from '../../../utils/currency';
@@ -31,11 +31,15 @@ export function AdminRecordPaymentModal({
     payable.qrTicketUnlocked ?? true
   );
   const [notes, setNotes] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const isPayableClosed =
+    payable.status === 'waived' ||
+    payable.status === 'refund_pending' ||
+    payable.status === 'refunded' ||
+    (payable as any).status === 'cancelled';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (paymentAmount <= 0) return;
+    if (paymentAmount <= 0 || isPayableClosed) return;
 
     setIsSubmitting(true);
     try {
@@ -49,9 +53,9 @@ export function AdminRecordPaymentModal({
         notes.trim() || undefined
       );
       onClose();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error recording payment:', err);
-      alert('Failed to record payment. Please try again.');
+      alert(err?.message || 'Failed to record payment. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -90,6 +94,14 @@ export function AdminRecordPaymentModal({
               <span className="font-bold text-[#001A4D]">Remaining: {formatCurrency(remaining)}</span>
             </div>
           </div>
+
+          {/* Warning Banner if Payable is Waived or In Refund */}
+          {isPayableClosed && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-xs text-red-700">
+              <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+              <span>This payable is <strong>{payable.status}</strong>. New payments cannot be recorded.</span>
+            </div>
+          )}
 
           {/* Payment Amount Input */}
           <div>
@@ -215,7 +227,7 @@ export function AdminRecordPaymentModal({
             </button>
             <button
               type="submit"
-              disabled={isSubmitting || paymentAmount <= 0}
+              disabled={isSubmitting || paymentAmount <= 0 || isPayableClosed}
               className="flex items-center gap-1.5 px-4 py-2 bg-[#001A4D] text-white rounded-lg text-xs font-bold hover:bg-[#001A4D]/90 disabled:opacity-50"
             >
               {isSubmitting ? (

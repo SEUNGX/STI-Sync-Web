@@ -962,7 +962,11 @@ export default function OfficerEventDetailView({
           >
             <SectionHeader
               title="7. Event Payables & QR Ticket Access Control"
-              subtitle="Target participant collection roster, payment settlement, and QR ticket unlocking"
+              subtitle={
+                isCancelled
+                  ? "Event cancelled — Payment collection closed, unpaid fees auto-waived, and gate passes revoked"
+                  : "Target participant collection roster, payment settlement, and QR ticket unlocking"
+              }
             />
 
             <div className="space-y-4">
@@ -974,6 +978,7 @@ export default function OfficerEventDetailView({
                 isOfficer={true}
                 isClubEvent={true}
                 hostingOrgName={orgName}
+                isCancelled={isCancelled}
               />
             </div>
           </section>

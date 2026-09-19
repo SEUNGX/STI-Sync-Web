@@ -36,6 +36,7 @@ interface EventFinesRosterViewProps {
   semesterId?: string;
   onOpenAssessFinesModal: () => void;
   isEventCompleted: boolean;
+  isEventCancelled?: boolean;
 }
 
 export function EventFinesRosterView({
@@ -49,6 +50,7 @@ export function EventFinesRosterView({
   semesterId,
   onOpenAssessFinesModal,
   isEventCompleted,
+  isEventCancelled = false,
 }: EventFinesRosterViewProps) {
   const { data: allEventPayables, loading } = useEventPayablesStream(eventId);
   const { data: students } = useStudents();
@@ -514,33 +516,45 @@ export function EventFinesRosterView({
                       {/* Actions */}
                       <td className="p-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          {!isPaid && !isWaived && (
+                          {isEventCancelled ? (
+                            isPaid ? (
+                              <span className="text-green-600 text-xs font-semibold flex items-center gap-1 justify-end">
+                                <CheckCircle2 className="w-3.5 h-3.5" /> Settled
+                              </span>
+                            ) : (
+                              <span className="text-gray-400 text-xs italic">Waived / Cancelled</span>
+                            )
+                          ) : (
                             <>
-                              <button
-                                type="button"
-                                onClick={() => setSelectedPaymentPayable(p)}
-                                className="px-2.5 py-1.5 bg-[#001A4D] text-[#FFD41C] hover:bg-[#002B7F] rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
-                              >
-                                <DollarSign className="w-3.5 h-3.5" />
-                                Record Pay
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleWaiveFine(p)}
-                                disabled={waivingId === p.id}
-                                className="px-2.5 py-1.5 border border-gray-300 hover:bg-gray-100 text-gray-600 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
-                              >
-                                {waivingId === p.id ? '...' : 'Waive'}
-                              </button>
+                              {!isPaid && !isWaived && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedPaymentPayable(p)}
+                                    className="px-2.5 py-1.5 bg-[#001A4D] text-[#FFD41C] hover:bg-[#002B7F] rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
+                                  >
+                                    <DollarSign className="w-3.5 h-3.5" />
+                                    Record Pay
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleWaiveFine(p)}
+                                    disabled={waivingId === p.id}
+                                    className="px-2.5 py-1.5 border border-gray-300 hover:bg-gray-100 text-gray-600 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                                  >
+                                    {waivingId === p.id ? '...' : 'Waive'}
+                                  </button>
+                                </>
+                              )}
+                              {isPaid && (
+                                <span className="text-green-600 text-xs font-semibold flex items-center gap-1 justify-end">
+                                  <CheckCircle2 className="w-3.5 h-3.5" /> Settled
+                                </span>
+                              )}
+                              {isWaived && (
+                                <span className="text-gray-400 text-xs italic">Waived</span>
+                              )}
                             </>
-                          )}
-                          {isPaid && (
-                            <span className="text-green-600 text-xs font-semibold flex items-center gap-1 justify-end">
-                              <CheckCircle2 className="w-3.5 h-3.5" /> Settled
-                            </span>
-                          )}
-                          {isWaived && (
-                            <span className="text-gray-400 text-xs italic">Waived</span>
                           )}
                         </div>
                       </td>
@@ -565,7 +579,7 @@ export function EventFinesRosterView({
       </div>
 
       {/* Record Payment Modal */}
-      {selectedPaymentPayable && (
+      {selectedPaymentPayable && !isEventCancelled && (
         <AdminRecordPaymentModal
           payable={selectedPaymentPayable}
           onClose={() => setSelectedPaymentPayable(null)}

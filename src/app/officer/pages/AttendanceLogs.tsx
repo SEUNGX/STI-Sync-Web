@@ -642,6 +642,11 @@ export default function AttendanceLogs() {
                   semesterId="active"
                   onOpenAssessFinesModal={() => setIsAssessFinesModalOpen(true)}
                   isEventCompleted={currentEvent.status === 'Completed'}
+                  isEventCancelled={
+                    currentEvent.status === 'Cancelled' ||
+                    currentEvent.status === 'cancelled' ||
+                    (currentEvent as any).isCancelled === true
+                  }
                 />
               )}
 

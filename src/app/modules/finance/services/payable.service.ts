@@ -245,7 +245,39 @@ export async function recordPayment(
 
   const data = snap.data() as PayableDocument;
   const currentPaid = Number(data.paidAmount) || 0;
-  const assigned = Number(data.assignedAmount) || 0;
+  // GUARD: Reject if payable is closed, waived, refunded, or queued for refund
+  if (data.status === 'waived') {
+    throw new Error('Cannot record payment: This payable has been waived.');
+  }
+  if (data.status === 'refund_pending' || data.status === 'refunded') {
+    throw new Error('Cannot record payment: This payable has been refunded or queued for refund.');
+  }
+  if ((data as any).status === 'cancelled') {
+    throw new Error('Cannot record payment: This payable is cancelled.');
+  }
+
+  // GUARD: Check if the associated event is cancelled
+  if (data.eventId) {
+    try {
+      const eventSnap = await getDoc(doc(db, 'events', data.eventId));
+      if (eventSnap.exists()) {
+        const evData = eventSnap.data();
+        if (
+          evData.status === 'cancelled' ||
+          evData.isCancelled === true ||
+          evData.proposalStatus === 'cancelled' ||
+          evData.lifecycleStatus === 'cancelled'
+        ) {
+          throw new Error('Cannot record payment: This event has been cancelled.');
+        }
+      }
+    } catch (e: any) {
+      if (e.message?.includes('Cannot record payment: This event has been cancelled.')) {
+        throw e;
+      }
+      console.warn('[recordPayment] Could not verify event status:', e);
+    }
+  }
 
   // GUARD: Reject if already fully paid
   if (data.status === 'paid' || (assigned > 0 && currentPaid >= assigned)) {

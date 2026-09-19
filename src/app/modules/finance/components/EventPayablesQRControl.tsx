@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Search, Lock, Unlock, Loader2, Coins, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
+import { Search, Lock, Unlock, Loader2, Coins, CheckCircle2, AlertCircle, RefreshCw, XCircle, RotateCcw, Clock } from 'lucide-react';
 import { doc, getDoc, writeBatch } from 'firebase/firestore';
 import { db } from '../../../../services/firebase';
 import { useEventPayablesStream } from '../hooks/usePayableStream';
@@ -19,6 +19,7 @@ interface EventPayablesQRControlProps {
   isClubEvent?: boolean;
   hostingOrgName?: string;
   readOnly?: boolean;
+  isCancelled?: boolean;
 }
 
 export function EventPayablesQRControl({
@@ -30,12 +31,13 @@ export function EventPayablesQRControl({
   isClubEvent = false,
   hostingOrgName,
   readOnly = false,
+  isCancelled = false,
 }: EventPayablesQRControlProps) {
   const { data: payables, loading } = useEventPayablesStream(eventId);
   const { data: students } = useStudents();
 
-  // Admin cannot accept payment or unlock QR tickets for club events
-  const canManagePayments = !readOnly && (isOfficer ? true : !isClubEvent);
+  // Admin cannot accept payment or unlock QR tickets for club events, and cancelled events forbid payment
+  const canManagePayments = !readOnly && !isCancelled && (isOfficer ? true : !isClubEvent);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'unpaid' | 'paid' | 'locked' | 'unlocked'>('all');
@@ -115,7 +117,16 @@ export function EventPayablesQRControl({
 
   const totalAssigned = useMemo(() => payables.reduce((a, p) => a + (p.assignedAmount || 0), 0), [payables]);
   const totalCollected = useMemo(() => payables.reduce((a, p) => a + (p.paidAmount || 0), 0), [payables]);
-  const unlockedCount = useMemo(() => payables.filter((p) => p.qrTicketUnlocked).length, [payables]);
+  const paidCount = useMemo(() => payables.filter((p) => p.status === 'paid').length, [payables]);
+  const unpaidCount = useMemo(
+    () => payables.filter((p) => p.status !== 'paid' && p.status !== 'waived' && p.status !== 'refunded').length,
+    [payables]
+  );
+  const unlockedCount = useMemo(
+    () => (isCancelled ? 0 : payables.filter((p) => p.qrTicketUnlocked).length),
+    [payables, isCancelled]
+  );
+  const lockedCount = useMemo(() => payables.length - unlockedCount, [payables, unlockedCount]);
 
   const [isSyncing, setIsSyncing] = useState(false);
 
@@ -223,8 +234,23 @@ export function EventPayablesQRControl({
         </div>
       </div>
 
-      {/* Notice Banner when Admin is viewing a club event */}
-      {!canManagePayments && (
+      {/* Notice Banner when Event is Cancelled or Admin is viewing a club event */}
+      {isCancelled ? (
+        <div className="p-4 bg-red-50 border-b border-red-200 flex items-start gap-3 text-xs text-red-900">
+          <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <div className="flex items-center gap-2">
+              <p className="font-bold text-red-900">Event Cancelled — Payment Collections & QR Gate Passes Closed</p>
+              <span className="px-2 py-0.5 bg-red-100 text-red-700 font-semibold rounded text-[10px] uppercase tracking-wide">
+                Cancelled
+              </span>
+            </div>
+            <p className="text-red-700 text-[11px] mt-0.5 leading-relaxed">
+              This event has been cancelled. Recording payments and unlocking QR attendance passes are disabled. Unpaid payables have been waived and any collected fees have been queued for refund in the Finance Center.
+            </p>
+          </div>
+        </div>
+      ) : !canManagePayments && (
         <div className="p-3.5 bg-amber-50 border-b border-amber-200 flex items-start gap-2.5 text-xs text-amber-900">
           <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
           <div>
@@ -249,24 +275,27 @@ export function EventPayablesQRControl({
           />
         </div>
 
-        <div className="flex items-center gap-1 overflow-x-auto pb-1 md:pb-0">
-          {[
-            { id: 'all', label: `All (${payables.length})` },
-            { id: 'unpaid', label: 'Unpaid' },
-            { id: 'paid', label: 'Paid' },
-            { id: 'locked', label: '🔒 Locked QR' },
-            { id: 'unlocked', label: '🔓 Unlocked QR' },
-          ].map((tab) => (
+        {/* Filter Badges */}
+        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+          {(
+            [
+              { id: 'all', label: `All (${payables.length})` },
+              { id: 'unpaid', label: `Unpaid (${unpaidCount})` },
+              { id: 'paid', label: `Paid (${paidCount})` },
+              { id: 'locked', label: `Locked (${lockedCount})` },
+              { id: 'unlocked', label: `Unlocked (${unlockedCount})` },
+            ] as const
+          ).map((f) => (
             <button
-              key={tab.id}
-              onClick={() => setStatusFilter(tab.id as any)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${
-                statusFilter === tab.id
-                  ? 'bg-[#001A4D] text-white'
+              key={f.id}
+              onClick={() => setStatusFilter(f.id)}
+              className={`px-3 py-1.5 rounded-lg font-bold transition-all text-xs cursor-pointer ${
+                statusFilter === f.id
+                  ? 'bg-[#001A4D] text-white shadow-xs'
                   : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-100'
               }`}
             >
-              {tab.label}
+              {f.label}
             </button>
           ))}
         </div>
@@ -274,9 +303,9 @@ export function EventPayablesQRControl({
 
       {/* Payables Table */}
       <div className="overflow-x-auto">
-        <table className="w-full text-left text-xs">
-          <thead className="bg-[#F8F8F8] border-b border-[#E0E0E0] text-[#888780] font-bold uppercase tracking-wider">
-            <tr>
+        <table className="w-full text-left border-collapse text-xs">
+          <thead>
+            <tr className="bg-gray-50 text-gray-500 font-bold border-b border-[#E0E0E0] uppercase text-[10px] tracking-wider">
               <th className="px-5 py-3">Student Name</th>
               <th className="px-5 py-3">School ID</th>
               <th className="px-5 py-3">Fee Amount</th>
@@ -288,9 +317,12 @@ export function EventPayablesQRControl({
           </thead>
           <tbody className="divide-y divide-[#E0E0E0]">
             {filteredPayables.map((payable) => {
-              const isPaid = payable.status === 'paid' || payable.status === 'waived';
+              const isPaid = payable.status === 'paid';
+              const isWaived = payable.status === 'waived';
+              const isRefundPending = payable.status === 'refund_pending';
+              const isRefunded = payable.status === 'refunded';
               const isPartial = payable.status === 'partial';
-              const isUnlocked = !!payable.qrTicketUnlocked;
+              const isUnlocked = !isCancelled && !!payable.qrTicketUnlocked;
 
               return (
                 <tr key={payable.id} className="hover:bg-gray-50/80 transition-colors">
@@ -313,6 +345,12 @@ export function EventPayablesQRControl({
                           ? 'bg-emerald-100 text-emerald-800'
                           : isPartial
                           ? 'bg-amber-100 text-amber-800'
+                          : isWaived
+                          ? 'bg-gray-100 text-gray-700'
+                          : isRefundPending
+                          ? 'bg-amber-50 text-amber-800 border border-amber-300'
+                          : isRefunded
+                          ? 'bg-purple-100 text-purple-800'
                           : 'bg-red-100 text-red-700'
                       }`}
                     >
@@ -320,11 +358,19 @@ export function EventPayablesQRControl({
                     </span>
                   </td>
                   <td className="px-5 py-3.5">
-                    {canManagePayments ? (
+                    {isCancelled ? (
+                      <span
+                        className="px-2.5 py-1 rounded-lg text-[11px] font-bold inline-flex items-center gap-1.5 bg-gray-100 text-gray-500 border border-gray-200"
+                        title="Gate pass revoked due to event cancellation"
+                      >
+                        <Lock className="w-3.5 h-3.5 text-gray-400" />
+                        <span>Revoked</span>
+                      </span>
+                    ) : canManagePayments ? (
                       <button
                         onClick={() => handleToggleQR(payable.id, isUnlocked)}
                         disabled={togglingId === payable.id}
-                        className={`px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition-all ${
+                        className={`px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
                           isUnlocked
                             ? 'bg-emerald-50 text-emerald-700 border border-emerald-300 hover:bg-emerald-100'
                             : 'bg-amber-50 text-amber-800 border border-amber-300 hover:bg-amber-100'
@@ -368,10 +414,48 @@ export function EventPayablesQRControl({
                     )}
                   </td>
                   <td className="px-5 py-3.5 text-right">
-                    {canManagePayments ? (
+                    {isCancelled ? (
+                      isWaived ? (
+                        <span className="px-2.5 py-1 bg-gray-100 text-gray-600 rounded-lg text-[11px] font-semibold inline-flex items-center gap-1">
+                          <XCircle className="w-3 h-3 text-gray-400" /> Waived
+                        </span>
+                      ) : isRefundPending ? (
+                        <span className="px-2.5 py-1 bg-amber-50 text-amber-800 border border-amber-200 rounded-lg text-[11px] font-semibold inline-flex items-center gap-1">
+                          <Clock className="w-3 h-3 text-amber-600" /> Refund Pending
+                        </span>
+                      ) : isRefunded ? (
+                        <span className="px-2.5 py-1 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg text-[11px] font-semibold inline-flex items-center gap-1">
+                          <RotateCcw className="w-3 h-3 text-purple-600" /> Refunded
+                        </span>
+                      ) : isPaid ? (
+                        <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-[11px] font-semibold inline-flex items-center gap-1">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Paid
+                        </span>
+                      ) : (
+                        <span className="px-2.5 py-1 bg-red-50 text-red-700 border border-red-200 rounded-lg text-[11px] font-semibold inline-flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3 text-red-600" /> Cancelled
+                        </span>
+                      )
+                    ) : isPaid ? (
+                      <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-[11px] font-semibold inline-flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Settled
+                      </span>
+                    ) : isWaived ? (
+                      <span className="px-2.5 py-1 bg-gray-100 text-gray-500 rounded-lg text-[11px] font-semibold inline-block">
+                        Waived
+                      </span>
+                    ) : isRefundPending ? (
+                      <span className="px-2.5 py-1 bg-amber-50 text-amber-800 border border-amber-200 rounded-lg text-[11px] font-semibold inline-block">
+                        Refund Pending
+                      </span>
+                    ) : isRefunded ? (
+                      <span className="px-2.5 py-1 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg text-[11px] font-semibold inline-block">
+                        Refunded
+                      </span>
+                    ) : canManagePayments ? (
                       <button
                         onClick={() => setSelectedPayable(payable)}
-                        className="px-3 py-1.5 bg-[#001A4D] hover:bg-[#001A4D]/90 text-white rounded-lg font-bold text-[11px] transition-colors shadow-sm inline-flex items-center gap-1"
+                        className="px-3 py-1.5 bg-[#001A4D] hover:bg-[#001A4D]/90 text-white rounded-lg font-bold text-[11px] transition-colors shadow-sm inline-flex items-center gap-1 cursor-pointer"
                       >
                         <Coins className="w-3.5 h-3.5 text-[#FFC107]" />
                         Record Payment
@@ -403,14 +487,16 @@ export function EventPayablesQRControl({
       <div className="p-4 bg-gray-50 border-t border-[#E0E0E0] flex items-center justify-between text-xs text-gray-500">
         <span>Showing {filteredPayables.length} of {payables.length} student records</span>
         <span className="text-[11px] text-gray-400">
-          {canManagePayments
+          {isCancelled
+            ? 'Event is cancelled: Cash payment recording and QR ticket unlocking are disabled.'
+            : canManagePayments
             ? 'Advisers & Officers have permission to record cash payments and manage QR ticket gate access'
             : 'Payment collections and QR ticket unlocking for club events are managed by student officers.'}
         </span>
       </div>
 
       {/* Record Payment Modal */}
-      {selectedPayable && canManagePayments && (
+      {selectedPayable && canManagePayments && !isCancelled && (
         <AdminRecordPaymentModal
           payable={selectedPayable}
           onClose={() => setSelectedPayable(null)}

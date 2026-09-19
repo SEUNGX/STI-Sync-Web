@@ -131,7 +131,7 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
 
   const navItems = NAV_SECTIONS.filter(s => {
     if (s.id === 'payables') {
-      return isApproved && event.studentPayablesEnabled !== false;
+      return (isApproved || isCancelled) && event.studentPayablesEnabled !== false;
     }
     return true;
   });
@@ -882,14 +882,21 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
             </div>
           </section>
 
-          {/* SECTION 7 — PAYABLES & QR ACCESS CONTROL (For Approved Events) */}
-          {isApproved && (
+          {/* SECTION 7 — PAYABLES & QR ACCESS CONTROL (For Approved/Cancelled Events) */}
+          {(isApproved || isCancelled) && (
             <section
               ref={el => { sectionRefs.current['payables'] = el; }}
               onMouseEnter={() => { setActiveSection('payables'); setVisitedSections(p => new Set([...p, 'payables'])); }}
               className="space-y-4"
             >
-              <SectionHeader title="7. Event Payables & QR Ticket Access Control" subtitle="Participant fees, collection status, and gate pass lock controls" />
+              <SectionHeader
+                title="7. Event Payables & QR Ticket Access Control"
+                subtitle={
+                  isCancelled
+                    ? "Event cancelled — Collections closed, fees auto-waived, and gate passes revoked"
+                    : "Participant fees, collection status, and gate pass lock controls"
+                }
+              />
               <div className="space-y-4">
                 <EventPayablesQRControl
                   eventId={event.id}
@@ -906,6 +913,7 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
                       event.hostingOrgId !== 'sao_admin')
                   }
                   hostingOrgName={orgName}
+                  isCancelled={isCancelled}
                 />
               </div>
             </section>

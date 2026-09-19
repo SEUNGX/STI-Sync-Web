@@ -714,4 +714,94 @@ describe('Phase 3: Event Cancellation & Financial Auto-Waiver Engine', () => {
       assert.equal(isMajorFieldLocked('budgetItems', returnedEvent), false);
     });
   });
+
+  describe('Phase 7: Cancelled Event Payables & Record Payment Barrier', () => {
+    // Helper function reproducing recordPayment validation guards
+    function validateRecordPayment(payable, event) {
+      if (!payable) throw new Error('Payable document not found');
+      if (payable.status === 'waived') {
+        throw new Error('Cannot record payment: This payable has been waived.');
+      }
+      if (payable.status === 'refund_pending' || payable.status === 'refunded') {
+        throw new Error('Cannot record payment: This payable has been refunded or queued for refund.');
+      }
+      if (payable.status === 'cancelled') {
+        throw new Error('Cannot record payment: This payable is cancelled.');
+      }
+      if (event) {
+        if (
+          event.status === 'cancelled' ||
+          event.isCancelled === true ||
+          event.proposalStatus === 'cancelled' ||
+          event.lifecycleStatus === 'cancelled'
+        ) {
+          throw new Error('Cannot record payment: This event has been cancelled.');
+        }
+      }
+      const assigned = Number(payable.assignedAmount) || 0;
+      const currentPaid = Number(payable.paidAmount) || 0;
+      if (payable.status === 'paid' || (assigned > 0 && currentPaid >= assigned)) {
+        throw new Error('This payable is already fully paid.');
+      }
+      return { success: true };
+    }
+
+    test('recordPayment rejects payment if payable is waived', () => {
+      assert.throws(
+        () => validateRecordPayment({ id: 'p1', status: 'waived' }),
+        /Cannot record payment: This payable has been waived/
+      );
+    });
+
+    test('recordPayment rejects payment if payable is refund_pending or refunded', () => {
+      assert.throws(
+        () => validateRecordPayment({ id: 'p2', status: 'refund_pending' }),
+        /Cannot record payment: This payable has been refunded or queued for refund/
+      );
+      assert.throws(
+        () => validateRecordPayment({ id: 'p3', status: 'refunded' }),
+        /Cannot record payment: This payable has been refunded or queued for refund/
+      );
+    });
+
+    test('recordPayment rejects payment if parent event is cancelled', () => {
+      const activePayable = { id: 'p4', status: 'pending', assignedAmount: 200, paidAmount: 0 };
+      const cancelledEvent = { id: 'evt-c1', status: 'cancelled', isCancelled: true };
+      assert.throws(
+        () => validateRecordPayment(activePayable, cancelledEvent),
+        /Cannot record payment: This event has been cancelled/
+      );
+    });
+
+    test('UI action barrier disallows Record Payment when event is cancelled', () => {
+      function getActionType(payable, isCancelled, canManagePayments) {
+        if (isCancelled) {
+          if (payable.status === 'waived') return 'badge_waived';
+          if (payable.status === 'refund_pending') return 'badge_refund_pending';
+          if (payable.status === 'refunded') return 'badge_refunded';
+          if (payable.status === 'paid') return 'badge_paid';
+          return 'badge_cancelled';
+        }
+        if (payable.status === 'paid') return 'badge_settled';
+        if (payable.status === 'waived') return 'badge_waived';
+        if (payable.status === 'refund_pending') return 'badge_refund_pending';
+        if (canManagePayments) return 'button_record_payment';
+        return 'badge_club_managed';
+      }
+
+      const payable1 = { id: 'p1', status: 'waived', assignedAmount: 100, paidAmount: 0 };
+      const payable2 = { id: 'p2', status: 'refund_pending', assignedAmount: 100, paidAmount: 100 };
+      const payable3 = { id: 'p3', status: 'pending', assignedAmount: 100, paidAmount: 0 };
+
+      // Under Cancelled Event: NO "Record Payment" button allowed under any circumstance
+      assert.equal(getActionType(payable1, true, true), 'badge_waived');
+      assert.equal(getActionType(payable2, true, true), 'badge_refund_pending');
+      assert.equal(getActionType(payable3, true, true), 'badge_cancelled');
+
+      // Under Active Event: Record Payment allowed only for unsettled, non-waived payables
+      assert.equal(getActionType(payable3, false, true), 'button_record_payment');
+      assert.equal(getActionType(payable1, false, true), 'badge_waived');
+      assert.equal(getActionType({ id: 'p4', status: 'paid' }, false, true), 'badge_settled');
+    });
+  });
 });

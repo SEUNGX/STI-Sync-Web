@@ -408,6 +408,11 @@ function EventDetail({
             setIsAssessFinesModalOpen(true);
           }}
           isEventCompleted={event.status === 'Completed'}
+          isEventCancelled={
+            event.status === 'Cancelled' ||
+            event.status === 'cancelled' ||
+            (event as any).isCancelled === true
+          }
         />
       )}
 
