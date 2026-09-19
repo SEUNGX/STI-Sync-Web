@@ -38,8 +38,7 @@ export function Certificates() {
       {/* Page Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-[#001A4D] font-bold text-2xl">{screenTitles[screen]}</h1>
-          <nav className="flex items-center gap-1.5 mt-1">
+          <nav className="flex items-center gap-1.5">
             {breadcrumbs[screen].map((crumb, i, arr) => (
               <span key={crumb} className="flex items-center gap-1.5">
                 <button

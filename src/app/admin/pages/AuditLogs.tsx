@@ -108,8 +108,7 @@ export function AuditLogs() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-[#001A4D]">Audit Logs</h2>
-          <p className="text-gray-500 text-sm">Monitor all system activities and administrative actions</p>
+          <p className="text-gray-500 text-sm font-medium">Monitor all system activities and administrative actions</p>
         </div>
         <Button onClick={handleExportCSV} variant="outline" className="border-[#0E4EBD] text-[#0E4EBD] cursor-pointer">
           <Download className="w-4 h-4 mr-2" />

@@ -10,6 +10,7 @@ import {
   query,
   where,
   writeBatch,
+  runTransaction,
   serverTimestamp,
   Timestamp,
 } from 'firebase/firestore';
@@ -24,6 +25,7 @@ import type {
   GenerateEventFinesPayload,
   SessionFineRule,
   FineViolationDetail,
+  ProcessRefundPayload,
 } from '../types/payable.types';
 
 export const PAYABLES_COLLECTION = 'payables';
@@ -1281,7 +1283,11 @@ export async function transferCollectionGroupToLedger(params: {
       .filter((d) => d.exists())
       .filter((d) => {
         const data = d.data()!;
-        const isPaidStatus = String(data.status || '').toLowerCase() === 'paid';
+        const st = String(data.status || '').toLowerCase();
+        if (st === 'refund_pending' || st === 'refunded' || st === 'waived' || st === 'cancelled') {
+          return false;
+        }
+        const isPaidStatus = st === 'paid';
         const hasPaid = (Number(data.paidAmount) || 0) > 0;
         const assignedAmt = Number(data.assignedAmount) || 0;
         const effectivePaid = hasPaid ? Number(data.paidAmount) : (isPaidStatus ? assignedAmt : 0);
@@ -1320,7 +1326,11 @@ export async function transferCollectionGroupToLedger(params: {
     const snap = await getDocs(qDocs);
     eligibleDocs = snap.docs.filter((d) => {
       const data = d.data();
-      const isPaidStatus = String(data.status || '').toLowerCase() === 'paid';
+      const st = String(data.status || '').toLowerCase();
+      if (st === 'refund_pending' || st === 'refunded' || st === 'waived' || st === 'cancelled') {
+        return false;
+      }
+      const isPaidStatus = st === 'paid';
       const hasPaid = (Number(data.paidAmount) || 0) > 0;
       const assignedAmt = Number(data.assignedAmount) || 0;
       const effectivePaid = hasPaid ? Number(data.paidAmount) : (isPaidStatus ? assignedAmt : 0);
@@ -1339,7 +1349,11 @@ export async function transferCollectionGroupToLedger(params: {
       const singleSnap = await getDoc(singleDocRef);
       if (singleSnap.exists()) {
         const sData = singleSnap.data();
-        const isPaidStatus = String(sData.status || '').toLowerCase() === 'paid';
+        const st = String(sData.status || '').toLowerCase();
+        if (st === 'refund_pending' || st === 'refunded' || st === 'waived' || st === 'cancelled') {
+          return { transferredCount: 0, transferredAmount: 0 };
+        }
+        const isPaidStatus = st === 'paid';
         const hasPaid = (Number(sData.paidAmount) || 0) > 0;
         const assignedAmt = Number(sData.assignedAmount) || 0;
         const effectivePaid = hasPaid ? Number(sData.paidAmount) : (isPaidStatus ? assignedAmt : 0);
@@ -1438,4 +1452,171 @@ export async function transferCollectionGroupToLedger(params: {
     transferredCount: eligibleDocs.length,
     transferredAmount: totalTransferDelta,
   };
+}
+
+export interface ProcessPayableRefundParams extends ProcessRefundPayload {
+  actorRole?: 'admin' | 'officer';
+  actorOrgId?: string | null;
+}
+
+/**
+ * Atomically processes a student refund for a payable.
+ * - Enforces zero ghost money by debiting ledger if funds were previously transferred to treasury.
+ * - Prevents double-refunding and validates non-zero refundable balance.
+ * - Strictly enforces officer vs admin organization boundaries.
+ */
+export async function processPayableRefund(params: ProcessPayableRefundParams): Promise<{
+  payableId: string;
+  studentName: string;
+  refundedAmount: number;
+  ledgerAdjusted: boolean;
+}> {
+  const {
+    payableId,
+    refundedAmount,
+    refundedBy,
+    refundedByName,
+    refundMethod = 'cash',
+    receiptNumber,
+    refundNotes,
+    actorRole,
+    actorOrgId,
+  } = params;
+
+  if (!payableId) {
+    throw new Error('Payable ID is required for refund processing.');
+  }
+
+  const payableRef = doc(db, PAYABLES_COLLECTION, payableId);
+
+  return await runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(payableRef);
+    if (!snap.exists()) {
+      throw new Error(`Payable with ID "${payableId}" does not exist.`);
+    }
+
+    const data = snap.data() as PayableDocument;
+
+    // 1. Guard against double-refunding
+    if (data.status === 'refunded') {
+      throw new Error(`This payable for ${data.studentName || 'student'} has already been refunded.`);
+    }
+
+    // 2. Strict Role & Ownership boundary
+    if (actorRole === 'officer') {
+      if (data.organizationId && actorOrgId && data.organizationId !== actorOrgId) {
+        throw new Error('Unauthorized: You can only process refunds for events hosted by your own organization.');
+      }
+    }
+
+    // 3. Amount verification (no ghost money)
+    const paidAmt = Number(data.paidAmount || 0);
+    const refundDue = typeof data.refundDue === 'number' ? data.refundDue : paidAmt;
+    const maxRefundable = Math.max(0, Math.min(paidAmt > 0 ? paidAmt : refundDue, refundDue > 0 ? refundDue : paidAmt));
+
+    if (maxRefundable <= 0) {
+      throw new Error('This payable has no refundable balance (paid amount is 0).');
+    }
+
+    const requestedRefund = Number(refundedAmount);
+    if (isNaN(requestedRefund) || requestedRefund <= 0) {
+      throw new Error('Please enter a valid positive refund amount.');
+    }
+
+    if (requestedRefund > maxRefundable) {
+      throw new Error(`Refund amount (₱${requestedRefund.toFixed(2)}) cannot exceed refundable balance (₱${maxRefundable.toFixed(2)}).`);
+    }
+
+    const now = Timestamp.now();
+    const actorName = refundedByName || (actorRole === 'admin' ? 'SAO Admin' : 'Student Officer');
+
+    // 4. Zero ghost money: If this payable was already transferred to the ledger, record an offsetting expense
+    const transferredAmt = Number(data.transferredAmount || 0);
+    const wasTransferred = data.transferredToBudget === true || transferredAmt > 0;
+    const ledgerDebit = Math.min(transferredAmt, requestedRefund);
+
+    if (wasTransferred && ledgerDebit > 0) {
+      if (data.organizationId) {
+        const orgLedgerRef = doc(collection(db, 'organization_ledger'));
+        transaction.set(orgLedgerRef, {
+          organizationId: data.organizationId,
+          semesterId: data.semesterId || null,
+          date: now,
+          description: `Student Refund – ${data.label || 'Event Fee'} (${data.studentName || data.studentSchoolId})`,
+          eventId: data.eventId || null,
+          type: 'expense' as const,
+          source: 'student_refund' as const,
+          amount: ledgerDebit,
+          addedBy: actorName,
+          payableId: data.id,
+          receiptNumber: receiptNumber || null,
+          notes: refundNotes || `Event cancellation refund disbursed via ${refundMethod}`,
+          createdAt: serverTimestamp(),
+        });
+      } else {
+        const saoLedgerRef = doc(collection(db, 'sao_ledger'));
+        transaction.set(saoLedgerRef, {
+          semesterId: data.semesterId || null,
+          date: now,
+          description: `Student Refund – ${data.label || 'Event Fee'} (${data.studentName || data.studentSchoolId})`,
+          eventId: data.eventId || null,
+          type: 'expense' as const,
+          source: 'student_refund' as const,
+          amount: ledgerDebit,
+          addedBy: actorName,
+          payableId: data.id,
+          receiptNumber: receiptNumber || null,
+          notes: refundNotes || `Event cancellation refund disbursed via ${refundMethod}`,
+          createdAt: serverTimestamp(),
+        });
+      }
+    }
+
+    // 5. Update payable document
+    const newTransferredAmount = Math.max(0, transferredAmt - ledgerDebit);
+    transaction.update(payableRef, {
+      status: 'refunded' as PayableStatus,
+      refundedAmount: requestedRefund,
+      refundedAt: now,
+      refundedBy,
+      refundedByName: actorName,
+      refundMethod,
+      refundNotes: refundNotes || null,
+      receiptNumber: receiptNumber || null,
+      transferredAmount: newTransferredAmount,
+      transferredToBudget: newTransferredAmount > 0,
+      qrTicketUnlocked: false,
+      updatedAt: serverTimestamp(),
+    });
+
+    // 6. Audit log entry
+    const auditRef = doc(collection(db, 'audit_logs'));
+    transaction.set(auditRef, {
+      action: 'PROCESS_STUDENT_REFUND',
+      entity: 'payable',
+      entityId: data.id,
+      details: `Processed refund of ₱${requestedRefund.toFixed(2)} to ${data.studentName || data.studentSchoolId} via ${refundMethod}. By ${actorName}.`,
+      actorId: refundedBy,
+      actorName,
+      actorRole: actorRole || 'user',
+      metadata: {
+        payableId: data.id,
+        eventId: data.eventId,
+        organizationId: data.organizationId,
+        studentSchoolId: data.studentSchoolId,
+        refundedAmount: requestedRefund,
+        refundMethod,
+        receiptNumber: receiptNumber || null,
+        ledgerAdjusted: wasTransferred && ledgerDebit > 0,
+      },
+      timestamp: now,
+    });
+
+    return {
+      payableId: data.id,
+      studentName: data.studentName || data.studentSchoolId,
+      refundedAmount: requestedRefund,
+      ledgerAdjusted: wasTransferred && ledgerDebit > 0,
+    };
+  });
 }

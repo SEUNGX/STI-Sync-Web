@@ -704,11 +704,7 @@ export function AttendanceMonitoring() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <div className="flex items-center gap-3">
-          <h2 className="text-2xl font-bold text-[#001A4D]">Attendance Monitoring</h2>
-          {loading && <Loader2 className="w-4 h-4 animate-spin text-[#0E4EBD]" />}
-        </div>
-        <p className="text-gray-500 text-sm">Track and monitor event attendance across campus with section and department filters.</p>
+        <p className="text-gray-500 text-sm font-medium">Track and monitor event attendance across campus with section and department filters.</p>
       </div>
 
       {/* Summary Metrics */}

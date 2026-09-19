@@ -219,9 +219,8 @@ export default function FinancialLiquidation() {
       {/* ── Header ── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <div className="text-gray-500 text-xs mb-1">Dashboard &gt; Financial Liquidation</div>
-          <h1 className="text-2xl font-bold text-[#001A4D] tracking-tight">Financial Liquidation Portal</h1>
-          <p className="text-gray-500 text-sm mt-0.5">
+          <div className="text-gray-500 text-xs font-medium">Dashboard &gt; Financial Liquidation</div>
+          <p className="text-gray-500 text-sm mt-0.5 font-medium">
             Submit actual spendings, receipt evidence, and track financial variance against approved event budgets
           </p>
         </div>

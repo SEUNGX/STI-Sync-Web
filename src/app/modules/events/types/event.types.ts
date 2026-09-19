@@ -10,7 +10,8 @@ export interface EventDocument {
   objectives: string[];
   bannerImageUrl: string | null;
   isVisible: boolean;
-  visibilityStart: string | null; // ISO string for form, converted to Timestamp in service
+  visibleToStudents?: boolean;
+  visibilityStart: string | Timestamp | null; // ISO string for form, converted to Timestamp in service
 
   // ─── Classification ───
   eventTypeId: string;                     // FK → /event_types
@@ -76,10 +77,29 @@ export interface EventDocument {
   scannerActivationCode: string;           // auto-generated 6-digit code
 
   // ─── Lifecycle ───
-  proposalStatus: 'draft' | 'pending_review' | 'approved' | 'rejected' | 'returned';
-  createdBy: string;                       // SAO Adviser UID
+  proposalStatus: 'draft' | 'pending_review' | 'pending' | 'approved' | 'rejected' | 'returned' | 'cancelled';
+  createdBy: string;                       // SAO Adviser UID or Officer UID
   createdAt: Timestamp;
   updatedAt: Timestamp;
+
+  // ─── Soft Deletion & Archiving ───
+  isDeleted?: boolean;                     // true = soft-deleted (hidden from standard lists)
+  deletedAt?: Timestamp | null;
+  deletedBy?: string | null;
+  deletedByName?: string | null;
+  deleteReason?: string | null;
+  isArchived?: boolean;                    // true = sealed by semester / AY rollover
+  archivedAt?: Timestamp | null;
+  archivedBy?: string | null;
+
+  // ─── Cancellation & Financial Waiver Metadata ───
+  cancelledAt?: Timestamp | null;
+  cancelledBy?: string | null;
+  cancelledByName?: string | null;
+  cancelledByRole?: 'admin' | 'officer' | null;
+  cancellationReason?: string | null;
+  cancellationRefundPolicy?: 'refund_cash' | 'credit_next_event' | 'no_fees_collected' | null;
+  refundStatus?: 'none' | 'pending' | 'processing' | 'completed' | null;
 
   // ─── Review & Version Metadata ───
   approvedBy?: string | null;
@@ -100,9 +120,28 @@ export interface EventDocument {
   versionHistory?: EventVersionSnapshot[];
 }
 
+export interface EventCancellationPayload {
+  eventId: string;
+  cancelledBy: string;
+  cancelledByName?: string;
+  cancelledByRole: 'admin' | 'officer';
+  cancellationReason: string;
+  refundPolicy: 'refund_cash' | 'credit_next_event' | 'no_fees_collected';
+  notifyAttendees?: boolean;
+}
+
+export interface EventCancellationResult {
+  eventId: string;
+  waivedPayablesCount: number;
+  refundPendingPayablesCount: number;
+  voidedLiquidationsCount: number;
+  qrTicketsRevoked: boolean;
+  cancelledAt: string;
+}
+
 export interface EventProposalHistoryLog {
   id: string;
-  action: 'created' | 'submitted' | 'approved' | 'returned' | 'rejected' | 'resubmitted' | 'edited' | 'draft_saved';
+  action: 'created' | 'submitted' | 'approved' | 'returned' | 'rejected' | 'resubmitted' | 'edited' | 'draft_saved' | 'cancelled' | 'archived' | 'restored';
   performedBy: string;
   performedByName?: string;
   performedAt: Timestamp | Date | any;

@@ -19,11 +19,21 @@ import DocumentManagementSettings from '../components/settings/DocumentManagemen
 import DataManagement from '../components/settings/DataManagement';
 import AuditVisibility from '../components/settings/AuditVisibility';
 import ArchiveCenter from '../components/settings/ArchiveCenter';
+import { useSearchParams } from 'react-router';
 
 export function SystemSettings() {
-  const [activeSection, setActiveSection] = useState('adviser-profile');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialSection = searchParams.get('section') || 'adviser-profile';
+  const [activeSection, setActiveSection] = useState(initialSection);
   const [searchQuery, setSearchQuery] = useState('');
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
+  useEffect(() => {
+    const sec = searchParams.get('section');
+    if (sec && sec !== activeSection) {
+      setActiveSection(sec);
+    }
+  }, [searchParams]);
 
   const handleUnsavedChange = () => {
     setHasUnsavedChanges(true);
@@ -36,6 +46,7 @@ export function SystemSettings() {
       setHasUnsavedChanges(false);
     }
     setActiveSection(section);
+    setSearchParams({ section });
   };
 
   const renderSection = () => {

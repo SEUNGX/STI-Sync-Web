@@ -6,5 +6,8 @@ export * from './hooks/useEventConfigMutations';
 export * from './hooks/useEventCreation';
 export * from './hooks/useEventStream';
 export * from './utils/event-validation';
+export * from './utils/event-lifecycle.utils';
 export { default as OfficerEventDetailView } from './components/OfficerEventDetailView';
+export { default as CancelEventModal } from './components/CancelEventModal';
+export * from './components/CancelEventModal';
 

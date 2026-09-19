@@ -66,7 +66,14 @@ export default function OfficerLiquidationModal({
   const eligibleEvents = useMemo(() => {
     if (allEvents.length === 0) return [];
 
-    const nonDrafts = allEvents.filter((e: any) => (e.proposalStatus || '').toString().toLowerCase() !== 'draft');
+    const nonDrafts = allEvents.filter((e: any) => {
+      const pStatus = (e.proposalStatus || '').toString().toLowerCase();
+      const eStatus = (e.status || '').toString().toLowerCase();
+      const lStatus = (e.lifecycleStatus || '').toString().toLowerCase();
+      const isCancelled = e.isCancelled === true || pStatus === 'cancelled' || eStatus === 'cancelled' || lStatus === 'cancelled';
+      const isDraft = pStatus === 'draft';
+      return !isDraft && !isCancelled;
+    });
 
     if (userRole === 'admin') {
       return nonDrafts.filter((e: any) => {

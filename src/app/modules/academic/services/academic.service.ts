@@ -331,8 +331,9 @@ export async function executeSemesterRollover(
   targetSemester: SemesterDocument,
   options?: { academicLevel?: AcademicLevel; carryBudget?: boolean; autoInactivate?: boolean; flagOfficers?: boolean; resetCompliance?: boolean },
   adminUid?: string
-): Promise<{ success: boolean; closingLabel: string; targetLabel: string }> {
-  const batch = (await import('firebase/firestore')).writeBatch(db);
+): Promise<{ success: boolean; closingLabel: string; targetLabel: string; eventsArchivedCount: number }> {
+  const { writeBatch, collection: firestoreCollection, query: firestoreQuery, where: firestoreWhere, getDocs: firestoreGetDocs } = await import('firebase/firestore');
+  const batch = writeBatch(db);
 
   const academicLevel = options?.academicLevel || closingSemester.academicLevel || (String(closingSemester.semester).includes('Trimester') ? 'SHS' : 'COLLEGE');
 
@@ -350,7 +351,41 @@ export async function executeSemesterRollover(
     updatedAt: Timestamp.now(),
   });
 
-  // 3. Write Audit Log
+  // 3. Automatically archive completed events for closing semester (Phase 5 Task 5.1)
+  let eventsArchivedCount = 0;
+  try {
+    const eventsCol = firestoreCollection(db, 'events');
+    const [eventsBySemSnap, eventsByYearSnap] = await Promise.all([
+      firestoreGetDocs(firestoreQuery(eventsCol, firestoreWhere('semesterId', '==', closingSemester.id))),
+      closingSemester.academicYear
+        ? firestoreGetDocs(firestoreQuery(eventsCol, firestoreWhere('schoolYear', '==', closingSemester.academicYear)))
+        : Promise.resolve({ docs: [] } as any),
+    ]);
+
+    const seenEventDocIds = new Set<string>();
+    const allCandidateDocs = [...eventsBySemSnap.docs, ...eventsByYearSnap.docs];
+
+    for (const dSnap of allCandidateDocs) {
+      if (!seenEventDocIds.has(dSnap.id)) {
+        seenEventDocIds.add(dSnap.id);
+        const eData = dSnap.data();
+        const isCompleted = eData.status === 'completed' || eData.proposalStatus === 'completed';
+        if (isCompleted && !eData.isArchived) {
+          batch.update(dSnap.ref, {
+            isArchived: true,
+            archivedAt: Timestamp.now(),
+            archivedReason: `Semester Rollover: ${closingSemester.label}`,
+            updatedAt: Timestamp.now(),
+          });
+          eventsArchivedCount++;
+        }
+      }
+    }
+  } catch (eventErr) {
+    console.warn('[executeSemesterRollover] Failed to query events for rollover archiving:', eventErr);
+  }
+
+  // 4. Write Audit Log
   const auditRef = doc(collection(db, 'audit_logs'));
   batch.set(auditRef, {
     id: auditRef.id,
@@ -361,6 +396,7 @@ export async function executeSemesterRollover(
     closingSemesterLabel: closingSemester.label,
     targetSemesterId: targetSemester.id,
     targetSemesterLabel: targetSemester.label,
+    eventsArchivedCount,
     options: options || {},
     timestamp: Timestamp.now(),
     createdAt: Timestamp.now(),
@@ -372,6 +408,7 @@ export async function executeSemesterRollover(
     success: true,
     closingLabel: closingSemester.label,
     targetLabel: targetSemester.label,
+    eventsArchivedCount,
   };
 }
 

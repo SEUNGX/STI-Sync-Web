@@ -10,6 +10,7 @@ import {
   validateStep4,
   validateStep5,
   validateStep6,
+  formatVisibilityString,
 } from '../../utils/event-validation';
 import { formatCurrency } from '../../../../utils/currency';
 
@@ -115,7 +116,15 @@ export default function Step7Publish({ data, onUpdate, onPublish, isPublishing, 
                   </div>
                   <div>
                     <span className="text-gray-600">Visibility:</span>
-                    <span className="ml-2 px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium">Will be published</span>
+                    {data.isVisible !== false ? (
+                      <span className="ml-2 px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium">
+                        Visible in Feed {data.visibilityStart ? `(from ${formatVisibilityString(data.visibilityStart)})` : ''}
+                      </span>
+                    ) : (
+                      <span className="ml-2 px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs font-medium">
+                        Hidden from Student Feed
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>

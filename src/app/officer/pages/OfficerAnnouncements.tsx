@@ -90,8 +90,7 @@ export default function OfficerAnnouncements() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <div className="text-[#888780] text-[13px] mb-1">Dashboard &gt; Announcements</div>
-          <h1 className="text-[#001A4D] text-[24px] font-bold">Announcements</h1>
+          <div className="text-[#888780] text-[13px] font-medium">Dashboard &gt; Announcements</div>
           <p className="text-gray-500 text-xs mt-0.5">
             Broadcast updates to your members and view campus announcements from SAO
           </p>

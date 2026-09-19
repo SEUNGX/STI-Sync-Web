@@ -10,7 +10,8 @@ import {
   Filter,
   RotateCcw,
   Clock,
-  Download
+  Download,
+  XCircle
 } from 'lucide-react';
 import OfficerEventProposalModal from '../components/OfficerEventProposalModal';
 import { useOfficerProfile } from '../../auth/hooks/useOfficerProfile';
@@ -20,14 +21,15 @@ import {
   useEventCategoriesStream,
   useVenuesStream,
 } from '../../modules/events/hooks/useEventConfigStream';
-import { deleteEvent } from '../../modules/events/services/event.service';
+import { deleteEvent, withdrawProposal } from '../../modules/events/services/event.service';
+import { canWithdrawProposal, canCancelEvent, isEventEditable, getEventTimingStatus } from '../../modules/events/utils/event-lifecycle.utils';
 import type { EventDocument } from '../../modules/events/types/event.types';
-import { OfficerEventDetailView } from '../../modules/events';
+import { OfficerEventDetailView, CancelEventModal } from '../../modules/events';
 import { formatCurrency } from '../../utils/currency';
 import { toast } from 'sonner';
 import { TablePagination } from '../../components/common/TablePagination';
 
-type EventStatusTab = 'all' | 'draft' | 'pending' | 'approved' | 'completed' | 'rejected' | 'returned';
+type EventStatusTab = 'all' | 'draft' | 'pending' | 'approved' | 'completed' | 'rejected' | 'returned' | 'cancelled';
 const ITEMS_PER_PAGE = 8;
 
 function parseDateSafe(input: any): Date | null {
@@ -88,6 +90,8 @@ export default function EventManagement() {
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [editingEvent, setEditingEvent] = useState<EventDocument | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [withdrawingId, setWithdrawingId] = useState<string | null>(null);
+  const [cancellingEvent, setCancellingEvent] = useState<EventDocument | null>(null);
 
   const { profile } = useOfficerProfile();
   const { data: orgs } = useOrganizationStream();
@@ -113,14 +117,32 @@ export default function EventManagement() {
     return map;
   }, [venues]);
 
+  const isEventCompleted = (e: EventDocument) => {
+    if (e.proposalStatus === 'completed' || e.status === 'completed' || (e as any).lifecycleStatus === 'completed') {
+      return true;
+    }
+    if (e.proposalStatus === 'approved' || e.status === 'approved') {
+      return getEventTimingStatus(e) === 'completed';
+    }
+    return false;
+  };
+
+  const isEventApprovedUpcoming = (e: EventDocument) => {
+    if (e.proposalStatus === 'approved' || e.status === 'approved') {
+      return getEventTimingStatus(e) !== 'completed';
+    }
+    return false;
+  };
+
   const statusCounts = {
     all: events.length,
     draft: events.filter((e) => e.proposalStatus === 'draft').length,
     pending: events.filter((e) => e.proposalStatus === 'pending' || e.proposalStatus === 'pending_review').length,
-    approved: events.filter((e) => e.proposalStatus === 'approved').length,
-    completed: events.filter((e) => e.proposalStatus === 'completed').length,
+    approved: events.filter((e) => isEventApprovedUpcoming(e)).length,
+    completed: events.filter((e) => isEventCompleted(e)).length,
     rejected: events.filter((e) => e.proposalStatus === 'rejected').length,
     returned: events.filter((e) => e.proposalStatus === 'returned').length,
+    cancelled: events.filter((e) => e.proposalStatus === 'cancelled' || e.status === 'cancelled').length,
   };
 
   // Filtered & Sorted (LATEST FIRST by default)
@@ -132,10 +154,11 @@ export default function EventManagement() {
 
         if (activeStatus === 'draft') statusMatch = currentStatus === 'draft';
         else if (activeStatus === 'pending') statusMatch = currentStatus === 'pending' || currentStatus === 'pending_review';
-        else if (activeStatus === 'approved') statusMatch = currentStatus === 'approved';
-        else if (activeStatus === 'completed') statusMatch = currentStatus === 'completed';
+        else if (activeStatus === 'approved') statusMatch = isEventApprovedUpcoming(event);
+        else if (activeStatus === 'completed') statusMatch = isEventCompleted(event);
         else if (activeStatus === 'rejected') statusMatch = currentStatus === 'rejected';
         else if (activeStatus === 'returned') statusMatch = currentStatus === 'returned';
+        else if (activeStatus === 'cancelled') statusMatch = currentStatus === 'cancelled' || event.status === 'cancelled';
 
         const q = (searchQuery || '').toLowerCase().trim();
         const titleMatch = !q || (event.title || '').toLowerCase().includes(q);
@@ -181,6 +204,30 @@ export default function EventManagement() {
     }
   };
 
+  const handleWithdraw = async (event: EventDocument) => {
+    if (!profile) return;
+    const confirmWithdraw = window.confirm(
+      `Are you sure you want to withdraw "${event.title}"? The proposal will return to Draft status so you can make revisions before SAO reviews it.`
+    );
+    if (!confirmWithdraw) return;
+
+    setWithdrawingId(event.id);
+    try {
+      await withdrawProposal(event.id, profile.uid, profile.studentName);
+      toast.success('Proposal Withdrawn', {
+        description: `"${event.title}" has been returned to Draft status. Opening editor...`,
+      });
+      setEditingEvent({ ...event, proposalStatus: 'draft' });
+      setShowCreateModal(true);
+    } catch (err: any) {
+      toast.error('Failed to withdraw proposal', {
+        description: err.message || 'Please try again.',
+      });
+    } finally {
+      setWithdrawingId(null);
+    }
+  };
+
   const handleExportCSV = () => {
     if (filteredEvents.length === 0) {
       toast.info(`No ${activeStatus === 'all' ? '' : activeStatus + ' '}events to export.`);
@@ -213,7 +260,16 @@ export default function EventManagement() {
     toast.success(`Exported ${filteredEvents.length} ${activeStatus === 'all' ? '' : activeStatus + ' '}event(s) to CSV.`);
   };
 
-  const renderStatusBadge = (status?: string) => {
+  const renderStatusBadge = (status?: string, event?: EventDocument) => {
+    if (event && isEventCompleted(event)) {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200/80">
+          <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+          Completed
+        </span>
+      );
+    }
+
     switch (status) {
       case 'approved':
         return (
@@ -242,6 +298,16 @@ export default function EventManagement() {
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-200/80">
             <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
             Rejected
+          </span>
+        );
+      case 'cancelled':
+        return (
+          <span 
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200/80 cursor-help"
+            title={event?.cancellationReason ? `Cancelled: ${event.cancellationReason}` : 'Event Cancelled'}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+            Cancelled
           </span>
         );
       case 'completed':
@@ -323,6 +389,7 @@ export default function EventManagement() {
               { key: 'pending', label: 'Pending', count: statusCounts.pending },
               { key: 'approved', label: 'Approved', count: statusCounts.approved },
               { key: 'returned', label: 'Returned', count: statusCounts.returned },
+              { key: 'cancelled', label: 'Cancelled', count: statusCounts.cancelled },
               { key: 'completed', label: 'Completed', count: statusCounts.completed },
               { key: 'rejected', label: 'Rejected', count: statusCounts.rejected },
               { key: 'draft', label: 'Drafts', count: statusCounts.draft },
@@ -533,7 +600,7 @@ export default function EventManagement() {
 
                       {/* Status */}
                       <td className="py-3.5 px-4 whitespace-nowrap">
-                        {renderStatusBadge(event.proposalStatus)}
+                        {renderStatusBadge(event.proposalStatus, event)}
                       </td>
 
                       {/* Actions */}
@@ -548,25 +615,48 @@ export default function EventManagement() {
                             <span>View</span>
                           </button>
 
-                          {(isDraft || isReturned || (isRejected && event.allowResubmission !== false)) && (
+                          {canWithdrawProposal(event, 'officer').canWithdraw && (
+                            <button
+                              onClick={() => handleWithdraw(event)}
+                              disabled={withdrawingId === event.id}
+                              className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                              title="Withdraw Proposal to Draft"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                              <span>{withdrawingId === event.id ? '...' : 'Withdraw'}</span>
+                            </button>
+                          )}
+
+                          {canCancelEvent(event, 'officer', activeOrgId).canCancel && (
+                            <button
+                              onClick={() => setCancellingEvent(event)}
+                              className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer"
+                              title="Cancel Event Proposal"
+                            >
+                              <XCircle className="w-3.5 h-3.5" />
+                              <span>Cancel</span>
+                            </button>
+                          )}
+
+                          {isEventEditable(event, 'officer').editable && (
                             <button
                               onClick={() => {
                                 setEditingEvent(event);
                                 setShowCreateModal(true);
                               }}
                               className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-[#001A4D] border border-blue-200 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer"
-                              title="Edit Proposal"
+                              title={event.proposalStatus === 'approved' ? 'Edit Minor Event Details' : 'Edit Proposal'}
                             >
                               <Edit className="w-3.5 h-3.5" />
                               <span>Edit</span>
                             </button>
                           )}
 
-                          {!isApproved && (
+                          {(isDraft || isRejected) && (
                             <button
                               onClick={() => handleDelete(event.id)}
                               disabled={deletingId === event.id}
-                              className="p-1 hover:bg-red-50 text-red-600 rounded-lg transition-colors cursor-pointer"
+                              className="p-1 hover:bg-red-50 text-red-600 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
                               title="Delete Proposal"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -601,8 +691,20 @@ export default function EventManagement() {
             setShowCreateModal(false);
             setEditingEvent(null);
           }}
-          initialDraft={editingEvent || undefined}
+          initialDraft={editingEvent ?? undefined}
           draftId={editingEvent?.id}
+        />
+      )}
+
+      {/* Cancel Event Modal */}
+      {cancellingEvent && (
+        <CancelEventModal
+          isOpen={!!cancellingEvent}
+          onClose={() => setCancellingEvent(null)}
+          event={cancellingEvent}
+          userRole="officer"
+          userId={profile?.uid || 'officer-user'}
+          userName={profile?.studentName || 'Student Officer'}
         />
       )}
 
@@ -612,7 +714,8 @@ export default function EventManagement() {
           event={selectedEvent}
           onClose={() => setSelectedEventId(null)}
           onEdit={() => {
-            setEditingEvent(selectedEvent);
+            const isPending = selectedEvent.proposalStatus === 'pending' || selectedEvent.proposalStatus === 'pending_review';
+            setEditingEvent(isPending ? { ...selectedEvent, proposalStatus: 'draft' } : selectedEvent);
             setSelectedEventId(null);
             setShowCreateModal(true);
           }}

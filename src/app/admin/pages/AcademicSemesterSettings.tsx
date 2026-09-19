@@ -880,6 +880,7 @@ function RolloverModal({ existingSemesters, defaultAcademicLevel = "COLLEGE", on
   const [flagOfficers, setFlagOfficers] = useState(true);
   const [resetCompliance, setResetCompliance] = useState(true);
   const [execError, setExecError] = useState<string | null>(null);
+  const [rolloverResult, setRolloverResult] = useState<{ eventsArchivedCount?: number } | null>(null);
 
   const activeSemester = useMemo(
     () =>
@@ -931,6 +932,7 @@ function RolloverModal({ existingSemesters, defaultAcademicLevel = "COLLEGE", on
   const execSteps = [
     "Validating semester records and permissions...",
     `Closing active ${rolloverTrack === 'SHS' ? 'trimester' : 'semester'} (${activeSemester?.label || 'Current'})...`,
+    `Archiving completed events for ${activeSemester?.label || 'closing semester'}...`,
     `Activating target ${rolloverTrack === 'SHS' ? 'trimester' : 'semester'} (${targetSemester?.label || 'Next'})...`,
     `Flagging active ${rolloverTrack === 'SHS' ? 'SHS' : 'College'} students for re-enrollment in active registry...`,
     "Writing immutable audit trail log...",
@@ -950,14 +952,18 @@ function RolloverModal({ existingSemesters, defaultAcademicLevel = "COLLEGE", on
       await new Promise((r) => setTimeout(r, 600));
 
       setExecStep(3);
-      await executeSemesterRollover(
+      await new Promise((r) => setTimeout(r, 600));
+
+      setExecStep(4);
+      const res = await executeSemesterRollover(
         activeSemester,
         targetSemester,
         { academicLevel: rolloverTrack, carryBudget, autoInactivate, flagOfficers, resetCompliance },
         profile?.uid
       );
+      setRolloverResult(res);
 
-      setExecStep(4);
+      setExecStep(5);
       await new Promise((r) => setTimeout(r, 600));
 
       setDone(true);
@@ -987,9 +993,15 @@ function RolloverModal({ existingSemesters, defaultAcademicLevel = "COLLEGE", on
               <p className="text-gray-500 text-sm mb-1">
                 <strong>{targetSemester?.label}</strong> is now the active semester.
               </p>
-              <p className="text-xs text-gray-400 mb-5">
+              <p className="text-xs text-gray-400 mb-3">
                 All active students are now listed under <strong>Re-enrollment Management</strong>.
               </p>
+              {typeof rolloverResult?.eventsArchivedCount === 'number' && (
+                <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 font-semibold mb-5 flex items-center justify-center gap-2">
+                  <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                  <span>{rolloverResult.eventsArchivedCount} completed event(s) from {activeSemester?.label} automatically archived.</span>
+                </div>
+              )}
               <button
                 onClick={onClose}
                 className="w-full py-3 bg-[#001A4D] text-[#FFD41C] font-bold rounded-xl text-sm hover:bg-[#001A4D]/90 transition-colors cursor-pointer"
@@ -2087,10 +2099,9 @@ export function AcademicSemesterSettings() {
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-[#001A4D]">Academic Year &amp; Semester</h2>
-          <p className="text-gray-500 text-sm">Settings &rsaquo; Academic Periods &amp; Tracks</p>
+          <p className="text-gray-500 text-sm font-medium">Settings &rsaquo; Academic Periods &amp; Tracks</p>
         </div>
         <button
           onClick={() => setShowRollover(true)}

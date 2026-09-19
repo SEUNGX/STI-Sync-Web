@@ -628,7 +628,7 @@ function IncomingQueueTab() {
                             </>
                           )}
                         </td>
-                        <td className="px-4 py-3"><StatusBadge status={doc.status} /></td>
+                        <td className="px-4 py-3"><StatusPill status={doc.status} /></td>
                         <td className="px-4 py-3 relative">
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button onClick={() => setPreviewDoc(doc)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-blue-50 text-blue-600 transition-colors" title="View Document"><Eye className="w-4 h-4" /></button>
@@ -808,8 +808,7 @@ export function AdminDocuments() {
       {/* Page Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-[#001A4D]">Document Management</h2>
-          <p className="text-gray-500 text-sm">Dashboard &rsaquo; Document Management</p>
+          <p className="text-gray-500 text-sm font-medium">Dashboard &rsaquo; Document Management</p>
         </div>
         <button
           onClick={() => setShowBroadcast(true)}

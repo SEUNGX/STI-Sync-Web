@@ -2,7 +2,7 @@ import {
   UserCircle, Lock, Activity, Calendar, Book,
   Building, Shield, Users, CalendarDays, QrCode, Award,
   Receipt, AlertTriangle, Coins,
-  Database, Eye, Files,
+  Database, Eye, Files, Archive,
 } from 'lucide-react';
 
 interface SettingsNavigationProps {
@@ -63,6 +63,7 @@ const navItems = [
     items: [
       { id: 'data-management', icon: Database, label: 'Data Management' },
       { id: 'audit-visibility', icon: Eye, label: 'Audit & Visibility' },
+      { id: 'archive-center', icon: Archive, label: 'Archive & Trash Center' },
     ]
   },
 ];

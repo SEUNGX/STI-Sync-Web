@@ -1,6 +1,6 @@
 import { Timestamp } from 'firebase/firestore';
 
-export type LiquidationStatus = 'draft' | 'pending' | 'approved' | 'returned';
+export type LiquidationStatus = 'draft' | 'pending' | 'approved' | 'returned' | 'voided';
 
 export interface ExpenseLineItem {
   id: string;
@@ -23,7 +23,7 @@ export interface LiquidationRemark {
   id: string;
   authorName: string;
   authorRole: 'admin' | 'officer';
-  action: 'submitted' | 'returned' | 'approved' | 'draft_saved';
+  action: 'submitted' | 'returned' | 'approved' | 'draft_saved' | 'voided';
   comment: string;
   timestamp: string; // ISO string
 }
@@ -48,6 +48,9 @@ export interface LiquidationDocument {
   approvedBy?: string;
   returnRemarks?: string;
   returnedAt?: Timestamp | any;
+  voidedAt?: Timestamp | any;
+  voidedBy?: string;
+  voidedReason?: string;
   createdAt?: Timestamp | any;
   updatedAt?: Timestamp | any;
 }

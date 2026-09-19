@@ -1373,11 +1373,31 @@ interface EventDocument {
   scannerActivationCode: string;           // auto-generated 6-digit code
 
   // ─── Lifecycle ───
+  <!-- AGENT-UPDATED: 2026-09-18 — Phase 1: Event lifecycle, soft deletion, archiving, and financial waiver schema extension -->
   isOfficerProposal?: boolean;             // false for SAS Admin events, true for officer proposals
-  proposalStatus: 'draft' | 'pending' | 'approved' | 'rejected' | 'returned';
+  proposalStatus: 'draft' | 'pending' | 'pending_review' | 'approved' | 'rejected' | 'returned' | 'cancelled';
   createdBy: string;                       // SAS Adviser UID or Officer UID
   createdAt: Timestamp;
   updatedAt: Timestamp;
+
+  // ─── Soft Deletion & Archiving ───
+  isDeleted?: boolean;                     // true = soft-deleted (hidden from standard lists)
+  deletedAt?: Timestamp | null;
+  deletedBy?: string | null;
+  deletedByName?: string | null;
+  deleteReason?: string | null;
+  isArchived?: boolean;                    // true = sealed by semester / AY rollover
+  archivedAt?: Timestamp | null;
+  archivedBy?: string | null;
+
+  // ─── Cancellation & Financial Waiver Metadata ───
+  cancelledAt?: Timestamp | null;
+  cancelledBy?: string | null;
+  cancelledByName?: string | null;
+  cancelledByRole?: 'admin' | 'officer' | null;
+  cancellationReason?: string | null;
+  cancellationRefundPolicy?: 'refund_cash' | 'credit_next_event' | 'no_fees_collected' | null;
+  refundStatus?: 'none' | 'pending' | 'processing' | 'completed' | null;
 }
 
 interface EventSession {
@@ -1451,13 +1471,25 @@ interface PayableDocument {
   semesterId: string;                      // FK → /semesters
 
   // ─── Fee & Payment Status ───
+  <!-- AGENT-UPDATED: 2026-09-18 — Phase 1: Added waived, refund_pending, and refunded status and waiver audit metadata -->
   type: 'membership_due' | 'event_fee' | 'org_fine' | 'admin_fine' | 'custom';
   label: string;                           // e.g. "Event Fee — IT Week 2026"
   description: string;
   assignedAmount: number;                  // Total fee amount in PHP (₱)
   paidAmount: number;                      // Total amount paid to date in PHP (₱)
-  status: 'pending' | 'partial' | 'paid' | 'overdue' | 'waived';
+  status: 'pending' | 'partial' | 'paid' | 'overdue' | 'waived' | 'refund_pending' | 'refunded';
   dueDate: Timestamp | null;
+
+  // ─── Waiver & Refund Metadata ───
+  waivedAt?: Timestamp | null;
+  waivedReason?: string | null;
+  waivedBy?: string | null;
+  refundDue?: number;                      // Amount to be refunded if event was cancelled after payment
+  refundedAmount?: number;
+  refundedAt?: Timestamp | null;
+  refundedBy?: string | null;
+  refundMethod?: string | null;            // e.g. 'cash', 'credit_next_event'
+  refundNotes?: string | null;
 
   // ─── Payment Record & Gate Access ───
   paidAt: Timestamp | null;
@@ -1653,5 +1685,75 @@ interface StudentDocument {
 - `status` ASC, `createdAt` DESC
 - `courseCode` ASC, `yearLevel` ASC, `section` ASC
 - `studentId` ASC
+
+<!-- AGENT-UPDATED: 2026-09-18 — Documented liquidations collection with voided lifecycle status and parent cancellation audit fields -->
+
+### 1.19 `liquidations`
+
+**Path:** `/liquidations/{liquidationId}`
+
+Stores event financial liquidation reports and audited line items.
+
+```typescript
+type LiquidationStatus = 'draft' | 'pending' | 'approved' | 'returned' | 'voided';
+
+interface ExpenseLineItem {
+  id: string;
+  description: string;
+  category: string;
+  allocatedCost?: number;
+  proposedQuantity?: number;
+  proposedUnitCost?: number;
+  isPreFilled?: boolean;
+  quantity: number;
+  unitCost: number;
+  totalCost: number;
+  vendorName: string;
+  receiptNumber?: string;
+  receiptUrl: string;
+  receiptPublicId?: string;
+}
+
+interface LiquidationRemark {
+  id: string;
+  authorName: string;
+  authorRole: 'admin' | 'officer';
+  action: 'submitted' | 'returned' | 'approved' | 'draft_saved' | 'voided';
+  comment: string;
+  timestamp: string;
+}
+
+interface LiquidationDocument {
+  id: string;                              // Auto-generated Firestore document ID
+  eventId: string;                         // FK → /events
+  eventTitle: string;
+  organizationId: string;                  // FK → /organizations
+  organizationName: string;
+  createdById: string;                     // Auth UID
+  createdByRole: 'admin' | 'officer';
+  createdByName: string;
+  allocatedBudget: number;                 // Approved budget ceiling
+  totalActualSpending: number;             // Sum of all line items
+  surplusOrDeficit: number;                // allocatedBudget - totalActualSpending
+  status: LiquidationStatus;
+  lineItems: ExpenseLineItem[];
+  remarksHistory?: LiquidationRemark[];
+  submittedAt?: Timestamp;
+  approvedAt?: Timestamp;
+  approvedBy?: string;
+  returnRemarks?: string;
+  returnedAt?: Timestamp;
+  voidedAt?: Timestamp;                    // Set when parent event is cancelled
+  voidedBy?: string;                       // UID of actor who cancelled parent event
+  voidedReason?: string;                   // Event cancellation explanation
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+```
+
+**Indexes Required:**
+- `organizationId` ASC, `createdAt` DESC
+- `eventId` ASC
+
 
 

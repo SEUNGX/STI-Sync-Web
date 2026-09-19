@@ -220,14 +220,17 @@ export function useStudentDetail(studentDocOrId: StudentDocument | string | null
       };
     });
 
-  // Compute aggregated stats
-  const totalBilled = payables.reduce((sum, p) => sum + (Number(p.assignedAmount) || 0), 0);
+  // Compute aggregated stats (excluding waived items from outstanding balance)
+  const activePayables = payables.filter((p) => p.status !== 'waived');
+  const totalBilled = activePayables.reduce((sum, p) => sum + (Number(p.assignedAmount) || 0), 0);
   const totalPaid = payables.reduce((sum, p) => sum + (Number(p.paidAmount) || 0), 0);
   const outstandingBalance = Math.max(0, totalBilled - totalPaid);
 
   let paymentStatus: 'Paid' | 'Outstanding' | 'None' = 'None';
-  if (payables.length > 0) {
+  if (activePayables.length > 0) {
     paymentStatus = outstandingBalance <= 0 ? 'Paid' : 'Outstanding';
+  } else if (payables.length > 0) {
+    paymentStatus = 'Paid';
   }
 
   const eventsAttended = attendances.filter(

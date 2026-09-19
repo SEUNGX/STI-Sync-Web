@@ -241,8 +241,7 @@ export default function OfficerSettings({ defaultTab = 'account' }: OfficerSetti
   return (
     <div className="space-y-6 pb-12">
       <div>
-        <div className="text-[#888780] text-[13px] mb-1">Dashboard › Settings</div>
-        <h1 className="text-[#001A4D] text-[24px] font-bold">Settings</h1>
+        <div className="text-[#888780] text-[13px] font-medium">Dashboard › Settings</div>
       </div>
 
       <div className="grid grid-cols-12 gap-6">

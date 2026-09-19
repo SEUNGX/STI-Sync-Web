@@ -276,6 +276,8 @@ export function useAllEventPayablesStream() {
             
             const statusLower = String(doc.status || '').toLowerCase();
             const isPaidStatus = statusLower === 'paid';
+            const isRefundPending = statusLower === 'refund_pending';
+            const isRefunded = statusLower === 'refunded';
             const assignedAmt = Number(doc.assignedAmount) || 0;
             const rawPaid = Number(doc.paidAmount) || 0;
             const hasPaidAmount = rawPaid > 0;
@@ -298,13 +300,18 @@ export function useAllEventPayablesStream() {
               group.transferredDate = formatAppDateTime(doc.transferredAt, formatAppDate(doc.transferredAt));
             }
 
+            // Determine collection item status
+            let collectionStatus: 'Paid' | 'Pending' | 'Refund Pending' | 'Refunded' = isPaid ? 'Paid' : 'Pending';
+            if (isRefundPending) collectionStatus = 'Refund Pending';
+            else if (isRefunded) collectionStatus = 'Refunded';
+
             group.payments.push({
               id: doc.id,
               name: doc.studentName || 'Student',
               studentId: doc.studentSchoolId || doc.studentId,
               amount: paidAmt,
               paidDate: formatAppDateTime(doc.paidAt, formatAppDate(doc.paidAt, '—')),
-              status: isPaid ? 'Paid' : 'Pending',
+              status: collectionStatus,
               transferredAmount: docTransferredAmt,
               untransferredAmount: docUntransferredAmt,
               transferredToBudget: isDocFullyTransferred,
@@ -313,14 +320,21 @@ export function useAllEventPayablesStream() {
               paymentMethod: doc.paymentMethod || 'cash',
               fineViolations: doc.fineViolations || undefined,
               description: doc.description || doc.label,
+              payableDocId: doc.id,
+              refundDue: doc.refundDue,
             });
           }
 
           // Set transferredToBudget = true ONLY if all collected funds have been transferred
           groupsMap.forEach((group) => {
             const hasCollected = (group.totalCollected || 0) > 0;
+            const isCancelled = group.payments.some((p) => p.status === 'Refund Pending' || p.status === 'Refunded');
+            group.isCancelled = isCancelled;
+            if (isCancelled) {
+              group.untransferredAmount = 0;
+            }
             const hasUntransferred = (group.untransferredAmount || 0) > 0;
-            group.transferredToBudget = hasCollected && !hasUntransferred;
+            group.transferredToBudget = hasCollected && !hasUntransferred && !isCancelled;
           });
 
           setData(Array.from(groupsMap.values()));
@@ -428,6 +442,8 @@ export function useOrgCollectionsStream(organizationId: string | null, semesterI
 
         const statusLower = String(doc.status || '').toLowerCase();
         const isPaidStatus = statusLower === 'paid';
+        const isRefundPending = statusLower === 'refund_pending';
+        const isRefunded = statusLower === 'refunded';
         const hasPaidAmount = (Number(doc.paidAmount) || 0) > 0;
         const assignedAmt = Number(doc.assignedAmount) || 0;
         const paidAmt = hasPaidAmount ? Number(doc.paidAmount) : (isPaidStatus ? assignedAmt : 0);
@@ -448,13 +464,18 @@ export function useOrgCollectionsStream(organizationId: string | null, semesterI
           group.transferredDate = formatAppDateTime(doc.transferredAt, formatAppDate(doc.transferredAt));
         }
 
+        // Determine collection item status
+        let collectionStatus: 'Paid' | 'Pending' | 'Refund Pending' | 'Refunded' = isPaid ? 'Paid' : 'Pending';
+        if (isRefundPending) collectionStatus = 'Refund Pending';
+        else if (isRefunded) collectionStatus = 'Refunded';
+
         group.payments.push({
           id: doc.id,
           name: doc.studentName || 'Student',
           studentId: doc.studentSchoolId || doc.studentId,
           amount: paidAmt,
           paidDate: formatAppDateTime(doc.paidAt, formatAppDate(doc.paidAt, '—')),
-          status: isPaid ? 'Paid' : 'Pending',
+          status: collectionStatus,
           transferredAmount: docTransferredAmt,
           untransferredAmount: docUntransferredAmt,
           transferredToBudget: isDocFullyTransferred,
@@ -463,14 +484,21 @@ export function useOrgCollectionsStream(organizationId: string | null, semesterI
           paymentMethod: doc.paymentMethod || 'cash',
           fineViolations: doc.fineViolations || undefined,
           description: doc.description || doc.label,
+          payableDocId: doc.id,
+          refundDue: doc.refundDue,
         });
       }
 
       // Set transferredToBudget = true ONLY if all collected funds have been transferred
       groupsMap.forEach((group) => {
         const hasCollected = (group.totalCollected || 0) > 0;
+        const isCancelled = group.payments.some((p) => p.status === 'Refund Pending' || p.status === 'Refunded');
+        group.isCancelled = isCancelled;
+        if (isCancelled) {
+          group.untransferredAmount = 0;
+        }
         const hasUntransferred = (group.untransferredAmount || 0) > 0;
-        group.transferredToBudget = hasCollected && !hasUntransferred;
+        group.transferredToBudget = hasCollected && !hasUntransferred && !isCancelled;
       });
 
       setData(Array.from(groupsMap.values()));

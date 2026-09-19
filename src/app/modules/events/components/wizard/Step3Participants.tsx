@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Users, Globe, UserCheck, CheckSquare, Layers, BookOpen, GraduationCap, ShieldAlert } from 'lucide-react';
+import { Users, Globe, UserCheck, CheckSquare, Layers, BookOpen, GraduationCap, ShieldAlert, Lock } from 'lucide-react';
 import { useCourses, useSections, useSemesters } from '../../../academic';
 import { useStudents } from '../../../students/hooks/useStudentStream';
 import { useOrgMembers } from '../../../organizations/hooks/useOrgMembers';
@@ -11,6 +11,7 @@ interface Step3Props {
   onUpdate: (data: Partial<EventFormData>) => void;
   isOfficer?: boolean;
   errors?: Record<string, string>;
+  isRestricted?: boolean;
 }
 
 const ALL_YEAR_LEVELS = ['1st Year', '2nd Year', '3rd Year', '4th Year', 'G11', 'G12'];
@@ -43,7 +44,7 @@ function addMinutesToTime(timeStr: string, minutesToAdd: number): string {
   return `${newH.toString().padStart(2, '0')}:${newM.toString().padStart(2, '0')}`;
 }
 
-export default function Step3Participants({ data, onUpdate, isOfficer, errors = {} }: Step3Props) {
+export default function Step3Participants({ data, onUpdate, isOfficer, errors = {}, isRestricted }: Step3Props) {
   const { data: courses, loading: coursesLoading } = useCourses();
   const { data: sections, loading: sectionsLoading } = useSections();
   const { data: students, loading: studentsLoading } = useStudents();
@@ -358,6 +359,16 @@ export default function Step3Participants({ data, onUpdate, isOfficer, errors = 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
       <div className="space-y-6">
+        {/* Approved Event Lock Banner */}
+        {isRestricted && (
+          <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between text-amber-900 text-xs font-semibold shadow-xs">
+            <div className="flex items-center gap-2">
+              <Lock className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>Target Audience & Attendance Rules Locked: Audience cohort, course filters, year levels, and session attendance rules are sealed and cannot be modified.</span>
+            </div>
+            <span className="px-2.5 py-0.5 bg-amber-100 text-amber-800 rounded-md text-[10px] font-bold uppercase tracking-wider">Locked</span>
+          </div>
+        )}
 
         {/* Section A — Target Audience */}
         <div>
@@ -365,6 +376,11 @@ export default function Step3Participants({ data, onUpdate, isOfficer, errors = 
             <h3 className="text-[#001A4D] font-bold text-base">
               {isOfficer ? 'Target Audience Scope' : 'Target Audience & Academic Filter'}
             </h3>
+            {isRestricted && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-md">
+                <Lock className="w-3 h-3 text-amber-600" /> Locked upon Approval
+              </span>
+            )}
           </div>
 
           {/* Academic Cohort Context Banner */}
@@ -404,8 +420,11 @@ export default function Step3Participants({ data, onUpdate, isOfficer, errors = 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
               <button
                 type="button"
+                disabled={isRestricted}
                 onClick={() => setAudienceScope('all')}
-                className={`p-4 rounded-xl border-2 text-left transition-all cursor-pointer ${
+                className={`p-4 rounded-xl border-2 text-left transition-all ${
+                  isRestricted ? 'cursor-not-allowed opacity-80' : 'cursor-pointer'
+                } ${
                   selectedScope === 'all'
                     ? 'border-[#0E4EBD] bg-blue-50/70 ring-2 ring-[#0E4EBD]/20'
                     : 'border-gray-200 hover:border-gray-300 bg-white'
@@ -416,7 +435,10 @@ export default function Step3Participants({ data, onUpdate, isOfficer, errors = 
                     <Globe className="w-4 h-4" />
                   </div>
                   <div>
-                    <h4 className="font-bold text-gray-900 text-sm">Campus-Wide / Open to All</h4>
+                    <h4 className="font-bold text-gray-900 text-sm flex items-center gap-1.5">
+                      <span>Campus-Wide / Open to All</span>
+                      {isRestricted && <Lock className="w-3.5 h-3.5 text-amber-600" />}
+                    </h4>
                     <p className="text-xs text-gray-500">Target all students matching course, year level, and section</p>
                   </div>
                 </div>
@@ -424,8 +446,11 @@ export default function Step3Participants({ data, onUpdate, isOfficer, errors = 
 
               <button
                 type="button"
+                disabled={isRestricted}
                 onClick={() => setAudienceScope('members')}
-                className={`p-4 rounded-xl border-2 text-left transition-all cursor-pointer ${
+                className={`p-4 rounded-xl border-2 text-left transition-all ${
+                  isRestricted ? 'cursor-not-allowed opacity-80' : 'cursor-pointer'
+                } ${
                   selectedScope === 'members'
                     ? 'border-[#0E4EBD] bg-blue-50/70 ring-2 ring-[#0E4EBD]/20'
                     : 'border-gray-200 hover:border-gray-300 bg-white'
@@ -436,7 +461,10 @@ export default function Step3Participants({ data, onUpdate, isOfficer, errors = 
                     <UserCheck className="w-4 h-4" />
                   </div>
                   <div>
-                    <h4 className="font-bold text-gray-900 text-sm">Organization Members Only</h4>
+                    <h4 className="font-bold text-gray-900 text-sm flex items-center gap-1.5">
+                      <span>Organization Members Only</span>
+                      {isRestricted && <Lock className="w-3.5 h-3.5 text-amber-600" />}
+                    </h4>
                     <p className="text-xs text-gray-500">
                       Exclusive to registered members of {currentOrg?.acronym || 'your organization'}
                     </p>
@@ -459,27 +487,30 @@ export default function Step3Participants({ data, onUpdate, isOfficer, errors = 
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <BookOpen className={`w-4 h-4 ${accentText}`} />
-                  <label className="text-xs font-bold text-gray-900 uppercase tracking-wider">
-                    Target Courses ({selectedCourses.length === 0 ? 'All Courses' : `${selectedCourses.length} Selected`})
+                  <label className="text-xs font-bold text-gray-900 uppercase tracking-wider flex items-center gap-1.5">
+                    <span>Target Courses ({selectedCourses.length === 0 ? 'All Courses' : `${selectedCourses.length} Selected`})</span>
+                    {isRestricted && <Lock className="w-3.5 h-3.5 text-amber-600" />}
                   </label>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={selectAllCourses}
-                    className={`text-xs ${accentText} hover:underline font-semibold flex items-center gap-1 cursor-pointer`}
-                  >
-                    <CheckSquare className="w-3.5 h-3.5" /> Select All ({cohortCourses.length})
-                  </button>
-                  <span className="text-gray-300">|</span>
-                  <button
-                    type="button"
-                    onClick={clearAllCourses}
-                    className="text-xs text-gray-500 hover:text-gray-700 font-medium cursor-pointer"
-                  >
-                    Clear
-                  </button>
-                </div>
+                {!isRestricted && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={selectAllCourses}
+                      className={`text-xs ${accentText} hover:underline font-semibold flex items-center gap-1 cursor-pointer`}
+                    >
+                      <CheckSquare className="w-3.5 h-3.5" /> Select All ({cohortCourses.length})
+                    </button>
+                    <span className="text-gray-300">|</span>
+                    <button
+                      type="button"
+                      onClick={clearAllCourses}
+                      className="text-xs text-gray-500 hover:text-gray-700 font-medium cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                )}
               </div>
 
               {coursesLoading ? (
@@ -494,8 +525,11 @@ export default function Step3Participants({ data, onUpdate, isOfficer, errors = 
                       <button
                         type="button"
                         key={course.id}
+                        disabled={isRestricted}
                         onClick={() => toggleCourse(course.id)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                          isRestricted ? 'cursor-not-allowed opacity-75' : 'cursor-pointer'
+                        } ${
                           isSelected
                             ? `${accentBg} text-white ${accentBorder} shadow-xs`
                             : `bg-gray-50 text-gray-700 border-gray-200 hover:${accentBorder} ${isOfficer ? 'hover:bg-purple-50/50' : 'hover:bg-blue-50/50'}`
@@ -514,27 +548,30 @@ export default function Step3Participants({ data, onUpdate, isOfficer, errors = 
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Layers className={`w-4 h-4 ${accentText}`} />
-                  <label className="text-xs font-bold text-gray-900 uppercase tracking-wider">
-                    Year Levels ({selectedYears.length === 0 ? 'All Year Levels' : `${selectedYears.length} Selected`})
+                  <label className="text-xs font-bold text-gray-900 uppercase tracking-wider flex items-center gap-1.5">
+                    <span>Year Levels ({selectedYears.length === 0 ? 'All Year Levels' : `${selectedYears.length} Selected`})</span>
+                    {isRestricted && <Lock className="w-3.5 h-3.5 text-amber-600" />}
                   </label>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={selectAllYears}
-                    className={`text-xs ${accentText} hover:underline font-semibold flex items-center gap-1 cursor-pointer`}
-                  >
-                    <CheckSquare className="w-3.5 h-3.5" /> Select All ({availableYearLevels.length})
-                  </button>
-                  <span className="text-gray-300">|</span>
-                  <button
-                    type="button"
-                    onClick={clearAllYears}
-                    className="text-xs text-gray-500 hover:text-gray-700 font-medium cursor-pointer"
-                  >
-                    Clear
-                  </button>
-                </div>
+                {!isRestricted && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={selectAllYears}
+                      className={`text-xs ${accentText} hover:underline font-semibold flex items-center gap-1 cursor-pointer`}
+                    >
+                      <CheckSquare className="w-3.5 h-3.5" /> Select All ({availableYearLevels.length})
+                    </button>
+                    <span className="text-gray-300">|</span>
+                    <button
+                      type="button"
+                      onClick={clearAllYears}
+                      className="text-xs text-gray-500 hover:text-gray-700 font-medium cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="flex flex-wrap gap-2">
@@ -544,8 +581,11 @@ export default function Step3Participants({ data, onUpdate, isOfficer, errors = 
                     <button
                       type="button"
                       key={year}
+                      disabled={isRestricted}
                       onClick={() => toggleYear(year)}
-                      className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                      className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                        isRestricted ? 'cursor-not-allowed opacity-75' : 'cursor-pointer'
+                      } ${
                         isSelected
                           ? `${accentBg} text-white ${accentBorder} shadow-xs`
                           : `bg-gray-50 text-gray-700 border-gray-200 hover:${accentBorder} ${isOfficer ? 'hover:bg-purple-50/50' : 'hover:bg-blue-50/50'}`
@@ -562,8 +602,9 @@ export default function Step3Participants({ data, onUpdate, isOfficer, errors = 
             <div className="p-4 border border-gray-200 rounded-xl bg-white space-y-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <label className="text-xs font-bold text-gray-900 uppercase tracking-wider">
-                    Sections ({selectedSections.length === 0 ? 'All Sections' : `${selectedSections.length} Selected`})
+                  <label className="text-xs font-bold text-gray-900 uppercase tracking-wider flex items-center gap-1.5">
+                    <span>Sections ({selectedSections.length === 0 ? 'All Sections' : `${selectedSections.length} Selected`})</span>
+                    {isRestricted && <Lock className="w-3.5 h-3.5 text-amber-600" />}
                   </label>
                   <p className="text-[11px] text-gray-500 mt-0.5">
                     {selectedCourses.length > 0 || selectedYears.length > 0
@@ -571,24 +612,26 @@ export default function Step3Participants({ data, onUpdate, isOfficer, errors = 
                       : `Showing all sections (${availableSections.length} available)`}
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={selectAllFilteredSections}
-                    disabled={availableSections.length === 0}
-                    className={`text-xs ${accentText} hover:underline font-semibold flex items-center gap-1 disabled:opacity-50 cursor-pointer`}
-                  >
-                    <CheckSquare className="w-3.5 h-3.5" /> Select All ({availableSections.length})
-                  </button>
-                  <span className="text-gray-300">|</span>
-                  <button
-                    type="button"
-                    onClick={clearAllSections}
-                    className="text-xs text-gray-500 hover:text-gray-700 font-medium cursor-pointer"
-                  >
-                    Clear
-                  </button>
-                </div>
+                {!isRestricted && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={selectAllFilteredSections}
+                      disabled={availableSections.length === 0}
+                      className={`text-xs ${accentText} hover:underline font-semibold flex items-center gap-1 disabled:opacity-50 cursor-pointer`}
+                    >
+                      <CheckSquare className="w-3.5 h-3.5" /> Select All ({availableSections.length})
+                    </button>
+                    <span className="text-gray-300">|</span>
+                    <button
+                      type="button"
+                      onClick={clearAllSections}
+                      className="text-xs text-gray-500 hover:text-gray-700 font-medium cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                )}
               </div>
 
               {sectionsLoading ? (
@@ -605,8 +648,11 @@ export default function Step3Participants({ data, onUpdate, isOfficer, errors = 
                       <button
                         type="button"
                         key={sec.id}
+                        disabled={isRestricted}
                         onClick={() => toggleSection(sec.name)}
-                        className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-all cursor-pointer ${
+                        className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-all ${
+                          isRestricted ? 'cursor-not-allowed opacity-75' : 'cursor-pointer'
+                        } ${
                           isSelected
                             ? `${accentBg} text-white ${accentBorder} font-bold shadow-xs`
                             : 'bg-white text-gray-700 border-gray-200 hover:border-[#0E4EBD]'
@@ -683,8 +729,9 @@ export default function Step3Participants({ data, onUpdate, isOfficer, errors = 
                               type="time"
                               step="600"
                               value={session.timeInOpen || ''}
+                              disabled={isRestricted}
                               onChange={(e) => updateSession(session.id, 'timeInOpen', e.target.value)}
-                              className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 ${accentFocusRing} focus:border-transparent ${
+                              className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 ${accentFocusRing} focus:border-transparent disabled:opacity-60 disabled:bg-gray-100 ${
                                 timeInOpenInvalid || timeInOrderInvalid ? 'border-red-400 bg-red-50/30' : 'border-gray-300'
                               }`}
                             />
@@ -704,8 +751,9 @@ export default function Step3Participants({ data, onUpdate, isOfficer, errors = 
                               type="time"
                               step="600"
                               value={session.timeInClose || ''}
+                              disabled={isRestricted}
                               onChange={(e) => updateSession(session.id, 'timeInClose', e.target.value)}
-                              className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 ${accentFocusRing} focus:border-transparent ${
+                              className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 ${accentFocusRing} focus:border-transparent disabled:opacity-60 disabled:bg-gray-100 ${
                                 timeInOrderInvalid ? 'border-red-400 bg-red-50/30' : 'border-gray-300'
                               }`}
                             />
@@ -734,8 +782,11 @@ export default function Step3Participants({ data, onUpdate, isOfficer, errors = 
                           </div>
                           <button
                             type="button"
+                            disabled={isRestricted}
                             onClick={() => updateSession(session.id, 'hasTimeOut', !session.hasTimeOut)}
-                            className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 cursor-pointer ${
+                            className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${
+                              isRestricted ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'
+                            } ${
                               session.hasTimeOut ? accentBg : 'bg-gray-300'
                             }`}
                           >
@@ -756,8 +807,9 @@ export default function Step3Participants({ data, onUpdate, isOfficer, errors = 
                                   type="time"
                                   step="600"
                                   value={session.timeOutOpen || ''}
+                                  disabled={isRestricted}
                                   onChange={(e) => updateSession(session.id, 'timeOutOpen', e.target.value)}
-                                  className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 ${accentFocusRing} focus:border-transparent ${
+                                  className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 ${accentFocusRing} focus:border-transparent disabled:opacity-60 disabled:bg-gray-100 ${
                                     timeOutBeforeInInvalid || timeOutOrderInvalid ? 'border-red-400 bg-red-50/30' : 'border-gray-300'
                                   }`}
                                 />
@@ -768,8 +820,9 @@ export default function Step3Participants({ data, onUpdate, isOfficer, errors = 
                                   type="time"
                                   step="600"
                                   value={session.timeOutClose || ''}
+                                  disabled={isRestricted}
                                   onChange={(e) => updateSession(session.id, 'timeOutClose', e.target.value)}
-                                  className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 ${accentFocusRing} focus:border-transparent ${
+                                  className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 ${accentFocusRing} focus:border-transparent disabled:opacity-60 disabled:bg-gray-100 ${
                                     timeOutOrderInvalid ? 'border-red-400 bg-red-50/30' : 'border-gray-300'
                                   }`}
                                 />

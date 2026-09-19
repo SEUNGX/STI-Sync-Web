@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Shield, Rocket, Save } from 'lucide-react';
+import { X, Shield, Rocket, Save, AlertTriangle, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import Step1EventDetails from '../../modules/events/components/wizard/Step1EventDetails';
 import Step2Schedule from '../../modules/events/components/wizard/Step2Schedule';
@@ -12,6 +12,7 @@ import type { EventDocument, EventFormData } from '../../modules/events/types/ev
 import { useEventCreation } from '../../modules/events/hooks/useEventCreation';
 import { useAllEvents } from '../../modules/events/hooks/useEventStream';
 import { validateWizardStep } from '../../modules/events/utils/event-validation';
+import { isEventEditable, isMajorFieldLocked } from '../../modules/events/utils/event-lifecycle.utils';
 
 interface SaoEventCreationModalProps {
   isOpen: boolean;
@@ -68,9 +69,31 @@ export default function SaoEventCreationModal({
   const { createEvent, saveDraft, loading } = useEventCreation();
   const { events: allEvents } = useAllEvents();
 
+  // Lifecycle & Editability Guards
+  const editCheck = isEventEditable(initialDraft, 'admin');
+  const isLocked = Boolean(initialDraft && !editCheck.editable);
+  const isRestricted = Boolean(initialDraft && editCheck.lockLevel === 'restricted');
+
   if (!isOpen) return null;
 
   const updateFormData = (stepData: any) => {
+    if (isLocked) return;
+    if (isRestricted && initialDraft) {
+      const safeData = { ...stepData };
+      const majorFields: (keyof EventFormData)[] = [
+        'startDate', 'endDate', 'startTime', 'endTime', 'venue', 'sessions',
+        'isMandatory', 'requiresAttendance', 'fines', 'studentPayablesEnabled',
+        'totalApprovedBudget', 'budgetItems', 'targetAudience', 'targetYearLevels',
+        'targetDepartmentIds', 'allowedCourses', 'allowedYearLevels'
+      ];
+      for (const f of majorFields) {
+        if (f in safeData && isMajorFieldLocked(initialDraft, f)) {
+          delete safeData[f];
+        }
+      }
+      setFormData(prev => ({ ...prev, ...safeData }));
+      return;
+    }
     setFormData(prev => ({ ...prev, ...stepData }));
   };
 
@@ -113,70 +136,85 @@ export default function SaoEventCreationModal({
     }
   };
 
-  const goToStep = (step: number) => {
-    if (step < currentStep) {
-      setStepErrors({});
-      setCurrentStep(step);
+  const goToStep = (stepIndex: number) => {
+    if (stepIndex <= currentStep) {
+      setCurrentStep(stepIndex);
       return;
     }
+    const valResult = validateWizardStep(
+      currentStep,
+      currentStepName,
+      formData,
+      false,
+      allEvents,
+      activeDraftId
+    );
 
-    // Check validation for all preceding steps
-    for (let sIdx = 0; sIdx < step; sIdx++) {
-      const sName = steps[sIdx];
-      const res = validateWizardStep(sIdx, sName, formData, false, allEvents, activeDraftId);
-      if (!res.isValid) {
-        setStepErrors(res.fieldErrors || {});
-        toast.error(`Please complete ${sName}`, {
-          description: res.errors[0] || `Please resolve errors in ${sName} before advancing.`,
-          duration: 5000,
-        });
-        setCurrentStep(sIdx);
-        return;
-      }
+    if (!valResult.isValid) {
+      setStepErrors(valResult.fieldErrors || {});
+      toast.error(`Please complete ${currentStepName} first`, {
+        description: valResult.errors[0],
+        duration: 4000,
+      });
+      return;
     }
     setStepErrors({});
-    setCurrentStep(step);
+    setCurrentStep(stepIndex);
   };
 
   const handleSubmit = async () => {
-    // Validate all wizard steps
-    for (let sIdx = 0; sIdx < steps.length - 1; sIdx++) {
-      const sName = steps[sIdx];
-      const res = validateWizardStep(sIdx, sName, formData, false, allEvents, activeDraftId);
-      if (!res.isValid) {
-        setStepErrors(res.fieldErrors || {});
-        toast.error(`Cannot Publish: Incomplete ${sName}`, {
-          description: res.errors[0] || `Please review and complete ${sName} before publishing.`,
-          duration: 6000,
-        });
-        setCurrentStep(sIdx);
-        return;
-      }
+    if (isLocked) {
+      toast.error('Event is Locked', {
+        description: editCheck.reason || 'This event cannot be published or updated.',
+      });
+      return;
     }
 
     setSaving(true);
     try {
-      const id = await createEvent(formData, activeDraftId, false);
-      if (id) {
-        toast.success('Institutional Event Created & Published!', {
-          description: 'Event is live on the system and visible in student portals.',
-          duration: 5000,
-        });
+      const payload: EventFormData = {
+        ...formData,
+        hostingOrgId: formData.hostingOrgId || 'sas',
+      };
+
+      const result = await createEvent(payload, activeDraftId);
+      if (result) {
+        toast.success(
+          activeDraftId ? 'Draft Published Successfully' : 'Event Created Successfully',
+          {
+            description: `${payload.title} is now active and published to the portal.`,
+            duration: 5000,
+          }
+        );
         onClose();
       } else {
-        toast.error('Failed to create event. Please try again.');
+        toast.error('Failed to create event', {
+          description: 'Please check your connection and try again.',
+        });
       }
     } catch {
-      toast.error('An error occurred while creating the event.');
+      toast.error('An unexpected error occurred while creating the event.');
     } finally {
       setSaving(false);
     }
   };
 
   const handleSaveDraft = async () => {
+    if (isLocked) {
+      toast.error('Event is Locked', {
+        description: editCheck.reason || 'This event cannot be modified.',
+      });
+      return;
+    }
+
     setSaving(true);
     try {
-      const id = await saveDraft(formData, activeDraftId, false);
+      const payload: EventFormData = {
+        ...formData,
+        hostingOrgId: formData.hostingOrgId || 'sas',
+      };
+
+      const id = await saveDraft(payload, activeDraftId, false);
       if (id) {
         setActiveDraftId(id);
         toast.success('Draft Saved Successfully', {
@@ -199,6 +237,7 @@ export default function SaoEventCreationModal({
       onUpdate: updateFormData,
       isOfficer: false,
       errors: stepErrors,
+      isRestricted: isRestricted,
     };
 
     switch (currentStepName) {
@@ -263,6 +302,27 @@ export default function SaoEventCreationModal({
             </div>
           </div>
 
+          {/* Lifecycle Status Banners */}
+          {isLocked && (
+            <div className="bg-red-50 border-b border-red-200 px-6 py-2.5 flex items-center justify-between text-red-900 text-xs font-semibold flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                <span>{editCheck.reason || 'This event cannot be modified in its current status.'}</span>
+              </div>
+              <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded text-[11px] uppercase tracking-wider font-bold">Read-Only</span>
+            </div>
+          )}
+
+          {isRestricted && (
+            <div className="bg-amber-50 border-b border-amber-200 px-6 py-2.5 flex items-center justify-between text-amber-900 text-xs font-semibold flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>Event is Approved: Core schedule, venue, fines, and budget are locked. Only minor information can be updated.</span>
+              </div>
+              <span className="px-2 py-0.5 bg-amber-100 text-amber-800 rounded text-[11px] uppercase tracking-wider font-bold">Approved — Restricted</span>
+            </div>
+          )}
+
           {/* Progress Line */}
           <div className="h-1 bg-white/20">
             <div
@@ -312,8 +372,9 @@ export default function SaoEventCreationModal({
               <div className="flex items-center gap-3">
                 <button
                   onClick={handleSaveDraft}
-                  disabled={saving || loading}
+                  disabled={saving || loading || isLocked}
                   className="px-6 py-2.5 border border-[#0E4EBD] text-[#0E4EBD] rounded-lg font-semibold hover:bg-blue-50 transition-colors disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+                  title={isLocked ? editCheck.reason : undefined}
                 >
                   {saving ? (
                     <>
@@ -341,8 +402,9 @@ export default function SaoEventCreationModal({
             ) : (
               <button
                 onClick={handleSubmit}
-                disabled={loading}
+                disabled={loading || isLocked}
                 className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+                title={isLocked ? editCheck.reason : undefined}
               >
                 <Rocket className="w-4 h-4" />
                 {loading ? 'Publishing...' : 'Create & Publish Event'}

@@ -180,14 +180,14 @@ export function EventFinesGenerationModal({
         idx === 0
           ? r
           : {
-              ...r,
-              timeInAbsentAmount: base.timeInAbsentAmount,
-              timeInLateAmount: base.timeInLateAmount,
-              timeOutAbsentAmount: base.timeOutAbsentAmount,
-              enableTimeInAbsent: base.enableTimeInAbsent,
-              enableTimeInLate: base.enableTimeInLate,
-              enableTimeOutAbsent: r.enableTimeOutAbsent ? base.enableTimeOutAbsent : false,
-            }
+            ...r,
+            timeInAbsentAmount: base.timeInAbsentAmount,
+            timeInLateAmount: base.timeInLateAmount,
+            timeOutAbsentAmount: base.timeOutAbsentAmount,
+            enableTimeInAbsent: base.enableTimeInAbsent,
+            enableTimeInLate: base.enableTimeInLate,
+            enableTimeOutAbsent: r.enableTimeOutAbsent ? base.enableTimeOutAbsent : false,
+          }
       )
     );
     toast.info('Applied Session 1 rules to all sessions.');
@@ -386,8 +386,7 @@ export function EventFinesGenerationModal({
       });
 
       toast.success(
-        `Generated ${res.created} fine payable(s) for ${eventTitle} (Total: ${formatCurrency(res.totalAmount)}).${
-          res.updated > 0 ? ` Updated ${res.updated} existing record(s).` : ''
+        `Generated ${res.created} fine payable(s) for ${eventTitle} (Total: ${formatCurrency(res.totalAmount)}).${res.updated > 0 ? ` Updated ${res.updated} existing record(s).` : ''
         }`
       );
 
@@ -531,13 +530,12 @@ export function EventFinesGenerationModal({
                 return (
                   <div
                     key={s.id}
-                    className={`bg-white border border-[#E0E0E0] rounded-xl p-4 shadow-xs space-y-3.5 relative overflow-hidden snap-start hover:border-[#0E4EBD]/40 transition-colors ${
-                      sessions.length === 1
+                    className={`bg-white border border-[#E0E0E0] rounded-xl p-4 shadow-xs space-y-3.5 relative overflow-hidden snap-start hover:border-[#0E4EBD]/40 transition-colors ${sessions.length === 1
                         ? 'w-full md:col-span-2'
                         : sessions.length === 2
-                        ? 'w-full'
-                        : 'w-[320px] sm:w-[360px] flex-shrink-0'
-                    }`}
+                          ? 'w-full'
+                          : 'w-[320px] sm:w-[360px] flex-shrink-0'
+                      }`}
                   >
                     {/* Session Header */}
                     <div className="flex items-start justify-between border-b border-gray-100 pb-2.5">
@@ -560,11 +558,10 @@ export function EventFinesGenerationModal({
                         </div>
                       </div>
                       <span
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                          s.hasTimeOut
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${s.hasTimeOut
                             ? 'bg-blue-50 text-[#0E4EBD] border border-blue-100'
                             : 'bg-gray-100 text-gray-600'
-                        }`}
+                          }`}
                       >
                         {s.hasTimeOut ? 'Time-In & Out' : 'Time-In Only'}
                       </span>
@@ -599,11 +596,10 @@ export function EventFinesGenerationModal({
                               Math.max(0, Number(e.target.value))
                             )
                           }
-                          className={`w-20 px-2 py-1 border rounded text-right text-xs font-bold ${
-                            !effectiveReadOnly && rule.enableTimeInAbsent
+                          className={`w-20 px-2 py-1 border rounded text-right text-xs font-bold ${!effectiveReadOnly && rule.enableTimeInAbsent
                               ? 'border-gray-300 text-[#001A4D] bg-white focus:ring-1 focus:ring-[#0E4EBD]'
                               : 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed'
-                          }`}
+                            }`}
                         />
                       </div>
                     </div>
@@ -637,27 +633,24 @@ export function EventFinesGenerationModal({
                               Math.max(0, Number(e.target.value))
                             )
                           }
-                          className={`w-20 px-2 py-1 border rounded text-right text-xs font-bold ${
-                            !effectiveReadOnly && rule.enableTimeInLate
+                          className={`w-20 px-2 py-1 border rounded text-right text-xs font-bold ${!effectiveReadOnly && rule.enableTimeInLate
                               ? 'border-gray-300 text-[#001A4D] bg-white focus:ring-1 focus:ring-[#0E4EBD]'
                               : 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed'
-                          }`}
+                            }`}
                         />
                       </div>
                     </div>
 
                     {/* Rule 3: Time-Out Absent / Missed */}
                     <div
-                      className={`flex items-center justify-between text-xs p-2.5 rounded-lg border ${
-                        s.hasTimeOut
+                      className={`flex items-center justify-between text-xs p-2.5 rounded-lg border ${s.hasTimeOut
                           ? 'bg-gray-50/80 border-gray-100'
                           : 'bg-gray-100/50 border-dashed border-gray-200 opacity-60'
-                      }`}
+                        }`}
                     >
                       <label
-                        className={`flex items-center gap-2 select-none ${
-                          s.hasTimeOut && !effectiveReadOnly ? 'cursor-pointer' : 'cursor-not-allowed'
-                        }`}
+                        className={`flex items-center gap-2 select-none ${s.hasTimeOut && !effectiveReadOnly ? 'cursor-pointer' : 'cursor-not-allowed'
+                          }`}
                       >
                         <input
                           type="checkbox"
@@ -687,11 +680,10 @@ export function EventFinesGenerationModal({
                               Math.max(0, Number(e.target.value))
                             )
                           }
-                          className={`w-20 px-2 py-1 border rounded text-right text-xs font-bold ${
-                            !effectiveReadOnly && s.hasTimeOut && rule.enableTimeOutAbsent
+                          className={`w-20 px-2 py-1 border rounded text-right text-xs font-bold ${!effectiveReadOnly && s.hasTimeOut && rule.enableTimeOutAbsent
                               ? 'border-gray-300 text-[#001A4D] bg-white focus:ring-1 focus:ring-[#0E4EBD]'
                               : 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed'
-                          }`}
+                            }`}
                         />
                       </div>
                     </div>
@@ -812,13 +804,12 @@ export function EventFinesGenerationModal({
                                 {s.violations.map((v, vIdx) => (
                                   <span
                                     key={vIdx}
-                                    className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                                      v.violationType === 'time_in_absent'
+                                    className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${v.violationType === 'time_in_absent'
                                         ? 'bg-red-100 text-red-700'
                                         : v.violationType === 'time_in_late'
-                                        ? 'bg-orange-100 text-orange-700'
-                                        : 'bg-amber-100 text-amber-700'
-                                    }`}
+                                          ? 'bg-orange-100 text-orange-700'
+                                          : 'bg-amber-100 text-amber-700'
+                                      }`}
                                   >
                                     {v.description} ({formatCurrency(v.amount)})
                                   </span>

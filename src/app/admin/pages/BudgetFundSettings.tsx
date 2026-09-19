@@ -40,6 +40,7 @@ import {
   SlidersHorizontal,
   CreditCard,
   Coins,
+  Banknote,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useSemesters } from "../../modules/academic/hooks/useAcademicStream";
@@ -52,6 +53,8 @@ import {
   recordPayment,
   bulkRecordPayment,
 } from "../../modules/finance/services/payable.service";
+import { ProcessRefundModal } from '../../modules/finance/components/ProcessRefundModal';
+import type { PayableDocument } from '../../modules/finance/types/payable.types';
 import type { SaoLedgerDocument, TransactionSource, TransactionType } from "../../modules/finance/types/finance.types";
 import type { StudentEventCollectionGroup } from "../../modules/finance/types/payable.types";
 import { Timestamp } from "firebase/firestore";
@@ -589,6 +592,8 @@ function CollectionDetailModal({
 
   const paid = effectivePayments.filter((p) => p.status === "Paid");
   const pending = effectivePayments.filter((p) => p.status === "Pending");
+  const refundPending = effectivePayments.filter((p) => p.status === "Refund Pending");
+  const refunded = effectivePayments.filter((p) => p.status === "Refunded");
   const totalCollected = paid.reduce((s, p) => s + p.amount, 0);
   
   const alreadyTransferred = paid.filter((p) => p.transferredToBudget);
@@ -596,6 +601,13 @@ function CollectionDetailModal({
   
   const untransferred = paid.filter((p) => !p.transferredToBudget);
   const untransferredAmount = effectivePayments.reduce((s, p) => s + (p.untransferredAmount !== undefined ? p.untransferredAmount : (p.status === 'Paid' && !p.transferredToBudget ? p.amount : 0)), 0);
+
+  const isCancelled = Boolean(
+    collection.isCancelled ||
+    refundPending.length > 0 ||
+    refunded.length > 0 ||
+    effectivePayments.some((p) => p.status === 'Refund Pending' || p.status === 'Refunded')
+  );
 
   const collectionPct = collection.totalStudents > 0 
     ? Math.round((paid.length / collection.totalStudents) * 100) 
@@ -605,12 +617,13 @@ function CollectionDetailModal({
   const isCustomOrAdmin = detailedType === "institutional_fee" || detailedType === "admin_fine";
 
   const [paymentModalStudent, setPaymentModalStudent] = useState<CollectionPaymentItem | null>(null);
+  const [refundPayable, setRefundPayable] = useState<PayableDocument | null>(null);
   const [selectedPaymentIds, setSelectedPaymentIds] = useState<string[]>([]);
   const [isBulkSubmitting, setIsBulkSubmitting] = useState(false);
 
   // Search, filter, sorting, and pagination state for payments
   const [modalSearch, setModalSearch] = useState("");
-  const [modalStatusFilter, setModalStatusFilter] = useState<"all" | "paid" | "pending" | "ready" | "transferred">("all");
+  const [modalStatusFilter, setModalStatusFilter] = useState<"all" | "paid" | "pending" | "ready" | "transferred" | "refund_pending" | "refunded">("all");
   const [modalSortField, setModalSortField] = useState<"name" | "studentId" | "amount" | "date" | "status">("name");
   const [modalSortDir, setModalSortDir] = useState<"asc" | "desc">("asc");
   const [modalPage, setModalPage] = useState(1);
@@ -632,11 +645,15 @@ function CollectionDetailModal({
         const isPaid = p.status === "Paid";
         const isTransferred = isPaid && Boolean(p.transferredToBudget);
         const isReady = isPaid && !isTransferred;
+        const isRefundPending = p.status === "Refund Pending";
+        const isRefunded = p.status === "Refunded";
 
         if (modalStatusFilter === "paid" && !isPaid) return false;
-        if (modalStatusFilter === "pending" && isPaid) return false;
+        if (modalStatusFilter === "pending" && p.status !== "Pending") return false;
         if (modalStatusFilter === "transferred" && !isTransferred) return false;
         if (modalStatusFilter === "ready" && !isReady) return false;
+        if (modalStatusFilter === "refund_pending" && !isRefundPending) return false;
+        if (modalStatusFilter === "refunded" && !isRefunded) return false;
 
         if (modalSearch.trim()) {
           const q = modalSearch.toLowerCase().trim();
@@ -819,6 +836,8 @@ function CollectionDetailModal({
                   <option value="transferred">Transferred ({alreadyTransferred.length})</option>
                   <option value="paid">Paid ({paid.length})</option>
                   <option value="pending">Pending ({pending.length})</option>
+                  {refundPending.length > 0 && <option value="refund_pending">Refund Pending ({refundPending.length})</option>}
+                  {refunded.length > 0 && <option value="refunded">Refunded ({refunded.length})</option>}
                 </select>
               </div>
             </div>
@@ -919,11 +938,20 @@ function CollectionDetailModal({
                   ) : (
                     paginatedPayments.map((p) => {
                       const isStudentPaid = p.status === "Paid";
+                      const isRefundPendingRow = p.status === "Refund Pending";
+                      const isRefundedRow = p.status === "Refunded";
+                      const rowBg = isRefundPendingRow
+                        ? "bg-purple-50/30 hover:bg-purple-50/50"
+                        : isRefundedRow
+                          ? "bg-purple-50/10 hover:bg-purple-50/20"
+                          : !isStudentPaid
+                            ? "bg-amber-50/30 hover:bg-amber-50/50"
+                            : "hover:bg-gray-50";
                       return (
-                        <tr key={p.id} className={!isStudentPaid ? "bg-amber-50/30 hover:bg-amber-50/50" : "hover:bg-gray-50"}>
+                        <tr key={p.id} className={rowBg}>
                           {isCustomOrAdmin && (
                             <td className="px-3 py-2.5 text-center">
-                              {!isStudentPaid ? (
+                              {!isStudentPaid && !isRefundPendingRow && !isRefundedRow ? (
                                 <input
                                   type="checkbox"
                                   checked={selectedPaymentIds.includes(p.id)}
@@ -938,13 +966,21 @@ function CollectionDetailModal({
                           <td className="px-3.5 py-2.5 text-[#001A4D] font-medium">{p.name}</td>
                           <td className="px-3.5 py-2.5 text-gray-500 font-mono">{p.studentId}</td>
                           <td className="px-3.5 py-2.5">
-                            <span className={`font-bold ${isStudentPaid ? "text-green-600" : "text-gray-400"}`}>
-                              {isStudentPaid ? formatCurrency(p.amount) : "—"}
+                            <span className={`font-bold ${isStudentPaid || isRefundPendingRow || isRefundedRow ? "text-green-600" : "text-gray-400"}`}>
+                              {isStudentPaid || isRefundPendingRow || isRefundedRow ? formatCurrency(p.amount) : "—"}
                             </span>
                           </td>
                           <td className="px-3.5 py-2.5 text-gray-500 whitespace-nowrap">{p.paidDate}</td>
                           <td className="px-3.5 py-2.5">
-                            {isStudentPaid && p.transferredToBudget ? (
+                            {isRefundPendingRow ? (
+                              <span className="px-2 py-0.5 text-[11px] rounded-full font-bold bg-purple-100 text-purple-700 inline-flex items-center gap-1">
+                                <Banknote className="w-2.5 h-2.5" /> Refund Pending
+                              </span>
+                            ) : isRefundedRow ? (
+                              <span className="px-2 py-0.5 text-[11px] rounded-full font-bold bg-purple-50 text-purple-600 border border-purple-200 inline-flex items-center gap-1">
+                                <CheckCircle className="w-2.5 h-2.5" /> Refunded
+                              </span>
+                            ) : isStudentPaid && p.transferredToBudget ? (
                               <span className="px-2 py-0.5 text-[11px] rounded-full font-bold bg-blue-100 text-blue-700 inline-flex items-center gap-1">
                                 <CheckCircle className="w-2.5 h-2.5" /> Transferred {p.transferredAt ? `(${p.transferredAt})` : ''}
                               </span>
@@ -964,7 +1000,50 @@ function CollectionDetailModal({
                           </td>
                           {isCustomOrAdmin && (
                             <td className="px-3.5 py-2.5 text-right whitespace-nowrap">
-                              {!isStudentPaid ? (
+                              {isRefundPendingRow ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    // Build a minimal PayableDocument from the collection payment item for the refund modal
+                                    setRefundPayable({
+                                      id: p.payableDocId || p.id,
+                                      studentId: p.studentId,
+                                      studentName: p.name,
+                                      studentSchoolId: p.studentId,
+                                      type: collection.type || 'event_fee',
+                                      label: collection.eventName,
+                                      description: collection.eventName,
+                                      organizationId: collection.organizationId || null,
+                                      organizationName: null,
+                                      semesterId: '',
+                                      eventId: collection.eventId || null,
+                                      assignedAmount: collection.payablePerStudent,
+                                      paidAmount: p.amount,
+                                      status: 'refund_pending',
+                                      dueDate: null,
+                                      refundDue: p.refundDue ?? p.amount,
+                                      transferredAmount: p.transferredAmount,
+                                      transferredToBudget: p.transferredToBudget,
+                                      paidAt: null,
+                                      recordedBy: null,
+                                      paymentMethod: p.paymentMethod || null,
+                                      createdBy: '',
+                                      createdAt: {} as any,
+                                      updatedAt: {} as any,
+                                    } as PayableDocument);
+                                  }}
+                                  className="px-2.5 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold text-[11px] inline-flex items-center gap-1 shadow-2xs cursor-pointer transition-colors"
+                                  title="Process refund disbursement for this student"
+                                >
+                                  <Banknote className="w-3 h-3" />
+                                  <span>Process Refund</span>
+                                </button>
+                              ) : isRefundedRow ? (
+                                <span className="text-[11px] font-semibold text-purple-600 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-md inline-flex items-center gap-1 select-none">
+                                  <CheckCircle className="w-3 h-3 text-purple-500" />
+                                  <span>Refunded</span>
+                                </span>
+                              ) : !isStudentPaid ? (
                                 <button
                                   type="button"
                                   onClick={() => setPaymentModalStudent(p)}
@@ -1025,7 +1104,12 @@ function CollectionDetailModal({
             Close
           </button>
           
-          {untransferredAmount > 0 ? (
+          {isCancelled ? (
+            <div className="flex-1 py-2.5 bg-purple-50 border border-purple-200 text-purple-700 rounded-xl text-sm font-bold text-center flex items-center justify-center gap-2 select-none">
+              <Banknote className="w-4 h-4" />
+              Transfer Disabled (Event Cancelled · {refundPending.length > 0 ? `${refundPending.length} Pending Refund` : 'Refund Mode'})
+            </div>
+          ) : untransferredAmount > 0 ? (
             <button
               onClick={() => { onTransfer(); onClose(); }}
               className="flex-1 py-2.5 bg-green-600 text-white rounded-xl text-sm font-bold hover:bg-green-700 transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-xs"
@@ -1059,6 +1143,16 @@ function CollectionDetailModal({
           payableTitle={collection.eventName}
           defaultAmount={collection.payablePerStudent}
           payableId={paymentModalStudent.id}
+        />
+      )}
+
+      {refundPayable && (
+        <ProcessRefundModal
+          payable={refundPayable}
+          onClose={() => setRefundPayable(null)}
+          actorId="admin_sao"
+          actorName="Admin SAO"
+          actorRole="admin"
         />
       )}
     </div>
@@ -1607,6 +1701,10 @@ export function BudgetFundSettings() {
   };
 
   const handleTransferCollection = async (collectionItem: StudentEventCollectionGroup) => {
+    if (collectionItem.isCancelled || collectionItem.payments.some((p) => p.status === 'Refund Pending' || p.status === 'Refunded')) {
+      toast.error("Transfer disabled: Funds from cancelled events must be refunded to students.");
+      return;
+    }
     try {
       const res = await transferCollectionGroupToLedger({
         collectionGroupId: collectionItem.id,
@@ -1637,8 +1735,7 @@ export function BudgetFundSettings() {
       {/* ── Header ── */}
       <div className="flex items-start justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-[#001A4D]">School Budget & Fund Management</h2>
-          <p className="text-gray-500 text-sm">
+          <p className="text-gray-500 text-sm font-medium">
             Finance &rsaquo; {tab === "ledger" ? "Budget Tracker" : "Student Collections"}
           </p>
         </div>
@@ -2307,7 +2404,12 @@ export function BudgetFundSettings() {
                             <span className="text-green-700 font-bold text-sm">{formatCurrency(totalCollected)}</span>
                           </td>
                           <td className="px-4 py-3">
-                            {untransferred > 0 && hasTransferred ? (
+                            {c.isCancelled || (c.payments || []).some((p) => p.status === 'Refund Pending' || p.status === 'Refunded') ? (
+                              <span className="inline-flex items-center gap-1 text-xs text-purple-800 bg-purple-100 border border-purple-200 px-2.5 py-0.5 rounded-full font-bold whitespace-nowrap">
+                                <Banknote className="w-3 h-3 text-purple-600" />
+                                Cancelled · Transfer Disabled
+                              </span>
+                            ) : untransferred > 0 && hasTransferred ? (
                               <span className="inline-flex items-center gap-1 text-xs text-amber-800 bg-amber-100 border border-amber-200 px-2.5 py-0.5 rounded-full font-bold whitespace-nowrap">
                                 <Clock className="w-3 h-3 text-amber-600" />
                                 Partially Transferred (+{formatCurrency(untransferred)} new)
@@ -2329,14 +2431,25 @@ export function BudgetFundSettings() {
                             )}
                           </td>
                           <td className="px-4 py-3 text-right">
-                            <button
-                              onClick={() => setViewCollectionId(c.id)}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#001A4D] hover:bg-[#0E4EBD] text-white text-xs rounded-lg font-semibold transition-colors whitespace-nowrap cursor-pointer shadow-2xs"
-                            >
-                              <Eye className="w-3.5 h-3.5" />
-                              View & Transfer
-                              <ChevronRight className="w-3 h-3" />
-                            </button>
+                            {c.isCancelled || (c.payments || []).some((p) => p.status === 'Refund Pending' || p.status === 'Refunded') ? (
+                              <button
+                                onClick={() => setViewCollectionId(c.id)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-800 hover:bg-purple-900 text-white text-xs rounded-lg font-semibold transition-colors whitespace-nowrap cursor-pointer shadow-2xs"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                                View & Refund
+                                <ChevronRight className="w-3 h-3" />
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => setViewCollectionId(c.id)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#001A4D] hover:bg-[#0E4EBD] text-white text-xs rounded-lg font-semibold transition-colors whitespace-nowrap cursor-pointer shadow-2xs"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                                View & Transfer
+                                <ChevronRight className="w-3 h-3" />
+                              </button>
+                            )}
                           </td>
                         </tr>
                       );

@@ -447,13 +447,20 @@ export default function StudentDetailModal({
                               </td>
                               <td className="px-5 py-3.5">
                                 <span className={`px-2.5 py-1 rounded-full text-xs font-semibold uppercase ${
+                                  p.status === 'waived' ? 'bg-gray-100 text-gray-700' :
+                                  p.status === 'refund_pending' ? 'bg-purple-100 text-purple-700' :
+                                  p.status === 'refunded' ? 'bg-blue-100 text-blue-700' :
                                   isPaid ? 'bg-green-100 text-green-700' :
                                   p.status === 'overdue' ? 'bg-red-100 text-red-700' :
-                                  p.status === 'waived' ? 'bg-gray-100 text-gray-600' :
                                   'bg-amber-100 text-amber-700'
                                 }`}>
-                                  {p.status}
+                                  {p.status === 'refund_pending' ? 'Refund Pending' : p.status}
                                 </span>
+                                {p.status === 'waived' && (
+                                  <div className="text-[10px] text-gray-500 italic mt-1 max-w-[200px]" title={p.waivedReason || 'Waived due to event cancellation'}>
+                                    {p.waivedReason || 'Event Cancelled — Any pending fine for this event has been waived.'}
+                                  </div>
+                                )}
                               </td>
                               <td className="px-5 py-3.5 text-xs text-gray-500">
                                 {p.paidAt ? (

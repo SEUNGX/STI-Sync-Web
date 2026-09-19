@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Sparkles,
   Users,
@@ -90,6 +91,17 @@ export function DevDataSeederModal({ isOpen, onClose }: DevDataSeederModalProps)
     if (!selectedEvent) return [];
     return students.filter((s) => isStudentEligibleForEvent(selectedEvent, s));
   }, [students, selectedEvent]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
@@ -249,9 +261,15 @@ export function DevDataSeederModal({ isOpen, onClose }: DevDataSeederModalProps)
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh] text-left animate-in fade-in zoom-in-95">
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh] text-left animate-in fade-in zoom-in-95"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="bg-gradient-to-r from-[#001A4D] via-[#0E4EBD] to-[#001A4D] px-6 py-4 flex items-center justify-between text-white flex-shrink-0">
           <div className="flex items-center gap-2.5">
@@ -875,6 +893,7 @@ export function DevDataSeederModal({ isOpen, onClose }: DevDataSeederModalProps)
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

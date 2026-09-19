@@ -213,11 +213,7 @@ export default function OfficerReportsPage() {
       {/* ── Page Header ── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
-            <BarChart3 className="w-6 h-6 text-[#0E4EBD]" />
-            <h2 className="text-2xl font-bold text-[#001A4D]">Organization Reports & Analytics</h2>
-          </div>
-          <p className="text-gray-500 text-sm mt-0.5">
+          <p className="text-gray-500 text-sm font-medium">
             Generate formal semestral reports, financial statements, and attendance records for SAO submission.
           </p>
         </div>

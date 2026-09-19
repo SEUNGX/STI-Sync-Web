@@ -16,9 +16,10 @@ interface Step1Props {
   onUpdate: (data: Partial<EventFormData>) => void;
   isOfficer?: boolean;
   errors?: Record<string, string>;
+  isRestricted?: boolean;
 }
 
-export default function Step1EventDetails({ data, onUpdate, isOfficer, errors = {} }: Step1Props) {
+export default function Step1EventDetails({ data, onUpdate, isOfficer, errors = {}, isRestricted }: Step1Props) {
   const { profile: officerProfile } = useOfficerProfile();
   const { profile: adviserProfile } = useAdviserProfile();
 
@@ -70,12 +71,49 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer, errors = 
   // Active Orgs, Types, Categories
   const activeOrgs = orgs.filter(o => !o.archived);
   const activeTypes = eventTypes.filter(t => !t.archived);
-  
+
   // Filter categories based on selected event type
   const activeCategories = categories.filter(c => !c.archived && c.typeId === data.eventTypeId);
 
   const [objectiveInput, setObjectiveInput] = useState('');
   const [isUploadingBanner, setIsUploadingBanner] = useState(false);
+
+  const getNowDateTimeLocal = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  };
+
+  useEffect(() => {
+    if (data.isVisible === undefined) {
+      onUpdate({
+        isVisible: true,
+        visibleToStudents: true,
+        visibilityStart: data.visibilityStart || getNowDateTimeLocal(),
+      });
+    }
+  }, []);
+
+  const handleToggleVisibility = () => {
+    const nextVisible = data.isVisible === false;
+    if (nextVisible) {
+      onUpdate({
+        isVisible: true,
+        visibleToStudents: true,
+        visibilityStart: data.visibilityStart || getNowDateTimeLocal(),
+      });
+    } else {
+      onUpdate({
+        isVisible: false,
+        visibleToStudents: false,
+        visibilityStart: null,
+      });
+    }
+  };
 
   const updateField = (field: keyof EventFormData, value: any) => {
     const updates: any = { [field]: value };
@@ -315,9 +353,7 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer, errors = 
                   Institutional / SAS
                 </span>
               </div>
-              <p className="text-xs text-gray-500 mt-2.5 pt-2.5 border-t border-blue-200">
-                💡 <span className="font-medium text-gray-700">Scanner recruitment:</span> In Step 4 (Staff), you can select and recruit student officers as scanners from specific organizations or across all organizations.
-              </p>
+             
             </div>
           )}
         </div>
@@ -337,11 +373,10 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer, errors = 
                 placeholder="Enter event title..."
                 value={data.title || ''}
                 onChange={(e) => updateField('title', e.target.value)}
-                className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:border-transparent transition-colors ${
-                  errors.title
+                className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:border-transparent transition-colors ${errors.title
                     ? 'border-red-500 ring-2 ring-red-200 focus:ring-red-500'
                     : `border-gray-300 ${accentFocusRing}`
-                }`}
+                  }`}
               />
               {errors.title && (
                 <p className="text-xs text-red-600 mt-1.5 font-medium flex items-center gap-1.5">
@@ -368,29 +403,34 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer, errors = 
 
         {/* Section D — Classification */}
         <div>
-          <div className={`border-l-4 ${accentBorder} pl-3 mb-4`}>
+          <div className={`border-l-4 ${accentBorder} pl-3 mb-4 flex items-center justify-between`}>
             <h3 className="text-[#001A4D] font-bold text-base">Classification</h3>
+            {isRestricted && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-md">
+                <Lock className="w-3 h-3 text-amber-600" /> Locked upon Approval
+              </span>
+            )}
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Event Type <span className="text-red-500">*</span>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center gap-1.5">
+                <span>Event Type <span className="text-red-500">*</span></span>
+                {isRestricted && <Lock className="w-3.5 h-3.5 text-amber-600" />}
               </label>
               <select
                 value={data.customEventTypeName ? '__other__' : (data.eventTypeId || '')}
                 onChange={(e) => handleEventTypeChange(e.target.value)}
-                disabled={typesLoading}
-                className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:border-transparent disabled:opacity-50 transition-colors ${
-                  errors.eventTypeId
+                disabled={typesLoading || isRestricted}
+                className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:border-transparent disabled:opacity-60 disabled:bg-gray-100 transition-colors ${errors.eventTypeId
                     ? 'border-red-500 ring-2 ring-red-200 focus:ring-red-500'
                     : `border-gray-300 ${accentFocusRing}`
-                }`}
+                  }`}
               >
                 <option value="">{typesLoading ? 'Loading types...' : 'Select type...'}</option>
                 {activeTypes.map(t => (
                   <option key={t.id} value={t.id}>{t.name}</option>
                 ))}
-                <option value="__other__">Other / Custom Event Type...</option>
+                {!isRestricted && <option value="__other__">Other / Custom Event Type...</option>}
               </select>
               {errors.eventTypeId && (
                 <p className="text-xs text-red-600 mt-1.5 font-medium flex items-center gap-1.5">
@@ -408,46 +448,48 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer, errors = 
                     />
                     <span>Custom Event Type: <strong>{data.customEventTypeName}</strong></span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCustomTypeName(data.customEventTypeName || '');
-                      setCustomTypeColor(data.customEventTypeColor || '#1E70E8');
-                      setShowCustomTypeModal(true);
-                    }}
-                    className="text-[#0E4EBD] hover:underline font-bold text-xs cursor-pointer"
-                  >
-                    Edit
-                  </button>
+                  {!isRestricted && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCustomTypeName(data.customEventTypeName || '');
+                        setCustomTypeColor(data.customEventTypeColor || '#1E70E8');
+                        setShowCustomTypeModal(true);
+                      }}
+                      className="text-[#0E4EBD] hover:underline font-bold text-xs cursor-pointer"
+                    >
+                      Edit
+                    </button>
+                  )}
                 </div>
               )}
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Category <span className="text-red-500">*</span>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center gap-1.5">
+                <span>Category <span className="text-red-500">*</span></span>
+                {isRestricted && <Lock className="w-3.5 h-3.5 text-amber-600" />}
               </label>
               <select
                 value={data.customEventCategoryName ? '__other__' : (data.eventCategoryId || '')}
                 onChange={(e) => handleEventCategoryChange(e.target.value)}
-                disabled={(!data.eventTypeId && !data.customEventTypeName) || categoriesLoading}
-                className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:border-transparent disabled:opacity-50 transition-colors ${
-                  errors.eventCategoryId
+                disabled={(!data.eventTypeId && !data.customEventTypeName) || categoriesLoading || isRestricted}
+                className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:border-transparent disabled:opacity-60 disabled:bg-gray-100 transition-colors ${errors.eventCategoryId
                     ? 'border-red-500 ring-2 ring-red-200 focus:ring-red-500'
                     : `border-gray-300 ${accentFocusRing}`
-                }`}
+                  }`}
               >
                 <option value="">
                   {!data.eventTypeId && !data.customEventTypeName
                     ? 'Select a type first'
                     : categoriesLoading
-                    ? 'Loading...'
-                    : 'Select category...'}
+                      ? 'Loading...'
+                      : 'Select category...'}
                 </option>
                 {activeCategories.map(c => (
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
-                <option value="__other__">Other / Custom Category...</option>
+                {!isRestricted && <option value="__other__">Other / Custom Category...</option>}
               </select>
               {errors.eventCategoryId && (
                 <p className="text-xs text-red-600 mt-1.5 font-medium flex items-center gap-1.5">
@@ -462,16 +504,18 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer, errors = 
                     <Layers className="w-3.5 h-3.5 text-[#0E4EBD]" />
                     <span>Custom Category: <strong>{data.customEventCategoryName}</strong></span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCustomCategoryName(data.customEventCategoryName || '');
-                      setShowCustomCategoryModal(true);
-                    }}
-                    className="text-[#0E4EBD] hover:underline font-bold text-xs cursor-pointer"
-                  >
-                    Edit
-                  </button>
+                  {!isRestricted && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCustomCategoryName(data.customEventCategoryName || '');
+                        setShowCustomCategoryModal(true);
+                      }}
+                      className="text-[#0E4EBD] hover:underline font-bold text-xs cursor-pointer"
+                    >
+                      Edit
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -480,26 +524,33 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer, errors = 
 
         {/* Section E — Event Settings */}
         <div>
-          <div className={`border-l-4 ${accentBorder} pl-3 mb-4`}>
+          <div className={`border-l-4 ${accentBorder} pl-3 mb-4 flex items-center justify-between`}>
             <h3 className="text-[#001A4D] font-bold text-base">Event Settings</h3>
+            {isRestricted && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-md">
+                <Lock className="w-3 h-3 text-amber-600" /> Locked upon Approval
+              </span>
+            )}
           </div>
           <div className="space-y-3">
             {[
               { key: 'enableQRTickets', label: 'Enable QR Tickets', desc: 'Generate scannable QR code tickets & attendance scanner option', admin: false },
             ].map((setting) => {
-              const isQRActive = data.enableQRTickets === true || (data as any).enableQR === true;
+              const isQRActive = data.enableQRTickets !== false && (data as any).enableQR !== false;
               return (
                 <div key={setting.key} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-gray-900">{setting.label}</span>
+                      {isRestricted && <Lock className="w-3.5 h-3.5 text-amber-600" />}
                     </div>
                     <p className="text-sm text-gray-600">{setting.desc}</p>
                   </div>
                   <button
                     type="button"
+                    disabled={isRestricted}
                     onClick={() => updateField('enableQRTickets' as keyof EventFormData, !isQRActive)}
-                    className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ml-4 cursor-pointer ${isQRActive ? accentBg : 'bg-gray-300'}`}
+                    className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ml-4 ${isRestricted ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'} ${isQRActive ? accentBg : 'bg-gray-300'}`}
                   >
                     <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${isQRActive ? 'translate-x-6' : ''}`} />
                   </button>
@@ -519,17 +570,16 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer, errors = 
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Event Banner Image <span className="text-red-500">*</span>
               </label>
-              <div className={`relative border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer overflow-hidden group ${
-                errors.bannerImageUrl
+              <div className={`relative border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer overflow-hidden group ${errors.bannerImageUrl
                   ? 'border-red-500 bg-red-50/40 ring-2 ring-red-200'
                   : `border-gray-300 hover:${accentBorder}`
-              }`}>
-                <input 
-                  type="file" 
-                  accept="image/png, image/jpeg" 
-                  onChange={handleBannerUpload} 
+                }`}>
+                <input
+                  type="file"
+                  accept="image/png, image/jpeg"
+                  onChange={handleBannerUpload}
                   disabled={isUploadingBanner}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed z-10" 
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed z-10"
                 />
                 {data.bannerImageUrl ? (
                   <div className="absolute inset-0">
@@ -573,7 +623,7 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer, errors = 
               </div>
               <button
                 type="button"
-                onClick={() => updateField('isVisible', data.isVisible === undefined ? false : !data.isVisible)}
+                onClick={handleToggleVisibility}
                 className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ml-4 cursor-pointer ${(data.isVisible !== false) ? accentBg : 'bg-gray-300'}`}
               >
                 <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${(data.isVisible !== false) ? 'translate-x-6' : ''}`} />
@@ -587,14 +637,20 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer, errors = 
                 </label>
                 <input
                   type="datetime-local"
-                  min={new Date().toISOString().slice(0, 16)}
-                  value={data.visibilityStart || ''}
-                  onChange={(e) => updateField('visibilityStart', e.target.value)}
-                  className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:border-transparent transition-colors ${
-                    errors.visibilityStart
+                  min={getNowDateTimeLocal()}
+                  value={data.visibilityStart || getNowDateTimeLocal()}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    onUpdate({
+                      visibilityStart: val,
+                      isVisible: true,
+                      visibleToStudents: true,
+                    });
+                  }}
+                  className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:border-transparent transition-colors ${errors.visibilityStart
                       ? 'border-red-500 ring-2 ring-red-200 focus:ring-red-500'
                       : `border-gray-300 ${accentFocusRing}`
-                  }`}
+                    }`}
                 />
                 {errors.visibilityStart ? (
                   <p className="text-xs text-red-600 mt-1.5 font-medium flex items-center gap-1.5">
@@ -602,7 +658,7 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer, errors = 
                     <span>{errors.visibilityStart}</span>
                   </p>
                 ) : (
-                  <p className="text-xs text-gray-500 mt-1">If blank, it becomes visible immediately upon publishing.</p>
+                  <p className="text-xs text-gray-500 mt-1">Defaulted to today. Students will see this event starting from this date and time.</p>
                 )}
               </div>
             )}
@@ -637,8 +693,8 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer, errors = 
                   backgroundColor: data.customEventTypeColor
                     ? `${data.customEventTypeColor}20`
                     : selectedType?.color
-                    ? `${selectedType.color}20`
-                    : '#EFF6FF',
+                      ? `${selectedType.color}20`
+                      : '#EFF6FF',
                   color: data.customEventTypeColor || selectedType?.color || '#1E70E8',
                 }}
               >
@@ -700,9 +756,8 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer, errors = 
                       type="button"
                       key={c}
                       onClick={() => setCustomTypeColor(c)}
-                      className={`w-7 h-7 rounded-full transition-transform cursor-pointer flex items-center justify-center ${
-                        customTypeColor === c ? 'scale-110 ring-2 ring-offset-2 ring-gray-400' : 'hover:scale-105'
-                      }`}
+                      className={`w-7 h-7 rounded-full transition-transform cursor-pointer flex items-center justify-center ${customTypeColor === c ? 'scale-110 ring-2 ring-offset-2 ring-gray-400' : 'hover:scale-105'
+                        }`}
                       style={{ backgroundColor: c }}
                     >
                       {customTypeColor === c && <Check className="w-3.5 h-3.5 text-white" />}

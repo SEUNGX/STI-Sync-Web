@@ -7,7 +7,14 @@ export type PayableType =
   | 'admin_fine'
   | 'custom';
 
-export type PayableStatus = 'pending' | 'partial' | 'paid' | 'overdue' | 'waived';
+export type PayableStatus = 
+  | 'pending' 
+  | 'partial' 
+  | 'paid' 
+  | 'overdue' 
+  | 'waived'
+  | 'refund_pending'
+  | 'refunded';
 
 export interface PayableDocument {
   id: string;
@@ -33,6 +40,19 @@ export interface PayableDocument {
   paidAmount: number;
   status: PayableStatus;
   dueDate: Timestamp | null;
+
+  // ─── Waiver & Refund Metadata ───
+  waivedAt?: Timestamp | null;
+  waivedReason?: string | null;
+  waivedBy?: string | null;
+  waivedByName?: string | null;
+  refundDue?: number;                      // Amount to be refunded if event was cancelled after payment
+  refundedAmount?: number;
+  refundedAt?: Timestamp | null;
+  refundedBy?: string | null;
+  refundedByName?: string | null;
+  refundMethod?: string | null;            // e.g. 'cash', 'credit_next_event'
+  refundNotes?: string | null;
 
   // ─── Payment Record & QR Access Control ───
   paidAt: Timestamp | null;
@@ -109,7 +129,7 @@ export interface CollectionPaymentItem {
   studentId: string;
   amount: number;
   paidDate: string;
-  status: "Paid" | "Pending";
+  status: "Paid" | "Pending" | "Refund Pending" | "Refunded";
   transferredAmount?: number;
   untransferredAmount?: number;
   transferredToBudget?: boolean;
@@ -118,6 +138,10 @@ export interface CollectionPaymentItem {
   paymentMethod?: string;
   fineViolations?: FineViolationDetail[];
   description?: string;
+  /** Original payable document ID for refund processing */
+  payableDocId?: string;
+  refundDue?: number;
+  isCancelled?: boolean;
 }
 
 export interface StudentEventCollectionGroup {
@@ -136,6 +160,7 @@ export interface StudentEventCollectionGroup {
   transferredToBudget: boolean;
   transferredDate?: string;
   payments: CollectionPaymentItem[];
+  isCancelled?: boolean;
 }
 
 export interface CreatePayablePayload {
@@ -191,4 +216,14 @@ export interface FineRuleDocument {
   isActive: boolean;
   createdAt: Timestamp;
   updatedAt: Timestamp;
+}
+
+export interface ProcessRefundPayload {
+  payableId: string;
+  refundedAmount: number;
+  refundedBy: string;
+  refundedByName?: string;
+  refundMethod?: 'cash' | 'credit_next_event' | string;
+  receiptNumber?: string;
+  refundNotes?: string;
 }

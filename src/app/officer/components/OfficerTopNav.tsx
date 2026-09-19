@@ -34,7 +34,7 @@ export function OfficerTopNav({ title }: OfficerTopNavProps) {
   };
 
   return (
-    <div className="h-14 bg-white border-b border-[#E0E0E0] flex items-center justify-between px-6">
+    <div className="h-14 bg-white/95 backdrop-blur-md border-b border-[#E0E0E0] flex items-center justify-between px-6 sticky top-0 z-30">
       {/* Page Title */}
       <h1 className="text-lg font-bold text-[#001A4D]">{title}</h1>
 

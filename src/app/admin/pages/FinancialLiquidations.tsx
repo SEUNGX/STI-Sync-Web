@@ -279,8 +279,7 @@ export function FinancialLiquidations() {
       {/* ── Header ── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-[#001A4D] tracking-tight">Financial Liquidations</h1>
-          <p className="text-gray-500 text-sm mt-0.5">
+          <p className="text-gray-500 text-sm font-medium">
             Review and process liquidation reports from student organizations
           </p>
         </div>

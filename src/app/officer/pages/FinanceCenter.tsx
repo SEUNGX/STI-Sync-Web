@@ -6,6 +6,7 @@ import { addOrgLedgerTransaction } from '../../modules/finance/services/finance.
 import { useSemesters } from '../../modules/academic/hooks/useAcademicStream';
 import { useOrgPayables, useOrgCollectionsStream } from '../../modules/finance/hooks/usePayableStream';
 import { transferCollectionGroupToLedger } from '../../modules/finance/services/payable.service';
+import { ProcessRefundModal } from '../../modules/finance/components/ProcessRefundModal';
 import { useOfficerProfile } from '../../auth/hooks/useOfficerProfile';
 import { useOrganizationStream } from '../../modules/organizations/hooks/useOrganizationStream';
 import { useOrgMembers } from '../../modules/organizations/hooks/useOrgMembers';
@@ -42,6 +43,9 @@ import {
   ArrowRight,
   ArrowDownLeft,
   ArrowUpRight,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
   Shield,
   RefreshCw,
   Info,
@@ -58,6 +62,7 @@ import {
   Trash2,
   Loader2,
   Layers,
+  Banknote,
 } from "lucide-react";
 
 type FinanceTab = "budget" | "collections";
@@ -882,26 +887,120 @@ function OrgCollectionDetailModal({
   isPast,
   onClose,
   onTransfer,
+  officerStudentId,
+  officerName,
+  organizationId,
+  organizationName,
 }: {
   collection: StudentEventCollectionGroup;
   isPast: boolean;
   onClose: () => void;
   onTransfer: () => void;
+  officerStudentId: string;
+  officerName?: string;
+  organizationId: string;
+  organizationName?: string;
 }) {
+  const [modalSearch, setModalSearch] = useState("");
+  const [modalStatusFilter, setModalStatusFilter] = useState("all");
+  const [modalSortField, setModalSortField] = useState<"name" | "studentId" | "amount" | "status">("name");
+  const [modalSortDir, setModalSortDir] = useState<"asc" | "desc">("asc");
+  const [modalPage, setModalPage] = useState(1);
+  const [refundPayable, setRefundPayable] = useState<PayableDocument | null>(null);
+
+  const MODAL_PER_PAGE = 8;
+
   const paid = collection.payments.filter((p) => p.status === "Paid");
   const pending = collection.payments.filter((p) => p.status === "Pending");
+  const refundPending = collection.payments.filter((p) => p.status === "Refund Pending");
+  const refunded = collection.payments.filter((p) => p.status === "Refunded");
+
   const totalCollected = paid.reduce((s, p) => s + p.amount, 0);
+  const refundPendingAmount = refundPending.reduce((s, p) => s + (p.refundDue ?? p.amount), 0);
+  const refundedAmount = refunded.reduce((s, p) => s + (p.refundDue ?? p.amount), 0);
 
   const alreadyTransferred = paid.filter((p) => p.transferredToBudget);
-  const alreadyTransferredAmount = collection.payments.reduce((s, p) => s + (p.transferredAmount !== undefined ? p.transferredAmount : (p.transferredToBudget ? p.amount : 0)), 0);
+  const alreadyTransferredAmount = collection.payments.reduce(
+    (s, p) => s + (p.transferredAmount !== undefined ? p.transferredAmount : (p.transferredToBudget ? p.amount : 0)),
+    0
+  );
 
   const untransferred = paid.filter((p) => !p.transferredToBudget);
-  const untransferredAmount = collection.payments.reduce((s, p) => s + (p.untransferredAmount !== undefined ? p.untransferredAmount : (p.status === 'Paid' && !p.transferredToBudget ? p.amount : 0)), 0);
+  const untransferredAmount = collection.payments.reduce(
+    (s, p) => s + (p.untransferredAmount !== undefined ? p.untransferredAmount : (p.status === "Paid" && !p.transferredToBudget ? p.amount : 0)),
+    0
+  );
+
+  const isCancelled = Boolean(
+    collection.isCancelled ||
+    refundPending.length > 0 ||
+    refunded.length > 0 ||
+    collection.payments.some((p) => p.status === "Refund Pending" || p.status === "Refunded")
+  );
+
+  const handleSort = (field: "name" | "studentId" | "amount" | "status") => {
+    if (modalSortField === field) {
+      setModalSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setModalSortField(field);
+      setModalSortDir("asc");
+    }
+  };
+
+  const filteredAndSortedPayments = useMemo(() => {
+    return collection.payments
+      .filter((p) => {
+        const q = modalSearch.toLowerCase().trim();
+        const matchesSearch =
+          !q ||
+          (p.name || "").toLowerCase().includes(q) ||
+          (p.studentId || "").toLowerCase().includes(q);
+
+        let matchesStatus = true;
+        if (modalStatusFilter === "paid") matchesStatus = p.status === "Paid";
+        else if (modalStatusFilter === "pending") matchesStatus = p.status === "Pending";
+        else if (modalStatusFilter === "refund_pending") matchesStatus = p.status === "Refund Pending";
+        else if (modalStatusFilter === "refunded") matchesStatus = p.status === "Refunded";
+
+        return matchesSearch && matchesStatus;
+      })
+      .sort((a, b) => {
+        let valA: any = "";
+        let valB: any = "";
+        if (modalSortField === "name") {
+          valA = (a.name || "").toLowerCase();
+          valB = (b.name || "").toLowerCase();
+        } else if (modalSortField === "studentId") {
+          valA = (a.studentId || "").toLowerCase();
+          valB = (b.studentId || "").toLowerCase();
+        } else if (modalSortField === "amount") {
+          valA = a.amount;
+          valB = b.amount;
+        } else if (modalSortField === "status") {
+          valA = a.status;
+          valB = b.status;
+        }
+        if (valA < valB) return modalSortDir === "asc" ? -1 : 1;
+        if (valA > valB) return modalSortDir === "asc" ? 1 : -1;
+        return 0;
+      });
+  }, [collection.payments, modalSearch, modalStatusFilter, modalSortField, modalSortDir]);
+
+  const totalModalPages = Math.max(1, Math.ceil(filteredAndSortedPayments.length / MODAL_PER_PAGE));
+  const paginatedPayments = useMemo(() => {
+    const start = (modalPage - 1) * MODAL_PER_PAGE;
+    return filteredAndSortedPayments.slice(start, start + MODAL_PER_PAGE);
+  }, [filteredAndSortedPayments, modalPage]);
+
+  // Reset page when filter/search changes
+  useEffect(() => {
+    setModalPage(1);
+  }, [modalSearch, modalStatusFilter]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/55 backdrop-blur-xs" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-[680px] max-h-[90vh] flex flex-col overflow-hidden">
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-[720px] max-h-[90vh] flex flex-col overflow-hidden">
         <div className="bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] px-6 py-4 flex items-center justify-between flex-shrink-0">
           <div>
             <div className="flex items-center gap-2">
@@ -910,7 +1009,7 @@ function OrgCollectionDetailModal({
                 {collection.type?.replace('_', ' ') || 'Collection'}
               </span>
             </div>
-            <p className="text-blue-200 text-xs mt-0.5">Collection Breakdown & Treasury Transfer</p>
+            <p className="text-blue-200 text-xs mt-0.5">Collection Breakdown, Refunds & Treasury Transfer</p>
           </div>
           <button onClick={onClose} className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10 cursor-pointer">
             <X className="w-5 h-5" />
@@ -918,6 +1017,16 @@ function OrgCollectionDetailModal({
         </div>
 
         <div className="p-5 space-y-4 overflow-y-auto flex-1 bg-slate-50/50">
+          {/* Refund Notice Banner if refunds exist */}
+          {refundPending.length > 0 && (
+            <div className="flex items-start gap-2.5 p-3.5 bg-purple-50 border border-purple-200 rounded-xl">
+              <Banknote className="w-4 h-4 text-purple-600 flex-shrink-0 mt-0.5" />
+              <div className="text-xs text-purple-900 leading-relaxed">
+                <strong>Refund Disbursement Mode:</strong> This event has <strong>{refundPending.length} student(s)</strong> with pending refunds ({formatCurrency(refundPendingAmount)}). Click the <strong>"Process Refund"</strong> button next to each student below to record their cash refund.
+              </div>
+            </div>
+          )}
+
           {/* Summary KPIs */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="bg-white border border-gray-200 rounded-xl p-3 text-center">
@@ -930,11 +1039,19 @@ function OrgCollectionDetailModal({
               <p className="text-base font-bold text-green-700 mt-0.5">{formatCurrency(totalCollected)}</p>
               <p className="text-[10px] text-gray-400">{paid.length} paid</p>
             </div>
-            <div className="bg-white border border-blue-200 rounded-xl p-3 text-center bg-blue-50/30">
-              <p className="text-xs text-blue-700">In Club Treasury</p>
-              <p className="text-base font-bold text-blue-700 mt-0.5">{formatCurrency(alreadyTransferredAmount)}</p>
-              <p className="text-[10px] text-blue-600">{alreadyTransferred.length} transferred</p>
-            </div>
+            {refundPending.length > 0 ? (
+              <div className="bg-white border border-purple-200 rounded-xl p-3 text-center bg-purple-50/30">
+                <p className="text-xs text-purple-700">Refund Pending</p>
+                <p className="text-base font-bold text-purple-700 mt-0.5">{formatCurrency(refundPendingAmount)}</p>
+                <p className="text-[10px] text-purple-600">{refundPending.length} students</p>
+              </div>
+            ) : (
+              <div className="bg-white border border-blue-200 rounded-xl p-3 text-center bg-blue-50/30">
+                <p className="text-xs text-blue-700">In Club Treasury</p>
+                <p className="text-base font-bold text-blue-700 mt-0.5">{formatCurrency(alreadyTransferredAmount)}</p>
+                <p className="text-[10px] text-blue-600">{alreadyTransferred.length} transferred</p>
+              </div>
+            )}
             <div className="bg-white border border-amber-200 rounded-xl p-3 text-center bg-amber-50/40">
               <p className="text-xs text-amber-800">Ready to Transfer</p>
               <p className="text-base font-bold text-amber-700 mt-0.5">{formatCurrency(untransferredAmount)}</p>
@@ -942,14 +1059,50 @@ function OrgCollectionDetailModal({
             </div>
           </div>
 
+          {/* Search & Status Filter Bar */}
+          <div className="flex flex-col sm:flex-row items-center gap-2.5">
+            <div className="relative flex-1 w-full">
+              <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Search student name or 11-digit ID..."
+                value={modalSearch}
+                onChange={(e) => setModalSearch(e.target.value)}
+                className="w-full pl-8.5 pr-3 py-1.5 border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-[#0E4EBD] outline-none bg-white"
+              />
+            </div>
+            <select
+              value={modalStatusFilter}
+              onChange={(e) => setModalStatusFilter(e.target.value)}
+              className="px-2.5 py-1.5 border border-gray-300 rounded-lg text-xs outline-none bg-white cursor-pointer w-full sm:w-auto"
+            >
+              <option value="all">All Status ({collection.payments.length})</option>
+              <option value="paid">Paid ({paid.length})</option>
+              {refundPending.length > 0 && (
+                <option value="refund_pending">Refund Pending ({refundPending.length})</option>
+              )}
+              {refunded.length > 0 && (
+                <option value="refunded">Refunded ({refunded.length})</option>
+              )}
+              <option value="pending">Pending ({pending.length})</option>
+            </select>
+          </div>
+
           {/* Roster Table */}
           <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-xs">
             <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
               <p className="text-[#001A4D] text-xs font-bold uppercase tracking-wide">Student Payment Records</p>
-              <div className="flex gap-2">
-                <span className="flex items-center gap-1 text-xs text-green-700 font-medium bg-green-50 px-2 py-0.5 rounded-full border border-green-200">
-                  <CheckCircle className="w-3 h-3" />{paid.length} Paid
-                </span>
+              <div className="flex gap-2 flex-wrap">
+                {paid.length > 0 && (
+                  <span className="flex items-center gap-1 text-xs text-green-700 font-medium bg-green-50 px-2 py-0.5 rounded-full border border-green-200">
+                    <CheckCircle className="w-3 h-3" />{paid.length} Paid
+                  </span>
+                )}
+                {refundPending.length > 0 && (
+                  <span className="flex items-center gap-1 text-xs text-purple-700 font-medium bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200">
+                    <Banknote className="w-3 h-3" />{refundPending.length} Refund Due
+                  </span>
+                )}
                 {pending.length > 0 && (
                   <span className="flex items-center gap-1 text-xs text-amber-700 font-medium bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
                     <Clock className="w-3 h-3" />{pending.length} Pending
@@ -961,47 +1114,172 @@ function OrgCollectionDetailModal({
               <table className="w-full text-left">
                 <thead className="bg-gray-50 sticky top-0 border-b border-gray-200 text-[11px] font-bold text-gray-500 uppercase tracking-wide">
                   <tr>
-                    <th className="px-3.5 py-2">Student</th>
-                    <th className="px-3.5 py-2">Student ID</th>
-                    <th className="px-3.5 py-2">Amount</th>
-                    <th className="px-3.5 py-2">Transfer State</th>
+                    <th onClick={() => handleSort("name")} className="px-3.5 py-2 cursor-pointer hover:bg-gray-100 transition-colors">
+                      <div className="flex items-center gap-1">
+                        <span>Student</span>
+                        {modalSortField === "name" ? (
+                          modalSortDir === "asc" ? <ArrowUp className="w-3 h-3 text-[#0E4EBD]" /> : <ArrowDown className="w-3 h-3 text-[#0E4EBD]" />
+                        ) : (
+                          <ArrowUpDown className="w-3 h-3 text-gray-300" />
+                        )}
+                      </div>
+                    </th>
+                    <th onClick={() => handleSort("studentId")} className="px-3.5 py-2 cursor-pointer hover:bg-gray-100 transition-colors">
+                      <div className="flex items-center gap-1">
+                        <span>Student ID</span>
+                        {modalSortField === "studentId" ? (
+                          modalSortDir === "asc" ? <ArrowUp className="w-3 h-3 text-[#0E4EBD]" /> : <ArrowDown className="w-3 h-3 text-[#0E4EBD]" />
+                        ) : (
+                          <ArrowUpDown className="w-3 h-3 text-gray-300" />
+                        )}
+                      </div>
+                    </th>
+                    <th onClick={() => handleSort("amount")} className="px-3.5 py-2 cursor-pointer hover:bg-gray-100 transition-colors">
+                      <div className="flex items-center gap-1">
+                        <span>Amount</span>
+                        {modalSortField === "amount" ? (
+                          modalSortDir === "asc" ? <ArrowUp className="w-3 h-3 text-[#0E4EBD]" /> : <ArrowDown className="w-3 h-3 text-[#0E4EBD]" />
+                        ) : (
+                          <ArrowUpDown className="w-3 h-3 text-gray-300" />
+                        )}
+                      </div>
+                    </th>
+                    <th onClick={() => handleSort("status")} className="px-3.5 py-2 cursor-pointer hover:bg-gray-100 transition-colors">
+                      <div className="flex items-center gap-1">
+                        <span>Transfer / State</span>
+                        {modalSortField === "status" ? (
+                          modalSortDir === "asc" ? <ArrowUp className="w-3 h-3 text-[#0E4EBD]" /> : <ArrowDown className="w-3 h-3 text-[#0E4EBD]" />
+                        ) : (
+                          <ArrowUpDown className="w-3 h-3 text-gray-300" />
+                        )}
+                      </div>
+                    </th>
+                    <th className="px-3.5 py-2 text-right whitespace-nowrap">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 text-xs">
-                  {collection.payments.map((p) => {
-                    const isStudentPaid = p.status === "Paid";
-                    return (
-                      <tr key={p.id} className={!isStudentPaid ? "bg-amber-50/30" : "hover:bg-gray-50"}>
-                        <td className="px-3.5 py-2.5 text-[#001A4D] font-medium">{p.name}</td>
-                        <td className="px-3.5 py-2.5 text-gray-500 font-mono">{p.studentId}</td>
-                        <td className="px-3.5 py-2.5 font-bold text-gray-700">
-                          {isStudentPaid ? formatCurrency(p.amount) : "—"}
-                        </td>
-                        <td className="px-3.5 py-2.5">
-                          {isStudentPaid && p.transferredToBudget ? (
-                            <span className="px-2 py-0.5 text-[11px] rounded-full font-bold bg-blue-100 text-blue-700 inline-flex items-center gap-1">
-                              <CheckCircle className="w-2.5 h-2.5" /> Transferred {p.transferredAt ? `(${p.transferredAt})` : ''}
-                            </span>
-                          ) : isStudentPaid && (p.transferredAmount || 0) > 0 ? (
-                            <span className="px-2 py-0.5 text-[11px] rounded-full font-bold bg-indigo-100 text-indigo-700 inline-flex items-center gap-1">
-                              <Clock className="w-2.5 h-2.5" /> Partially Transferred (+{formatCurrency(p.untransferredAmount || 0)} new)
-                            </span>
-                          ) : isStudentPaid ? (
-                            <span className="px-2 py-0.5 text-[11px] rounded-full font-bold bg-green-100 text-green-700 inline-flex items-center gap-1">
-                              <Clock className="w-2.5 h-2.5" /> Newly Paid · Ready to Transfer
-                            </span>
-                          ) : (
-                            <span className="px-2 py-0.5 text-[11px] rounded-full font-medium bg-amber-100 text-amber-700">
-                              Pending Payment
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {paginatedPayments.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-4 py-8 text-center text-gray-400">
+                        No student payment records found matching your filters.
+                      </td>
+                    </tr>
+                  ) : (
+                    paginatedPayments.map((p) => {
+                      const isStudentPaid = p.status === "Paid";
+                      const isRefundPendingRow = p.status === "Refund Pending";
+                      const isRefundedRow = p.status === "Refunded";
+                      const rowBg = isRefundPendingRow
+                        ? "bg-purple-50/30 hover:bg-purple-50/50"
+                        : isRefundedRow
+                          ? "bg-purple-50/10 hover:bg-purple-50/20"
+                          : !isStudentPaid
+                            ? "bg-amber-50/30 hover:bg-amber-50/50"
+                            : "hover:bg-gray-50";
+
+                      return (
+                        <tr key={p.id} className={rowBg}>
+                          <td className="px-3.5 py-2.5 text-[#001A4D] font-medium">{p.name}</td>
+                          <td className="px-3.5 py-2.5 text-gray-500 font-mono">{p.studentId}</td>
+                          <td className="px-3.5 py-2.5 font-bold text-gray-700">
+                            {isStudentPaid || isRefundPendingRow || isRefundedRow ? formatCurrency(p.amount) : "—"}
+                          </td>
+                          <td className="px-3.5 py-2.5">
+                            {isRefundPendingRow ? (
+                              <span className="px-2 py-0.5 text-[11px] rounded-full font-bold bg-purple-100 text-purple-700 inline-flex items-center gap-1">
+                                <Banknote className="w-2.5 h-2.5" /> Refund Pending
+                              </span>
+                            ) : isRefundedRow ? (
+                              <span className="px-2 py-0.5 text-[11px] rounded-full font-bold bg-purple-50 text-purple-600 border border-purple-200 inline-flex items-center gap-1">
+                                <CheckCircle className="w-2.5 h-2.5" /> Refunded
+                              </span>
+                            ) : isStudentPaid && p.transferredToBudget ? (
+                              <span className="px-2 py-0.5 text-[11px] rounded-full font-bold bg-blue-100 text-blue-700 inline-flex items-center gap-1">
+                                <CheckCircle className="w-2.5 h-2.5" /> Transferred {p.transferredAt ? `(${p.transferredAt})` : ''}
+                              </span>
+                            ) : isStudentPaid && (p.transferredAmount || 0) > 0 ? (
+                              <span className="px-2 py-0.5 text-[11px] rounded-full font-bold bg-indigo-100 text-indigo-700 inline-flex items-center gap-1">
+                                <Clock className="w-2.5 h-2.5" /> Partially Transferred (+{formatCurrency(p.untransferredAmount || 0)} new)
+                              </span>
+                            ) : isStudentPaid ? (
+                              <span className="px-2 py-0.5 text-[11px] rounded-full font-bold bg-green-100 text-green-700 inline-flex items-center gap-1">
+                                <Clock className="w-2.5 h-2.5" /> Newly Paid · Ready to Transfer
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 text-[11px] rounded-full font-medium bg-amber-100 text-amber-700">
+                                Pending Payment
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-3.5 py-2.5 text-right whitespace-nowrap">
+                            {isRefundPendingRow ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setRefundPayable({
+                                    id: p.payableDocId || p.id,
+                                    studentId: p.studentId,
+                                    studentName: p.name,
+                                    studentSchoolId: p.studentId,
+                                    type: collection.type || 'event_fee',
+                                    label: collection.eventName,
+                                    description: collection.eventName,
+                                    organizationId: collection.organizationId || organizationId,
+                                    organizationName: organizationName || null,
+                                    semesterId: '',
+                                    eventId: collection.eventId || null,
+                                    assignedAmount: collection.payablePerStudent,
+                                    paidAmount: p.amount,
+                                    status: 'refund_pending',
+                                    dueDate: null,
+                                    refundDue: p.refundDue ?? p.amount,
+                                    transferredAmount: p.transferredAmount,
+                                    transferredToBudget: p.transferredToBudget,
+                                    paidAt: null,
+                                    recordedBy: null,
+                                    paymentMethod: p.paymentMethod || null,
+                                    createdBy: '',
+                                    createdAt: {} as any,
+                                    updatedAt: {} as any,
+                                  } as PayableDocument);
+                                }}
+                                className="px-2.5 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold text-[11px] inline-flex items-center gap-1 shadow-2xs cursor-pointer transition-colors"
+                                title="Process refund disbursement for this student"
+                              >
+                                <Banknote className="w-3 h-3" />
+                                <span>Process Refund</span>
+                              </button>
+                            ) : isRefundedRow ? (
+                              <span className="text-[11px] font-semibold text-purple-600 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-md inline-flex items-center gap-1 select-none">
+                                <CheckCircle className="w-3 h-3 text-purple-500" />
+                                <span>Refunded</span>
+                              </span>
+                            ) : isStudentPaid ? (
+                              <span className="text-[11px] font-semibold text-green-700 bg-green-50 border border-green-200 px-2 py-0.5 rounded-md inline-flex items-center gap-1 select-none">
+                                <CheckCircle className="w-3 h-3 text-green-600" />
+                                <span>Paid</span>
+                              </span>
+                            ) : (
+                              <span className="text-gray-400 text-xs select-none">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>
+
+            {/* Modal Pagination */}
+            <TablePagination
+              currentPage={modalPage}
+              totalPages={totalModalPages}
+              totalItems={filteredAndSortedPayments.length}
+              itemsPerPage={MODAL_PER_PAGE}
+              onPageChange={setModalPage}
+              itemName="records"
+            />
           </div>
 
           {untransferredAmount > 0 && alreadyTransferredAmount > 0 && (
@@ -1022,6 +1300,11 @@ function OrgCollectionDetailModal({
             <div className="flex-1 py-2.5 bg-amber-50 text-amber-700 rounded-xl text-sm font-medium text-center flex items-center justify-center gap-2 select-none">
               Read-Only Past Semester
             </div>
+          ) : isCancelled ? (
+            <div className="flex-1 py-2.5 bg-purple-50 border border-purple-200 text-purple-700 rounded-xl text-sm font-bold text-center flex items-center justify-center gap-2 select-none">
+              <Banknote className="w-4 h-4" />
+              Transfer Disabled (Event Cancelled · {refundPending.length > 0 ? `${refundPending.length} Pending Refund` : 'Refund Mode'})
+            </div>
           ) : untransferredAmount > 0 ? (
             <button
               onClick={() => { onTransfer(); onClose(); }}
@@ -1030,7 +1313,7 @@ function OrgCollectionDetailModal({
               <ArrowDownLeft className="w-4 h-4" />
               Transfer {formatCurrency(untransferredAmount)} to Club Treasury
             </button>
-) : totalCollected > 0 ? (
+          ) : totalCollected > 0 ? (
             <div className="flex-1 py-2.5 bg-blue-50 border border-blue-200 text-blue-700 rounded-xl text-sm font-bold text-center flex items-center justify-center gap-2 select-none">
               <CheckCircle className="w-4 h-4" />
               All Paid Collections Transferred ({formatCurrency(totalCollected)})
@@ -1042,6 +1325,18 @@ function OrgCollectionDetailModal({
           )}
         </div>
       </div>
+
+      {/* Embedded Process Refund Modal */}
+      {refundPayable && (
+        <ProcessRefundModal
+          payable={refundPayable}
+          onClose={() => setRefundPayable(null)}
+          actorId={officerStudentId}
+          actorName={officerName || 'Student Officer'}
+          actorRole="officer"
+          actorOrgId={organizationId}
+        />
+      )}
     </div>
   );
 }
@@ -1066,6 +1361,7 @@ function StudentCollectionsAndPayablesTab({
   const { data: rawCollections, loading: collectionsLoading } = useOrgCollectionsStream(organizationId, semesterId);
   const { members: orgMembers = [], loading: membersLoading } = useOrgMembers(organizationId);
   const { data: allStudents = [] } = useStudents();
+  const { profile: officerProfile } = useOfficerProfile();
   const [subView, setSubView] = useState<CollectionsSubView>("collections");
 
   // Modals
@@ -1073,6 +1369,7 @@ function StudentCollectionsAndPayablesTab({
   const [showGenerateDues, setShowGenerateDues] = useState(false);
   const [showAddPayable, setShowAddPayable] = useState(false);
   const [selectedPayableForPayment, setSelectedPayableForPayment] = useState<PayableDocument | null>(null);
+  const [selectedPayableForRefund, setSelectedPayableForRefund] = useState<PayableDocument | null>(null);
   const [isTransferring, setIsTransferring] = useState(false);
 
   // Filters
@@ -1235,7 +1532,11 @@ function StudentCollectionsAndPayablesTab({
       if (memberStatusFilter === "Paid") matchesStatus = memberPaid >= memberAssigned && memberAssigned > 0;
       else if (memberStatusFilter === "Partial") matchesStatus = memberPaid > 0 && memberPaid < memberAssigned;
       else if (memberStatusFilter === "Unpaid") matchesStatus = memberPaid === 0 && memberAssigned > 0;
-      else if (memberStatusFilter === "Overdue") {
+      else if (memberStatusFilter === "Refund Pending") {
+        matchesStatus = m.payables.some((p) => p.status === "refund_pending");
+      } else if (memberStatusFilter === "Refunded") {
+        matchesStatus = m.payables.some((p) => p.status === "refunded");
+      } else if (memberStatusFilter === "Overdue") {
         matchesStatus = m.payables.some(
           (p) => p.status === "overdue" || (p.dueDate?.toMillis && p.dueDate.toMillis() < now && p.status !== "paid")
         );
@@ -1253,6 +1554,10 @@ function StudentCollectionsAndPayablesTab({
 
   // Transfer collection to ledger
   const handleTransfer = async (item: StudentEventCollectionGroup) => {
+    if (item.isCancelled || item.payments.some((p) => p.status === 'Refund Pending' || p.status === 'Refunded')) {
+      toast.error("Transfer disabled: Funds from cancelled events must be refunded to students.");
+      return;
+    }
     setIsTransferring(true);
     try {
       const res = await transferCollectionGroupToLedger({
@@ -1520,7 +1825,12 @@ function StudentCollectionsAndPayablesTab({
                           <span className="text-green-700 font-bold text-sm">{formatCurrency(totalCol)}</span>
                         </td>
                         <td className="px-4 py-3">
-                          {untransferred > 0 && hasTransferred ? (
+                          {c.isCancelled || c.payments.some((p) => p.status === 'Refund Pending' || p.status === 'Refunded') ? (
+                            <span className="flex items-center gap-1 text-[11px] text-purple-800 bg-purple-100 border border-purple-200 px-2 py-0.5 rounded-full font-bold whitespace-nowrap">
+                              <Banknote className="w-3 h-3 text-purple-600" />
+                              Cancelled · Transfer Disabled
+                            </span>
+                          ) : untransferred > 0 && hasTransferred ? (
                             <span className="flex items-center gap-1 text-[11px] text-amber-800 bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-full font-bold whitespace-nowrap">
                               <Clock className="w-3 h-3 text-amber-600" />
                               Partially Transferred (+{formatCurrency(untransferred)} new)
@@ -1542,14 +1852,25 @@ function StudentCollectionsAndPayablesTab({
                           )}
                         </td>
                         <td className="px-4 py-3">
-                          <button
-                            onClick={() => setViewCollection(c)}
-                            className="flex items-center gap-1 px-3 py-1.5 bg-[#001A4D] hover:bg-[#0E4EBD] text-white text-xs rounded-lg font-bold transition-colors whitespace-nowrap cursor-pointer shadow-2xs"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                            View & Transfer
-                            <ChevronRight className="w-3 h-3" />
-                          </button>
+                          {c.isCancelled || c.payments.some((p) => p.status === 'Refund Pending' || p.status === 'Refunded') ? (
+                            <button
+                              onClick={() => setViewCollection(c)}
+                              className="flex items-center gap-1 px-3 py-1.5 bg-purple-800 hover:bg-purple-900 text-white text-xs rounded-lg font-bold transition-colors whitespace-nowrap cursor-pointer shadow-2xs"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              View & Refund
+                              <ChevronRight className="w-3 h-3" />
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => setViewCollection(c)}
+                              className="flex items-center gap-1 px-3 py-1.5 bg-[#001A4D] hover:bg-[#0E4EBD] text-white text-xs rounded-lg font-bold transition-colors whitespace-nowrap cursor-pointer shadow-2xs"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              View & Transfer
+                              <ChevronRight className="w-3 h-3" />
+                            </button>
+                          )}
                         </td>
                       </tr>
                     );
@@ -1594,6 +1915,8 @@ function StudentCollectionsAndPayablesTab({
               <option value="Paid">Fully Paid</option>
               <option value="Partial">Partial</option>
               <option value="Unpaid">Unpaid</option>
+              <option value="Refund Pending">Refund Pending</option>
+              <option value="Refunded">Refunded</option>
               <option value="Overdue">Overdue</option>
             </select>
           </div>
@@ -1634,10 +1957,19 @@ function StudentCollectionsAndPayablesTab({
                     const paid = m.payables.reduce((a, p) => a + (p.paidAmount || 0), 0);
                     const outstanding = assigned - paid;
 
+                    const hasRefundPending = m.payables.some((p) => p.status === 'refund_pending');
+                    const hasRefunded = m.payables.some((p) => p.status === 'refunded');
+
                     let statusText = "No Dues";
                     let statusColor = "bg-gray-100 text-gray-600";
 
-                    if (assigned > 0) {
+                    if (hasRefundPending) {
+                      statusText = "Refund Pending";
+                      statusColor = "bg-purple-100 text-purple-700 font-semibold";
+                    } else if (hasRefunded && assigned <= 0) {
+                      statusText = "Refunded";
+                      statusColor = "bg-purple-50 text-purple-600 font-semibold";
+                    } else if (assigned > 0) {
                       if (outstanding <= 0) {
                         statusText = "Paid";
                         statusColor = "bg-green-100 text-green-700 font-semibold";
@@ -1710,24 +2042,43 @@ function StudentCollectionsAndPayablesTab({
                         </td>
                         {!isPast && (
                           <td className="px-4 py-3">
-                            {outstanding > 0 ? (
-                              <button
-                                onClick={() => {
-                                  const pendingPayable = m.payables.find(
-                                    (p) => (p.assignedAmount || 0) > (p.paidAmount || 0)
-                                  );
-                                  if (pendingPayable) setSelectedPayableForPayment(pendingPayable);
-                                }}
-                                className="px-3 py-1 bg-green-600 text-white rounded-lg text-xs font-semibold hover:bg-green-700 transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
-                              >
-                                <CheckCircle className="w-3.5 h-3.5" />
-                                Record Payment
-                              </button>
-                            ) : assigned > 0 ? (
-                              <span className="text-xs text-green-600 font-medium">✓ Settled</span>
-                            ) : (
-                              <span className="text-xs text-gray-400">—</span>
-                            )}
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {hasRefundPending && (() => {
+                                const refundPayable = m.payables.find((p) => p.status === 'refund_pending');
+                                return refundPayable ? (
+                                  <button
+                                    onClick={() => setSelectedPayableForRefund(refundPayable)}
+                                    className="px-3 py-1 bg-purple-600 text-white rounded-lg text-xs font-semibold hover:bg-purple-700 transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
+                                  >
+                                    <Banknote className="w-3.5 h-3.5" />
+                                    Process Refund
+                                  </button>
+                                ) : null;
+                              })()}
+                              {hasRefunded && !hasRefundPending && (
+                                <span className="px-2 py-0.5 text-xs rounded-full font-medium bg-purple-50 text-purple-600 border border-purple-200 inline-flex items-center gap-1">
+                                  <CheckCircle className="w-3 h-3" /> Refunded
+                                </span>
+                              )}
+                              {outstanding > 0 && !hasRefundPending ? (
+                                <button
+                                  onClick={() => {
+                                    const pendingPayable = m.payables.find(
+                                      (p) => (p.assignedAmount || 0) > (p.paidAmount || 0) && p.status !== 'refund_pending' && p.status !== 'refunded' && p.status !== 'waived'
+                                    );
+                                    if (pendingPayable) setSelectedPayableForPayment(pendingPayable);
+                                  }}
+                                  className="px-3 py-1 bg-green-600 text-white rounded-lg text-xs font-semibold hover:bg-green-700 transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
+                                >
+                                  <CheckCircle className="w-3.5 h-3.5" />
+                                  Record Payment
+                                </button>
+                              ) : !hasRefundPending && !hasRefunded && assigned > 0 ? (
+                                <span className="text-xs text-green-600 font-medium">✓ Settled</span>
+                              ) : !hasRefundPending && !hasRefunded ? (
+                                <span className="text-xs text-gray-400">—</span>
+                              ) : null}
+                            </div>
                           </td>
                         )}
                       </tr>
@@ -1823,6 +2174,10 @@ function StudentCollectionsAndPayablesTab({
             handleTransfer(viewCollection);
             setViewCollection(null);
           }}
+          officerStudentId={officerStudentId}
+          officerName={officerProfile?.studentName || 'Student Officer'}
+          organizationId={organizationId}
+          organizationName={organizationName}
         />
       )}
 
@@ -1852,6 +2207,17 @@ function StudentCollectionsAndPayablesTab({
           onClose={() => setSelectedPayableForPayment(null)}
           payable={selectedPayableForPayment}
           recordedBy={officerStudentId}
+        />
+      )}
+
+      {selectedPayableForRefund && (
+        <ProcessRefundModal
+          payable={selectedPayableForRefund}
+          onClose={() => setSelectedPayableForRefund(null)}
+          actorId={officerStudentId}
+          actorName={officerProfile?.studentName || 'Student Officer'}
+          actorRole="officer"
+          actorOrgId={organizationId}
         />
       )}
     </div>
@@ -2041,8 +2407,7 @@ export default function FinanceCenter() {
       {/* Page Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-[#001A4D]">Finance Center</h2>
-          <p className="text-gray-500 text-sm">
+          <p className="text-gray-500 text-sm font-medium">
             Finance &rsaquo; {activeTab === "budget" ? "Budget Tracker" : "Student Collections & Payables"}
             {activeOrgName && <span className="font-semibold ml-2 text-[#0E4EBD]">({activeOrgName})</span>}
           </p>

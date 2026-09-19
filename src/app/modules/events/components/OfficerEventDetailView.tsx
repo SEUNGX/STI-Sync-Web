@@ -12,6 +12,9 @@ import { useEventTypesStream, useVenuesStream } from '../hooks/useEventConfigStr
 import { useDepartments } from '../../academic/hooks/useAcademicStream';
 import { EventPayablesQRControl } from '../../finance/components/EventPayablesQRControl';
 import { exportEventProposalPDF } from '../utils/event-proposal-pdf';
+import { canWithdrawProposal, canCancelEvent, isEventEditable, getEventTimingStatus } from '../utils/event-lifecycle.utils';
+import { CancelEventModal } from './CancelEventModal';
+import { withdrawProposal } from '../services/event.service';
 import { toast } from 'sonner';
 import { formatCurrency } from '../../../utils/currency';
 import { formatAppDate, formatAppDateTime } from '../../../utils/date';
@@ -61,10 +64,8 @@ export default function OfficerEventDetailView({
   const { venues } = useVenuesStream();
   const { data: departments } = useDepartments();
 
-  const isEditable =
-    event.proposalStatus === 'draft' ||
-    event.proposalStatus === 'returned' ||
-    (event.proposalStatus === 'rejected' && event.allowResubmission !== false);
+  const editCheck = isEventEditable(event, 'officer');
+  const isEditable = editCheck.editable;
 
   const isSas = !event.hostingOrgId || event.hostingOrgId === 'sas';
   const orgObj = orgs.find((o) => o.id === event.hostingOrgId);
@@ -76,6 +77,12 @@ export default function OfficerEventDetailView({
   const venueName = venueObj ? venueObj.name : event.customVenueName || event.venueId || 'On-Campus Venue';
 
   const [exportingPdf, setExportingPdf] = useState(false);
+  const [withdrawing, setWithdrawing] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+
+  const withdrawCheck = canWithdrawProposal(event, 'officer');
+  const isCancelled = event.isCancelled || event.lifecycleStatus === 'cancelled' || event.status === 'cancelled' || event.proposalStatus === 'cancelled';
+  const cancelCheck = canCancelEvent(event, 'officer', orgObj?.id);
 
   const handleExportPDF = async () => {
     setExportingPdf(true);
@@ -91,6 +98,33 @@ export default function OfficerEventDetailView({
       toast.error('Failed to export PDF proposal.');
     } finally {
       setExportingPdf(false);
+    }
+  };
+
+  const handleWithdraw = async () => {
+    if (!profile) return;
+    const confirmWithdraw = window.confirm(
+      `Are you sure you want to withdraw "${event.title}"? The proposal will return to Draft status so you can make revisions before SAO reviews it.`
+    );
+    if (!confirmWithdraw) return;
+
+    setWithdrawing(true);
+    try {
+      await withdrawProposal(event.id, profile.uid, profile.studentName);
+      toast.success('Proposal Withdrawn', {
+        description: 'The proposal is now back in Draft status. Opening editor...',
+        duration: 4000,
+      });
+      onClose();
+      if (onEdit) {
+        onEdit();
+      }
+    } catch (err: any) {
+      toast.error('Failed to withdraw proposal', {
+        description: err.message || 'Please check your connection and try again.',
+      });
+    } finally {
+      setWithdrawing(false);
     }
   };
 
@@ -117,9 +151,20 @@ export default function OfficerEventDetailView({
     completed: { bg: 'bg-blue-50 text-blue-800 border-blue-300', text: 'text-blue-700', label: 'Completed Event', icon: CheckCircle2 },
     returned: { bg: 'bg-amber-50 text-amber-800 border-amber-300', text: 'text-amber-700', label: 'Returned for Revision', icon: RotateCcw },
     rejected: { bg: 'bg-red-50 text-red-800 border-red-300', text: 'text-red-700', label: 'Rejected Proposal', icon: XCircle },
+    cancelled: { bg: 'bg-red-50 text-red-800 border-red-300', text: 'text-red-700', label: 'Cancelled Event', icon: XCircle },
   };
 
-  const currentStatusKey = (event.proposalStatus || 'draft').toLowerCase();
+  const timing = getEventTimingStatus(event);
+  const isCompleted =
+    event.proposalStatus === 'completed' ||
+    event.status === 'completed' ||
+    ((event.proposalStatus === 'approved' || event.status === 'approved') && timing === 'completed');
+
+  const currentStatusKey = isCancelled
+    ? 'cancelled'
+    : isCompleted
+    ? 'completed'
+    : (event.proposalStatus || 'draft').toLowerCase();
   const currentStatus = statusColors[currentStatusKey] || statusColors.draft;
   const StatusIcon = currentStatus.icon;
 
@@ -172,6 +217,32 @@ export default function OfficerEventDetailView({
             <Download className="w-3.5 h-3.5" />
             <span>{exportingPdf ? 'Exporting...' : 'Export PDF'}</span>
           </button>
+
+          {/* Withdraw Proposal Action */}
+          {withdrawCheck.canWithdraw && (
+            <button
+              onClick={handleWithdraw}
+              disabled={withdrawing}
+              className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer disabled:opacity-50"
+              title="Withdraw proposal to Draft status to edit"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>{withdrawing ? 'Withdrawing...' : 'Withdraw Proposal'}</span>
+            </button>
+          )}
+
+          {/* Cancel Event Action */}
+          {!isCancelled && cancelCheck.canCancel && (
+            <button
+              type="button"
+              onClick={() => setShowCancelModal(true)}
+              className="px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
+              title="Cancel this event and auto-waive student liabilities"
+            >
+              <AlertTriangle className="w-3.5 h-3.5" />
+              <span>Cancel Event</span>
+            </button>
+          )}
 
           {/* Edit Proposal Action */}
           {isEditable && onEdit && (
@@ -278,6 +349,57 @@ export default function OfficerEventDetailView({
         {/* Center Content Pane */}
         <main ref={centerRef} className="flex-1 overflow-y-auto bg-gray-50/30 p-6 lg:p-8 space-y-8">
           {/* Status Feedback Banners */}
+          {withdrawCheck.canWithdraw && (
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-2xl shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3 text-blue-900">
+                <Clock className="w-5 h-5 text-blue-600 shrink-0" />
+                <div>
+                  <p className="text-sm font-bold">Proposal Under Review by SAO Adviser</p>
+                  <p className="text-xs text-blue-800 mt-0.5">
+                    This proposal is currently submitted and awaiting SAO review. Need to make revisions? You can withdraw it back to Draft status.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleWithdraw}
+                disabled={withdrawing}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-50 shrink-0 self-start sm:self-auto"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>{withdrawing ? 'Withdrawing...' : 'Withdraw Proposal to Edit'}</span>
+              </button>
+            </div>
+          )}
+
+          {isCancelled && (
+            <div className="p-5 bg-gradient-to-r from-red-50 to-rose-50 border-2 border-red-200 rounded-2xl shadow-xs space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-red-800 font-bold text-base">
+                  <XCircle className="w-5 h-5 text-red-600" />
+                  <span>This Event Has Been Cancelled</span>
+                </div>
+                {event.refundPolicy && (
+                  <span className="px-2.5 py-0.5 bg-red-200 text-red-800 font-bold text-xs rounded-full uppercase">
+                    Refund: {event.refundPolicy.replace(/_/g, ' ')}
+                  </span>
+                )}
+              </div>
+              {event.cancellationReason && (
+                <div className="bg-white p-3.5 rounded-xl border border-red-100 text-xs text-red-900 leading-relaxed shadow-2xs">
+                  <strong className="text-red-950">Cancellation Reason:</strong> {event.cancellationReason}
+                </div>
+              )}
+              <div className="text-xs text-red-600 flex flex-wrap items-center gap-3">
+                <span>Cancelled by: <strong className="text-red-700">{event.cancelledBy || 'Administrator / Officer'}</strong></span>
+                {event.cancelledAt && <span>• {formatAppDateTime(event.cancelledAt)}</span>}
+                <span className="font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                  ✓ Pending fines automatically waived
+                </span>
+              </div>
+            </div>
+          )}
+
           {event.proposalStatus === 'returned' && (
             <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl shadow-xs space-y-3">
               <div className="flex items-center gap-2 text-amber-800 font-bold text-sm">
@@ -933,6 +1055,21 @@ export default function OfficerEventDetailView({
           </section>
         </main>
       </div>
+
+      {/* CANCEL EVENT MODAL */}
+      {showCancelModal && (
+        <CancelEventModal
+          event={event}
+          role="officer"
+          currentOrgId={orgObj?.id}
+          isOpen={showCancelModal}
+          onClose={() => setShowCancelModal(false)}
+          onSuccess={() => {
+            setShowCancelModal(false);
+            onClose();
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   Download,
   Users,
@@ -82,6 +82,7 @@ export default function AttendanceLogs() {
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'attendance' | 'fines'>('attendance');
   const [isAssessFinesModalOpen, setIsAssessFinesModalOpen] = useState(false);
+  const [isRecordingFines, setIsRecordingFines] = useState(false);
 
   const activeOrgId = profile?.activeOrganizationId;
   const currentStudentId = profile?.studentId;
@@ -362,9 +363,8 @@ export default function AttendanceLogs() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <div className="text-gray-400 text-xs mb-1">Dashboard &gt; Attendance Logs</div>
-        <h1 className="text-[#001A4D] text-2xl font-bold">Officer Attendance Logs</h1>
-        <p className="text-gray-500 text-xs mt-0.5">
+        <div className="text-gray-400 text-xs font-medium">Dashboard &gt; Attendance Logs</div>
+        <p className="text-gray-500 text-xs mt-0.5 font-medium">
           Filter, monitor, and export attendance logs for events hosted or created by your organization.
         </p>
       </div>

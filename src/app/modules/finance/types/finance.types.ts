@@ -4,6 +4,7 @@ export type TransactionType = 'income' | 'expense';
 export type TransactionSource =
   | 'allocation'
   | 'student_collection'
+  | 'student_refund'
   | 'manual_expense'
   | 'carry_over'
   | 'event_budget'

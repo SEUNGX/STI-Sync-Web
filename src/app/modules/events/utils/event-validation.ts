@@ -146,6 +146,36 @@ export interface StepValidationResult {
   venueConflicts?: VenueConflict[];
 }
 
+export function extractDateString(val: any): string {
+  if (!val) return '';
+  if (typeof val === 'string') return val.split('T')[0];
+  if (typeof val.toDate === 'function') {
+    return val.toDate().toISOString().split('T')[0];
+  }
+  if (val instanceof Date) {
+    return val.toISOString().split('T')[0];
+  }
+  if (typeof val.seconds === 'number') {
+    return new Date(val.seconds * 1000).toISOString().split('T')[0];
+  }
+  return '';
+}
+
+export function formatVisibilityString(val: any): string {
+  if (!val) return '';
+  if (typeof val === 'string') return val.replace('T', ' ');
+  if (typeof val.toDate === 'function') {
+    return val.toDate().toISOString().replace('T', ' ').slice(0, 16);
+  }
+  if (val instanceof Date) {
+    return val.toISOString().replace('T', ' ').slice(0, 16);
+  }
+  if (typeof val.seconds === 'number') {
+    return new Date(val.seconds * 1000).toISOString().replace('T', ' ').slice(0, 16);
+  }
+  return String(val);
+}
+
 export function validateStep1(data: EventFormData, isOfficer = false): StepValidationResult {
   const errors: string[] = [];
   const fieldErrors: Record<string, string> = {};
@@ -187,11 +217,13 @@ export function validateStep1(data: EventFormData, isOfficer = false): StepValid
 
   // Visibility date check against sessions
   if (data.visibilityStart && data.sessions && data.sessions.length > 0) {
-    const visDate = data.visibilityStart.split('T')[0];
-    const conflictingSession = data.sessions.find(s => s.date && s.date < visDate);
-    if (conflictingSession) {
-      errors.push(`Visibility Conflict: Event visibility date (${visDate}) is scheduled after Session "${conflictingSession.title || 'Session'}" (${conflictingSession.date}). Students will not see the event before it takes place.`);
-      fieldErrors.visibilityStart = 'Visibility date cannot be after session date.';
+    const visDate = extractDateString(data.visibilityStart);
+    if (visDate) {
+      const conflictingSession = data.sessions.find(s => s.date && s.date < visDate);
+      if (conflictingSession) {
+        errors.push(`Visibility Conflict: Event visibility date (${visDate}) is scheduled after Session "${conflictingSession.title || 'Session'}" (${conflictingSession.date}). Students will not see the event before it takes place.`);
+        fieldErrors.visibilityStart = 'Visibility date cannot be after session date.';
+      }
     }
   }
 
@@ -259,11 +291,13 @@ export function validateStep2(
 
   // Visibility date check against sessions in Step 2
   if (data.visibilityStart && sessions.length > 0) {
-    const visDate = data.visibilityStart.split('T')[0];
-    const conflictingSession = sessions.find(s => s.date && s.date < visDate);
-    if (conflictingSession) {
-      errors.push(`Visibility Conflict: Event visibility date (${visDate}) is scheduled after Session "${conflictingSession.title || 'Session'}" (${conflictingSession.date}). Students will not see the event before it takes place.`);
-      fieldErrors.visibilityStart = 'Visibility date cannot be after session date.';
+    const visDate = extractDateString(data.visibilityStart);
+    if (visDate) {
+      const conflictingSession = sessions.find(s => s.date && s.date < visDate);
+      if (conflictingSession) {
+        errors.push(`Visibility Conflict: Event visibility date (${visDate}) is scheduled after Session "${conflictingSession.title || 'Session'}" (${conflictingSession.date}). Students will not see the event before it takes place.`);
+        fieldErrors.visibilityStart = 'Visibility date cannot be after session date.';
+      }
     }
   }
 

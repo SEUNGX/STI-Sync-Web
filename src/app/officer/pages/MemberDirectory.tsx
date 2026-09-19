@@ -305,13 +305,7 @@ export default function MemberDirectory() {
       {/* Header Banner */}
       <div className="bg-[#001A4D] rounded-2xl p-6 text-white shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="px-3 py-1 bg-[#FFD41C] text-[#001A4D] font-bold text-xs rounded-full uppercase tracking-wider">
-              Member Directory
-            </span>
-          </div>
-          <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">Organization Roster</h1>
-          <p className="text-[#FFD41C]/80 text-sm mt-1">
+          <p className="text-[#FFD41C]/90 text-sm font-medium">
             Manage organization members, officer assignments, and membership applications.
           </p>
         </div>

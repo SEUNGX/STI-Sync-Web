@@ -20,9 +20,12 @@ service cloud.firestore {
     }
 
     // 2. Events: public read for officer sessions and mobile app
+    // Guard against unauthorized mutation of archived or completed events
     match /events/{eventId} {
       allow read: if true;
-      allow write: if true;
+      allow create: if true;
+      allow update: if (resource.data.isArchived != true && resource.data.proposalStatus != 'completed') || isAuthenticated();
+      allow delete: if isAuthenticated();
     }
 
     // 3. Liquidations collection: public read/write to allow unauthenticated officer sessions to save & submit

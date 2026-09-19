@@ -14,6 +14,8 @@ import EventProposalReview from "../components/EventProposalReview";
 import { useAllEvents, useDraftEvents } from "../../modules/events/hooks/useEventStream";
 import { useOrganizationStream } from "../../modules/organizations/hooks/useOrganizationStream";
 import { useEventCategoriesStream, useVenuesStream } from "../../modules/events/hooks/useEventConfigStream";
+import { CancelEventModal, canCancelEvent } from "../../modules/events";
+import { useAdviserProfile } from "../../modules/auth/hooks/useAdviserProfile";
 import type { EventDocument } from "../../modules/events/types/event.types";
 import { formatCurrency } from "../../utils/currency";
 import { formatAppDateTime } from "../../utils/date";
@@ -22,7 +24,7 @@ import { TablePagination } from "../../components/common/TablePagination";
 
 const ITEMS_PER_PAGE = 8;
 
-type TabValue = "all" | "pending" | "approved" | "completed" | "rejected" | "drafts";
+type TabValue = "all" | "pending" | "approved" | "completed" | "rejected" | "drafts" | "cancelled";
 type DateRangeOption = "all" | "this_week" | "this_month" | "custom";
 
 function isWithinDateRange(
@@ -130,6 +132,8 @@ export function EventApprovals() {
   const [resumeDraft, setResumeDraft] = useState<EventDocument | null>(null);
   const [modalKey, setModalKey] = useState(0);
   const [selectedEvent, setSelectedEvent] = useState<EventDocument | null>(null);
+  const [cancellingEvent, setCancellingEvent] = useState<EventDocument | null>(null);
+  const { profile: adviserProfile } = useAdviserProfile();
 
   const { globalSearch } = useOutletContext<{ globalSearch: string }>() || { globalSearch: "" };
   const [localSearch, setLocalSearch] = useState("");
@@ -213,6 +217,13 @@ export function EventApprovals() {
     return events
       .filter((event) => {
         // Tab filter
+        const isCancelled = event.status === "cancelled" || event.proposalStatus === "cancelled";
+        if (activeTab === "cancelled") {
+          if (!isCancelled) return false;
+        } else if (isCancelled && activeTab !== "all") {
+          return false;
+        }
+
         if (activeTab === "pending" && event.proposalStatus !== "pending" && event.proposalStatus !== "pending_review") return false;
         if (activeTab === "approved" && (event.proposalStatus !== "approved" || isEventPast(event))) return false;
         if (activeTab === "completed" && (event.proposalStatus !== "approved" || !isEventPast(event))) return false;
@@ -263,10 +274,11 @@ export function EventApprovals() {
 
   // Counts
   const allCount = events.length;
-  const pendingCount = events.filter((e) => e.proposalStatus === "pending" || e.proposalStatus === "pending_review").length;
-  const approvedCount = events.filter((e) => e.proposalStatus === "approved" && !isEventPast(e)).length;
-  const completedCount = events.filter((e) => e.proposalStatus === "approved" && isEventPast(e)).length;
-  const rejectedCount = events.filter((e) => e.proposalStatus === "rejected").length;
+  const pendingCount = events.filter((e) => (e.proposalStatus === "pending" || e.proposalStatus === "pending_review") && e.status !== "cancelled").length;
+  const approvedCount = events.filter((e) => e.proposalStatus === "approved" && !isEventPast(e) && e.status !== "cancelled").length;
+  const completedCount = events.filter((e) => e.proposalStatus === "approved" && isEventPast(e) && e.status !== "cancelled").length;
+  const rejectedCount = events.filter((e) => e.proposalStatus === "rejected" && e.status !== "cancelled").length;
+  const cancelledCount = events.filter((e) => e.status === "cancelled" || e.proposalStatus === "cancelled").length;
   const draftsCount = filteredDrafts.length;
 
   // Active list & Pagination
@@ -359,6 +371,18 @@ export function EventApprovals() {
       );
     }
 
+    if (status === "cancelled" || event?.status === "cancelled" || event?.proposalStatus === "cancelled") {
+      return (
+        <span 
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200/80 cursor-help"
+          title={event?.cancellationReason ? `Cancelled: ${event.cancellationReason}` : 'Event Cancelled'}
+        >
+          <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+          Cancelled
+        </span>
+      );
+    }
+
     if (status === "rejected") {
       return (
         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-200/80">
@@ -383,8 +407,7 @@ export function EventApprovals() {
       {/* ── Header ── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-[#001A4D] tracking-tight">Event Approvals</h1>
-          <p className="text-gray-500 text-sm mt-0.5">
+          <p className="text-gray-500 text-sm font-medium">
             Review and approve event proposals from student organizations
           </p>
 
@@ -426,6 +449,7 @@ export function EventApprovals() {
               { key: "all", label: "All", count: allCount },
               { key: "pending", label: "Pending", count: pendingCount },
               { key: "approved", label: "Approved", count: approvedCount },
+              { key: "cancelled", label: "Cancelled", count: cancelledCount },
               { key: "rejected", label: "Rejected", count: rejectedCount },
               { key: "completed", label: "Completed", count: completedCount },
               { key: "drafts", label: "Drafts", count: draftsCount },
@@ -748,13 +772,26 @@ export function EventApprovals() {
 
                         {/* Actions */}
                         <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                          <button
-                            onClick={() => setSelectedEvent(event)}
-                            className="px-3 py-1.5 bg-gray-100 hover:bg-[#001A4D] hover:text-white text-gray-700 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                            <span>View</span>
-                          </button>
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => setSelectedEvent(event)}
+                              className="px-3 py-1.5 bg-gray-100 hover:bg-[#001A4D] hover:text-white text-gray-700 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              <span>View</span>
+                            </button>
+
+                            {canCancelEvent(event, 'admin').canCancel && (
+                              <button
+                                onClick={() => setCancellingEvent(event)}
+                                className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer"
+                                title="Cancel Event & Waive Liabilities"
+                              >
+                                <XCircle className="w-3.5 h-3.5" />
+                                <span>Cancel</span>
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -792,6 +829,18 @@ export function EventApprovals() {
         <EventProposalReview
           event={selectedEvent}
           onClose={() => setSelectedEvent(null)}
+        />
+      )}
+
+      {/* Cancel Event Modal */}
+      {cancellingEvent && (
+        <CancelEventModal
+          isOpen={!!cancellingEvent}
+          onClose={() => setCancellingEvent(null)}
+          event={cancellingEvent}
+          userRole="admin"
+          userId={adviserProfile?.uid || 'admin-user'}
+          userName={adviserProfile?.displayName || 'SAO Admin'}
         />
       )}
     </div>

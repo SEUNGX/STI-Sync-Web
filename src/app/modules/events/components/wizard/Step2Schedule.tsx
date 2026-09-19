@@ -1,10 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Plus, Trash2, Building2, Clock, X, Check, AlertCircle, AlertTriangle, ChevronLeft, ChevronRight, Calendar, CalendarDays, MapPin } from 'lucide-react';
+import { Plus, Trash2, Building2, Clock, X, Check, AlertCircle, AlertTriangle, ChevronLeft, ChevronRight, Calendar, CalendarDays, MapPin, Lock } from 'lucide-react';
 import { useSemesters } from '../../../academic';
 import { useVenuesStream } from '../../hooks/useEventConfigStream';
 import { useAllEvents } from '../../hooks/useEventStream';
 import { createVenue } from '../../services/event-config.service';
-import { checkInternalSessionConflicts, checkExternalVenueConflicts } from '../../utils/event-validation';
+import { checkInternalSessionConflicts, checkExternalVenueConflicts, extractDateString } from '../../utils/event-validation';
 import type { EventFormData, EventSession, EventDocument } from '../../types/event.types';
 import { toast } from 'sonner';
 
@@ -13,6 +13,7 @@ interface Step2Props {
   onUpdate: (data: Partial<EventFormData>) => void;
   isOfficer?: boolean;
   errors?: Record<string, string>;
+  isRestricted?: boolean;
 }
 
 function formatTime12Hour(timeStr?: string): string {
@@ -67,7 +68,7 @@ const getNextDayDateStr = (baseDateStr?: string): string => {
 
 const COMMON_FACILITIES = ['Projector', 'Air Conditioning', 'Sound System', 'Stage / Podium', 'WiFi / LAN', 'Whiteboard', 'Tiered Seating'];
 
-export default function Step2Schedule({ data, onUpdate, isOfficer, errors = {} }: Step2Props) {
+export default function Step2Schedule({ data, onUpdate, isOfficer, errors = {}, isRestricted }: Step2Props) {
   const { data: semesters, loading: semestersLoading } = useSemesters();
   const { venues, loading: venuesLoading } = useVenuesStream();
   const { events: allEvents } = useAllEvents();
@@ -276,7 +277,8 @@ export default function Step2Schedule({ data, onUpdate, isOfficer, errors = {} }
 
   const visibilityConflict = useMemo(() => {
     if (!data.visibilityStart || !sessions || sessions.length === 0) return null;
-    const visDate = data.visibilityStart.split('T')[0];
+    const visDate = extractDateString(data.visibilityStart);
+    if (!visDate) return null;
     const conflictingSession = sessions.find(s => s.date && s.date < visDate);
     if (conflictingSession) {
       return `Visibility Conflict: Feed visibility is set to ${visDate}, which is after Session "${conflictingSession.title || 'Session'}" (${conflictingSession.date}). Students will not see this event before it takes place. Please adjust your visibility date in Step 1.`;
@@ -336,6 +338,17 @@ export default function Step2Schedule({ data, onUpdate, isOfficer, errors = {} }
     <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
       {/* Left Column */}
       <div className="space-y-6">
+        {/* Approved Event Lock Banner */}
+        {isRestricted && (
+          <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between text-amber-900 text-xs font-semibold shadow-xs">
+            <div className="flex items-center gap-2">
+              <Lock className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>Schedule & Venue Locked: This approved event's venue, semester, and session dates/times are sealed and cannot be modified.</span>
+            </div>
+            <span className="px-2.5 py-0.5 bg-amber-100 text-amber-800 rounded-md text-[10px] font-bold uppercase tracking-wider">Locked</span>
+          </div>
+        )}
+
         {/* Visibility Conflict Alert */}
         {visibilityConflict && (
           <div className="p-4 bg-amber-50 border-l-4 border-amber-500 rounded-r-xl flex items-start gap-3 shadow-xs">
@@ -349,19 +362,25 @@ export default function Step2Schedule({ data, onUpdate, isOfficer, errors = {} }
 
         {/* Section A — Academic Context */}
         <div>
-          <div className={`border-l-4 ${accentBorder} pl-3 mb-4`}>
+          <div className={`border-l-4 ${accentBorder} pl-3 mb-4 flex items-center justify-between`}>
             <h3 className="text-[#001A4D] font-bold text-base">Academic Context</h3>
+            {isRestricted && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-md">
+                <Lock className="w-3 h-3 text-amber-600" /> Locked upon Approval
+              </span>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Semester <span className="text-red-500">*</span>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center gap-1.5">
+                <span>Semester <span className="text-red-500">*</span></span>
+                {isRestricted && <Lock className="w-3.5 h-3.5 text-amber-600" />}
               </label>
               <select 
                 value={data.semesterId || ''}
                 onChange={(e) => handleSemesterChange(e.target.value)}
-                disabled={semestersLoading}
-                className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:border-transparent disabled:opacity-50 transition-colors ${
+                disabled={semestersLoading || isRestricted}
+                className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:border-transparent disabled:opacity-60 disabled:bg-gray-100 transition-colors ${
                   errors.semesterId
                     ? 'border-red-500 ring-2 ring-red-200 focus:ring-red-500'
                     : `border-gray-300 ${accentFocusRing}`
@@ -397,16 +416,23 @@ export default function Step2Schedule({ data, onUpdate, isOfficer, errors = {} }
         {/* Section B — Event Schedule & Sessions */}
         <div>
           <div className="flex items-center justify-between mb-4">
-            <div className={`border-l-4 ${accentBorder} pl-3`}>
+            <div className={`border-l-4 ${accentBorder} pl-3 flex items-center gap-2`}>
               <h3 className="text-[#001A4D] font-bold text-base">Event Schedule & Sessions</h3>
+              {isRestricted && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-md">
+                  <Lock className="w-3 h-3 text-amber-600" /> Locked upon Approval
+                </span>
+              )}
             </div>
-            <button
-              type="button"
-              onClick={addSession}
-              className={`px-3 py-1.5 ${accentBg} ${accentBgHover} text-white rounded-lg text-sm font-medium flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs`}
-            >
-              <Plus className="w-4 h-4" /> Add Session
-            </button>
+            {!isRestricted && (
+              <button
+                type="button"
+                onClick={addSession}
+                className={`px-3 py-1.5 ${accentBg} ${accentBgHover} text-white rounded-lg text-sm font-medium flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs`}
+              >
+                <Plus className="w-4 h-4" /> Add Session
+              </button>
+            )}
           </div>
 
           <div className="space-y-4">
@@ -430,6 +456,8 @@ export default function Step2Schedule({ data, onUpdate, isOfficer, errors = {} }
                   className={`border rounded-xl p-4 transition-all ${
                     isConflicted
                       ? 'border-red-400 bg-red-50/40 ring-2 ring-red-300 shadow-sm'
+                      : isRestricted
+                      ? 'border-gray-200 bg-gray-50/40'
                       : 'border-gray-200 bg-white hover:border-gray-300'
                   }`}
                 >
@@ -445,10 +473,13 @@ export default function Step2Schedule({ data, onUpdate, isOfficer, errors = {} }
                           type="text"
                           placeholder={`Session ${index + 1} Title`}
                           value={session.title || ''}
+                          disabled={isRestricted}
                           onChange={(e) => updateSession(session.id, 'title', e.target.value)}
                           className={`font-semibold text-sm text-gray-900 border-b px-1 py-0.5 rounded-sm w-full max-w-md ${
                             titleErr
                               ? 'border-red-500 ring-1 ring-red-300 bg-red-50/30'
+                              : isRestricted
+                              ? 'border-transparent bg-transparent cursor-not-allowed text-gray-700'
                               : 'border-transparent hover:border-gray-300 focus:border-[#0E4EBD] focus:outline-hidden'
                           }`}
                         />
@@ -457,7 +488,7 @@ export default function Step2Schedule({ data, onUpdate, isOfficer, errors = {} }
                         )}
                       </div>
                     </div>
-                    {sessions.length > 1 && (
+                    {sessions.length > 1 && !isRestricted && (
                       <button
                         type="button"
                         onClick={() => removeSession(session.id)}
@@ -493,15 +524,17 @@ export default function Step2Schedule({ data, onUpdate, isOfficer, errors = {} }
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">
-                        Date <span className="text-red-500">*</span>
+                      <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1">
+                        <span>Date <span className="text-red-500">*</span></span>
+                        {isRestricted && <Lock className="w-3 h-3 text-amber-600" />}
                       </label>
                       <input
                         type="date"
                         min={todayStr}
                         value={session.date || ''}
+                        disabled={isRestricted}
                         onChange={(e) => updateSession(session.id, 'date', e.target.value)}
-                        className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:border-transparent transition-colors ${
+                        className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:border-transparent disabled:opacity-60 disabled:bg-gray-100 transition-colors ${
                           dateErr
                             ? 'border-red-500 ring-2 ring-red-200 focus:ring-red-500'
                             : !session.date
@@ -514,14 +547,16 @@ export default function Step2Schedule({ data, onUpdate, isOfficer, errors = {} }
                       )}
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">
-                        Start Time <span className="text-red-500">*</span>
+                      <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1">
+                        <span>Start Time <span className="text-red-500">*</span></span>
+                        {isRestricted && <Lock className="w-3 h-3 text-amber-600" />}
                       </label>
                       <input
                         type="time"
                         value={session.startTime || ''}
+                        disabled={isRestricted}
                         onChange={(e) => updateSession(session.id, 'startTime', e.target.value)}
-                        className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:border-transparent transition-colors ${
+                        className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:border-transparent disabled:opacity-60 disabled:bg-gray-100 transition-colors ${
                           startErr
                             ? 'border-red-500 ring-2 ring-red-200 focus:ring-red-500'
                             : !session.startTime
@@ -534,14 +569,16 @@ export default function Step2Schedule({ data, onUpdate, isOfficer, errors = {} }
                       )}
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">
-                        End Time <span className="text-red-500">*</span>
+                      <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1">
+                        <span>End Time <span className="text-red-500">*</span></span>
+                        {isRestricted && <Lock className="w-3 h-3 text-amber-600" />}
                       </label>
                       <input
                         type="time"
                         value={session.endTime || ''}
+                        disabled={isRestricted}
                         onChange={(e) => updateSession(session.id, 'endTime', e.target.value)}
-                        className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:border-transparent transition-colors ${
+                        className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:border-transparent disabled:opacity-60 disabled:bg-gray-100 transition-colors ${
                           endErr
                             ? 'border-red-500 ring-2 ring-red-200 focus:ring-red-500'
                             : !session.endTime
@@ -562,19 +599,25 @@ export default function Step2Schedule({ data, onUpdate, isOfficer, errors = {} }
 
         {/* Section C — Venue & Location */}
         <div>
-          <div className={`border-l-4 ${accentBorder} pl-3 mb-4`}>
+          <div className={`border-l-4 ${accentBorder} pl-3 mb-4 flex items-center justify-between`}>
             <h3 className="text-[#001A4D] font-bold text-base">Venue & Location</h3>
+            {isRestricted && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-md">
+                <Lock className="w-3 h-3 text-amber-600" /> Locked upon Approval
+              </span>
+            )}
           </div>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Venue <span className="text-red-500">*</span>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center gap-1.5">
+                <span>Venue <span className="text-red-500">*</span></span>
+                {isRestricted && <Lock className="w-3.5 h-3.5 text-amber-600" />}
               </label>
               <select
                 value={data.customVenueName ? '__other__' : (data.venueId || '')}
                 onChange={(e) => handleVenueChange(e.target.value)}
-                disabled={venuesLoading}
-                className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:border-transparent disabled:opacity-50 transition-colors ${
+                disabled={venuesLoading || isRestricted}
+                className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:border-transparent disabled:opacity-60 disabled:bg-gray-100 transition-colors ${
                   errors.venueId
                     ? 'border-red-500 ring-2 ring-red-200 focus:ring-red-500'
                     : `border-gray-300 ${accentFocusRing}`
@@ -586,7 +629,7 @@ export default function Step2Schedule({ data, onUpdate, isOfficer, errors = {} }
                     {v.name} {v.capacity ? `(Capacity: ${v.capacity})` : ''}
                   </option>
                 ))}
-                <option value="__other__">Other / Add Venue...</option>
+                {!isRestricted && <option value="__other__">Other / Add Venue...</option>}
               </select>
               {errors.venueId && (
                 <p className="text-xs text-red-600 mt-1.5 font-medium flex items-center gap-1.5">
@@ -601,31 +644,33 @@ export default function Step2Schedule({ data, onUpdate, isOfficer, errors = {} }
                     <Building2 className="w-4 h-4 text-[#0E4EBD]" />
                     <span>Custom Venue: <strong>{data.customVenueName}</strong></span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCustomVenueName(data.customVenueName || '');
-                        setShowCustomVenueModal(true);
-                      }}
-                      className="text-[#0E4EBD] hover:underline font-bold text-xs cursor-pointer"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onUpdate({
-                          venueId: '',
-                          customVenueName: null,
-                        });
-                      }}
-                      className="text-gray-400 hover:text-red-600 p-0.5 cursor-pointer"
-                      title="Clear custom venue"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
+                  {!isRestricted && (
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCustomVenueName(data.customVenueName || '');
+                          setShowCustomVenueModal(true);
+                        }}
+                        className="text-[#0E4EBD] hover:underline font-bold text-xs cursor-pointer"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onUpdate({
+                            venueId: '',
+                            customVenueName: null,
+                          });
+                        }}
+                        className="text-gray-400 hover:text-red-600 p-0.5 cursor-pointer"
+                        title="Clear custom venue"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -637,12 +682,18 @@ export default function Step2Schedule({ data, onUpdate, isOfficer, errors = {} }
                   <Clock className={`w-3.5 h-3.5 ${accentText}`} />
                   <span>Attendance Scanning Thresholds</span>
                 </label>
+                {isRestricted && (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">
+                    <Lock className="w-3 h-3 text-amber-600" /> Locked
+                  </span>
+                )}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center">
-                    Grace Period (minutes)
+                    <span>Grace Period (minutes)</span>
+                    {isRestricted && <Lock className="w-3.5 h-3.5 text-amber-600 ml-1.5" />}
                     <span className="relative group inline-block ml-1.5 cursor-pointer">
                       <span className="w-4 h-4 bg-gray-200 text-gray-600 rounded-full flex items-center justify-center text-[10px] font-bold">?</span>
                       <span className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 hidden group-hover:block w-48 p-2 bg-gray-900 text-white text-[11px] rounded shadow-xl z-20 pointer-events-none text-center">
@@ -653,10 +704,11 @@ export default function Step2Schedule({ data, onUpdate, isOfficer, errors = {} }
                   <input
                     type="number"
                     min={0}
+                    disabled={isRestricted}
                     placeholder="15"
                     value={data.gracePeriodMinutes ?? 15}
                     onChange={(e) => updateField('gracePeriodMinutes', e.target.value ? Number(e.target.value) : 0)}
-                    className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:border-transparent transition-colors ${
+                    className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:border-transparent disabled:opacity-60 disabled:bg-gray-100 transition-colors ${
                       errors.gracePeriod
                         ? 'border-red-500 ring-2 ring-red-200 focus:ring-red-500'
                         : `border-gray-300 ${accentFocusRing}`
@@ -667,7 +719,8 @@ export default function Step2Schedule({ data, onUpdate, isOfficer, errors = {} }
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center">
-                    Late Threshold (minutes)
+                    <span>Late Threshold (minutes)</span>
+                    {isRestricted && <Lock className="w-3.5 h-3.5 text-amber-600 ml-1.5" />}
                     <span className="relative group inline-block ml-1.5 cursor-pointer">
                       <span className="w-4 h-4 bg-gray-200 text-gray-600 rounded-full flex items-center justify-center text-[10px] font-bold">?</span>
                       <span className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 hidden group-hover:block w-48 p-2 bg-gray-900 text-white text-[11px] rounded shadow-xl z-20 pointer-events-none text-center">
@@ -678,10 +731,11 @@ export default function Step2Schedule({ data, onUpdate, isOfficer, errors = {} }
                   <input
                     type="number"
                     min={0}
+                    disabled={isRestricted}
                     placeholder="60"
                     value={data.lateThresholdMinutes ?? 60}
                     onChange={(e) => updateField('lateThresholdMinutes', e.target.value ? Number(e.target.value) : 0)}
-                    className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:border-transparent transition-colors ${
+                    className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:border-transparent disabled:opacity-60 disabled:bg-gray-100 transition-colors ${
                       errors.gracePeriod
                         ? 'border-red-500 ring-2 ring-red-200 focus:ring-red-500'
                         : `border-gray-300 ${accentFocusRing}`

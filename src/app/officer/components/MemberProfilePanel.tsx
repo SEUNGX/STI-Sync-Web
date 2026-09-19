@@ -560,14 +560,17 @@ export function MemberProfilePanel({
                               <td className="px-5 py-3.5 text-center">
                                 <span
                                   className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                                    isSettled
+                                    p.status === 'waived'
+                                      ? 'bg-gray-100 text-gray-700'
+                                      : isSettled
                                       ? 'bg-green-100 text-green-800'
                                       : p.status === 'partial'
                                       ? 'bg-amber-100 text-amber-800'
                                       : 'bg-red-100 text-red-700'
                                   }`}
+                                  title={p.status === 'waived' ? (p.waivedReason || 'Waived due to event cancellation') : undefined}
                                 >
-                                  {isSettled ? 'Paid' : p.status}
+                                  {p.status === 'waived' ? 'Waived' : isSettled ? 'Paid' : p.status}
                                 </span>
                               </td>
                             </tr>

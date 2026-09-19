@@ -932,8 +932,7 @@ export default function OfficerDocuments() {
       {/* Page Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-[#001A4D]">Documents</h2>
-          <p className="text-gray-500 text-sm">Dashboard &rsaquo; Documents</p>
+          <p className="text-gray-500 text-sm font-medium">Dashboard &rsaquo; Documents</p>
         </div>
         <button
           onClick={() => setShowSubmit(true)}
