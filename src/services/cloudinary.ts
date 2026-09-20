@@ -77,20 +77,33 @@ export function validateUploadFile(file: File, options: UploadOptions = {}): voi
     const fileType = file.type?.toLowerCase() || '';
     const fileName = file.name?.toLowerCase() || '';
 
-    const matchesMime = accepted.some(t => t.toLowerCase() === fileType);
-    const matchesExtension = accepted.some(t => {
-      if (t.startsWith('.')) return fileName.endsWith(t.toLowerCase());
-      if (t === 'application/pdf' && fileName.endsWith('.pdf')) return true;
-      if ((t.includes('word') || t.includes('msword') || t.includes('officedocument.word')) && (fileName.endsWith('.doc') || fileName.endsWith('.docx'))) return true;
-      if ((t.includes('excel') || t.includes('spreadsheet') || t.includes('officedocument.sheet')) && (fileName.endsWith('.xls') || fileName.endsWith('.xlsx') || fileName.endsWith('.csv'))) return true;
-      if (t === 'image/*' && fileType.startsWith('image/')) return true;
-      return false;
-    });
+    if (accepted.includes('*/*') || accepted.includes('*')) {
+      // Allow all file types
+    } else {
+      const matchesMime = accepted.some(t => {
+        if (t === '*/*' || t === '*') return true;
+        if (t.endsWith('/*')) {
+          const prefix = t.split('/')[0];
+          return fileType.startsWith(`${prefix}/`);
+        }
+        return t.toLowerCase() === fileType;
+      });
 
-    if (!matchesMime && !matchesExtension) {
-      throw new Error(
-        `Unsupported file type "${file.type || fileName.split('.').pop() || 'unknown'}". Allowed formats: PDF, Word DOC/DOCX, PNG, JPG.`
-      );
+      const matchesExtension = accepted.some(t => {
+        if (t.startsWith('.')) return fileName.endsWith(t.toLowerCase());
+        if (t === 'application/pdf' && fileName.endsWith('.pdf')) return true;
+        if ((t.includes('word') || t.includes('msword') || t.includes('officedocument.word')) && (fileName.endsWith('.doc') || fileName.endsWith('.docx') || fileName.endsWith('.rtf') || fileName.endsWith('.odt'))) return true;
+        if ((t.includes('excel') || t.includes('spreadsheet') || t.includes('officedocument.sheet')) && (fileName.endsWith('.xls') || fileName.endsWith('.xlsx') || fileName.endsWith('.csv') || fileName.endsWith('.ods'))) return true;
+        if (t === 'image/*' && (fileType.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif|svg|bmp|heic)$/i.test(fileName))) return true;
+        if (fileName.endsWith('.txt') && (t.includes('text') || t.includes('.txt'))) return true;
+        return false;
+      });
+
+      if (!matchesMime && !matchesExtension) {
+        throw new Error(
+          `Unsupported file type "${file.type || fileName.split('.').pop() || 'unknown'}". Allowed formats: Images, PDF, Word DOC/DOCX, Excel/CSV, Text documents.`
+        );
+      }
     }
   }
   if (file.size > maxBytes) {

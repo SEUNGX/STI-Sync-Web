@@ -2,7 +2,7 @@ import { Timestamp } from 'firebase/firestore';
 
 // ─── Document File Type ───────────────────────────────────────────────────────
 export type DocFileType = 'PDF' | 'DOCX' | 'XLSX' | 'JPG' | 'PNG' | 'OTHER';
-export type DocStatus = 'Pending' | 'Approved' | 'Rejected' | 'Resubmitted' | 'Draft';
+export type DocStatus = 'Pending' | 'Approved' | 'Rejected' | 'Returned' | 'Resubmitted' | 'Draft';
 export type DocDistribution = 'all' | 'specific' | 'type';
 
 // ─── Core Document (submission + broadcast in one collection) ─────────────────

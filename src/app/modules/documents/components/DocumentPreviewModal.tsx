@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, Download, FileText, AlertCircle, Mail } from 'lucide-react';
+import { X, Download, FileText, AlertCircle, Mail, Loader2 } from 'lucide-react';
 import type { DocumentDocument } from '../types/document.types';
+import { downloadFile } from '../../../../utils/fileDownloader';
 
 interface DocumentPreviewModalProps {
   doc: DocumentDocument;
@@ -10,15 +11,6 @@ interface DocumentPreviewModalProps {
 function formatBytes(bytes: number): string {
   if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   return `${Math.round(bytes / 1024)} KB`;
-}
-
-// Helper to force Cloudinary URLs to download instead of open in browser
-function getDownloadUrl(url: string) {
-  if (!url) return '';
-  if (url.includes('cloudinary.com') && url.includes('/upload/')) {
-    return url.replace('/upload/', '/upload/fl_attachment/');
-  }
-  return url;
 }
 
 // Helper to ensure Cloudinary serves the correct MIME type for PDFs
@@ -36,12 +28,21 @@ export function DocumentPreviewModal({ doc, onClose }: DocumentPreviewModalProps
   const isPdf = type === 'PDF';
   const isOffice = ['DOCX', 'DOC', 'XLSX', 'XLS', 'PPTX', 'PPT'].includes(type);
   
-  const downloadUrl = getDownloadUrl(doc.fileUrl);
   const pdfUrl = getPdfUrl(doc.fileUrl);
 
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState<{message: string, status?: number} | null>(null);
+  const [downloading, setDownloading] = useState(false);
+
+  const handleDownload = async () => {
+    setDownloading(true);
+    try {
+      await downloadFile(doc.fileUrl, doc.fileName);
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   useEffect(() => {
     if (isPdf && pdfUrl) {
@@ -83,14 +84,14 @@ export function DocumentPreviewModal({ doc, onClose }: DocumentPreviewModalProps
       <p className="text-gray-500 text-sm mb-8 max-w-md">
         This file format cannot be previewed directly in the browser. Please download the file to view it on your device.
       </p>
-      <a 
-        href={downloadUrl} 
-        download
-        className="flex items-center gap-2 px-6 py-3 bg-[#0E4EBD] text-white rounded-xl font-bold hover:bg-[#0E4EBD]/90 transition-colors shadow-sm"
+      <button 
+        onClick={handleDownload}
+        disabled={downloading}
+        className="flex items-center gap-2 px-6 py-3 bg-[#0E4EBD] text-white rounded-xl font-bold hover:bg-[#0E4EBD]/90 transition-colors shadow-sm cursor-pointer disabled:opacity-50"
       >
-        <Download className="w-5 h-5" />
-        Download {doc.fileName}
-      </a>
+        {downloading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
+        {downloading ? 'Downloading...' : `Download ${doc.fileName}`}
+      </button>
       <p className="text-gray-400 text-xs mt-4">{formatBytes(doc.fileSize)}</p>
     </div>
   );
@@ -127,18 +128,18 @@ export function DocumentPreviewModal({ doc, onClose }: DocumentPreviewModalProps
           </div>
           
           <div className="flex items-center gap-2 flex-shrink-0">
-            <a 
-              href={downloadUrl} 
-              download
-              className="flex items-center gap-2 px-4 py-2 bg-white/10 text-white rounded-lg text-sm font-medium hover:bg-white/20 transition-colors"
+            <button 
+              onClick={handleDownload}
+              disabled={downloading}
+              className="flex items-center gap-2 px-4 py-2 bg-white/10 text-white rounded-lg text-sm font-medium hover:bg-white/20 transition-colors cursor-pointer disabled:opacity-50"
             >
-              <Download className="w-4 h-4" />
-              Download
-            </a>
+              {downloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              {downloading ? 'Downloading...' : 'Download'}
+            </button>
             <div className="w-px h-6 bg-white/20 mx-1"></div>
             <button 
               onClick={onClose} 
-              className="text-white/70 hover:text-white p-2 rounded-lg hover:bg-white/10 transition-colors"
+              className="text-white/70 hover:text-white p-2 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
@@ -175,14 +176,14 @@ export function DocumentPreviewModal({ doc, onClose }: DocumentPreviewModalProps
                     </p>
                   )}
                 </div>
-                <a 
-                  href={downloadUrl} 
-                  download
-                  className="flex items-center gap-2 px-6 py-3 bg-[#0E4EBD] text-white rounded-xl font-bold hover:bg-[#0E4EBD]/90 transition-colors shadow-sm"
+                <button 
+                  onClick={handleDownload}
+                  disabled={downloading}
+                  className="flex items-center gap-2 px-6 py-3 bg-[#0E4EBD] text-white rounded-xl font-bold hover:bg-[#0E4EBD]/90 transition-colors shadow-sm cursor-pointer disabled:opacity-50"
                 >
-                  <Download className="w-5 h-5" />
+                  {downloading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
                   Try Downloading Anyway
-                </a>
+                </button>
               </div>
             ) : pdfBlobUrl ? (
               <iframe 

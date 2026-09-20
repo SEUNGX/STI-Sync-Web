@@ -2,6 +2,15 @@ import { Timestamp } from 'firebase/firestore';
 
 export type LiquidationStatus = 'draft' | 'pending' | 'approved' | 'returned' | 'voided';
 
+export interface ReceiptAttachment {
+  id: string;
+  url: string;
+  name: string;
+  fileType: 'image' | 'pdf' | 'document' | 'spreadsheet' | 'other';
+  size?: number;
+  publicId?: string;
+}
+
 export interface ExpenseLineItem {
   id: string;
   description: string;
@@ -15,8 +24,10 @@ export interface ExpenseLineItem {
   totalCost: number;
   vendorName: string;
   receiptNumber?: string;
-  receiptUrl: string; // Cloudinary secure URL
+  receiptUrl?: string; // Cloudinary secure URL (primary/first receipt for backward compatibility)
   receiptPublicId?: string;
+  receiptUrls?: string[]; // Multiple receipt URLs
+  receiptFiles?: ReceiptAttachment[]; // Detailed receipt attachment objects
 }
 
 export interface LiquidationRemark {

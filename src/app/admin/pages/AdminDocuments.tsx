@@ -3,7 +3,7 @@ import { useNavigate } from "react-router";
 import {
   Radio, Clock, CheckCircle, XCircle, Send, Building2,
   Eye, Download, Check, X, Search, Save, FileText,
-  Upload, AlertCircle, ChevronDown, Users, Loader2,
+  Upload, AlertCircle, ChevronDown, Users, Loader2, RotateCcw,
 } from "lucide-react";
 import { useDocumentCategories } from '../../modules/documents/hooks/useDocumentCategories';
 import { useIncomingDocuments, useSentDocuments } from '../../modules/documents/hooks/useDocumentStream';
@@ -11,10 +11,10 @@ import { createDocument, reviewDocument, getNextReferenceNumber } from '../../mo
 import { DocumentPreviewModal } from '../../modules/documents/components/DocumentPreviewModal';
 import { TablePagination } from '../../components/common/TablePagination';
 import { useOrganizationStream } from '../../modules/organizations/hooks/useOrganizationStream';
-import { useOrganizationTypes } from '../../modules/organizations/hooks/useOrganizationTypes';
 import { useAdviserProfile } from '../../modules/auth/hooks/useAdviserProfile';
 import { useSemesters } from '../../modules/academic/hooks/useAcademicStream';
 import { uploadToCloudinary } from '../../../services/cloudinary';
+import { downloadFile } from '../../../utils/fileDownloader';
 import { inferFileType, DOCUMENT_ACCEPTED_TYPES, DOCUMENT_MAX_BYTES } from '../../modules/documents/types/document.types';
 import type { DocumentDocument, DocStatus } from '../../modules/documents/types/document.types';
 import { formatDistanceToNow, format } from 'date-fns';
@@ -49,6 +49,7 @@ function StatusPill({ status }: { status: DocStatus }) {
     Pending: { cls: "bg-amber-100 text-amber-700 animate-pulse", label: "Pending" },
     Approved: { cls: "bg-green-100 text-green-700", label: "Approved" },
     Rejected: { cls: "bg-red-100 text-red-700", label: "Rejected" },
+    Returned: { cls: "bg-amber-100 text-amber-800 border border-amber-300", label: "Returned" },
     Resubmitted: { cls: "bg-blue-100 text-blue-700", label: "Resubmitted" },
     Draft: { cls: "bg-gray-100 text-gray-600", label: "Draft" },
   };
@@ -90,6 +91,40 @@ function QuickApprovePopover({ doc, onClose, onApprove }: { doc: DocumentDocumen
   );
 }
 
+function QuickReturnPopover({ doc, onClose, onReturn }: { doc: DocumentDocument; onClose: () => void; onReturn: (remarks: string) => void }) {
+  const [remarks, setRemarks] = useState("");
+  const [saving, setSaving] = useState(false);
+  const canReturn = remarks.trim().length > 0;
+  return (
+    <div className="absolute right-0 top-full mt-1 w-80 bg-white border border-[#E0E0E0] rounded-xl shadow-lg z-30 overflow-hidden">
+      <div className="h-8 bg-gradient-to-r from-amber-500 to-orange-500 flex items-center gap-2 px-3">
+        <RotateCcw className="w-3.5 h-3.5 text-white" />
+        <p className="text-white font-bold text-xs">Return for Revision</p>
+      </div>
+      <div className="p-3 space-y-3">
+        <p className="text-[#001A4D] text-xs"><strong>{doc.title.slice(0, 30)}...</strong> · {doc.submittedByOrgName}</p>
+        <textarea
+          rows={3}
+          placeholder="Required revision remarks / instructions for the officer..."
+          className="w-full px-3 py-2 border rounded-lg text-xs focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] resize-none border-gray-300"
+          value={remarks}
+          onChange={(e) => setRemarks(e.target.value)}
+        />
+        <div className="flex items-center justify-between">
+          <button onClick={onClose} className="text-gray-500 text-xs hover:text-gray-700">Cancel</button>
+          <button
+            disabled={!canReturn || saving}
+            onClick={async () => { setSaving(true); await onReturn(remarks); setSaving(false); }}
+            className={`px-3 py-1.5 text-white text-xs font-bold rounded-lg transition-colors ${canReturn ? "bg-gradient-to-r from-amber-500 to-orange-500 hover:opacity-90 cursor-pointer" : "bg-gray-200 text-gray-400 cursor-not-allowed"}`}
+          >
+            {saving ? "Returning..." : "Return for Revision"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function QuickRejectPopover({ doc, onClose, onReject }: { doc: DocumentDocument; onClose: () => void; onReject: (remarks: string) => void }) {
   const [remarks, setRemarks] = useState("");
   const [saving, setSaving] = useState(false);
@@ -123,14 +158,12 @@ function BroadcastModal({ onClose }: { onClose: () => void }) {
   const { data: docCategories } = useDocumentCategories();
   const activeCategories = docCategories.filter(c => c.active);
   const { data: orgs } = useOrganizationStream();
-  const { data: orgTypes } = useOrganizationTypes();
   const { profile: adminProfile } = useAdviserProfile();
   const { data: semesters } = useSemesters();
   const activeSemester = semesters.find(s => s.status === 'ACTIVE');
 
-  const [distribution, setDistribution] = useState<"all" | "specific" | "type">("all");
+  const [distribution, setDistribution] = useState<"all" | "specific">("all");
   const [selectedOrgs, setSelectedOrgs] = useState<string[]>([]);
-  const [selectedTypeId, setSelectedTypeId] = useState<string>("");
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
   const [categoryId, setCategoryId] = useState("");
@@ -151,21 +184,16 @@ function BroadcastModal({ onClose }: { onClose: () => void }) {
 
   const filteredOrgs = useMemo(() => {
     let list = activeOrgs;
-    if (distribution === "type" && selectedTypeId) {
-      list = list.filter(o => o.typeId === selectedTypeId);
-    }
     if (orgSearch.trim()) {
       const s = orgSearch.toLowerCase();
       list = list.filter(o => o.name.toLowerCase().includes(s) || o.acronym.toLowerCase().includes(s));
     }
     return list;
-  }, [activeOrgs, distribution, selectedTypeId, orgSearch]);
+  }, [activeOrgs, orgSearch]);
 
   const targetOrgCount = distribution === "all"
     ? activeOrgs.length
-    : distribution === "specific"
-      ? selectedOrgs.length
-      : selectedOrgs.length || filteredOrgs.length;
+    : selectedOrgs.length;
 
   const canBroadcast = title && uploadedFile && targetOrgCount > 0 && !broadcasting;
 
@@ -195,9 +223,7 @@ function BroadcastModal({ onClose }: { onClose: () => void }) {
       const refNum = await getNextReferenceNumber('SAS');
       const resolvedTargetOrgIds = distribution === "all"
         ? activeOrgs.map(o => o.id)
-        : distribution === "type"
-          ? (selectedOrgs.length > 0 ? selectedOrgs : filteredOrgs.map(o => o.id))
-          : selectedOrgs;
+        : selectedOrgs;
 
       await createDocument({
         type: 'broadcast',
@@ -231,7 +257,7 @@ function BroadcastModal({ onClose }: { onClose: () => void }) {
         broadcastByUid: adminProfile.uid,
         distribution,
         targetOrgIds: resolvedTargetOrgIds,
-        targetOrgTypeId: distribution === 'type' ? selectedTypeId : null,
+        targetOrgTypeId: null,
         readBy: {},
       });
       setBroadcastRef(refNum);
@@ -348,11 +374,10 @@ function BroadcastModal({ onClose }: { onClose: () => void }) {
                   {([
                     { key: "all" as const, icon: Building2, label: "All Organizations", desc: `Broadcast to all ${activeOrgs.length} active student organizations`, borderColor: "border-[#0E4EBD]", bg: "bg-[#E8F0FF]" },
                     { key: "specific" as const, icon: Building2, label: "Specific Organizations", desc: "Choose which clubs receive this document", borderColor: "border-blue-500", bg: "bg-blue-50" },
-                    { key: "type" as const, icon: Users, label: "By Organization Type", desc: "Filter by type, then pick clubs", borderColor: "border-[#0E4EBD]", bg: "bg-[#E8F0FF]" },
                   ]).map((opt) => (
                     <div key={opt.key}>
                       <button
-                        onClick={() => { setDistribution(opt.key); setSelectedOrgs([]); setSelectedTypeId(""); }}
+                        onClick={() => { setDistribution(opt.key); setSelectedOrgs([]); }}
                         className={`w-full flex items-center gap-4 p-4 rounded-xl border-2 text-left transition-colors ${distribution === opt.key ? `${opt.borderColor} ${opt.bg}` : "border-gray-200 hover:border-gray-300"}`}
                       >
                         <opt.icon className={`w-5 h-5 flex-shrink-0 ${distribution === opt.key ? "text-[#0E4EBD]" : "text-gray-400"}`} />
@@ -361,25 +386,6 @@ function BroadcastModal({ onClose }: { onClose: () => void }) {
                           <p className="text-gray-500 text-xs">{opt.desc}</p>
                         </div>
                       </button>
-
-                      {/* Type selector */}
-                      {opt.key === "type" && distribution === "type" && (
-                        <div className="mt-2 space-y-2">
-                          <select
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD] focus:border-transparent"
-                            value={selectedTypeId}
-                            onChange={(e) => { setSelectedTypeId(e.target.value); setSelectedOrgs([]); }}
-                          >
-                            <option value="">Select organization type...</option>
-                            {orgTypes.filter(t => !t.archived).map(t => (
-                              <option key={t.id} value={t.id}>{t.name}</option>
-                            ))}
-                          </select>
-                          {selectedTypeId && (
-                            <OrgChecklist orgs={filteredOrgs} selectedOrgs={selectedOrgs} toggleOrg={toggleOrg} setSelectedOrgs={setSelectedOrgs} search={orgSearch} setSearch={setOrgSearch} />
-                          )}
-                        </div>
-                      )}
 
                       {/* Specific org list */}
                       {opt.key === "specific" && distribution === "specific" && (
@@ -478,7 +484,9 @@ function IncomingQueueTab() {
   const { data: orgs } = useOrganizationStream();
   const { profile: adminProfile } = useAdviserProfile();
   const [approvePopover, setApprovePopover] = useState<string | null>(null);
+  const [returnPopover, setReturnPopover] = useState<string | null>(null);
   const [rejectPopover, setRejectPopover] = useState<string | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [previewDoc, setPreviewDoc] = useState<DocumentDocument | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState("All");
@@ -516,6 +524,12 @@ function IncomingQueueTab() {
     setApprovePopover(null);
   };
 
+  const handleReturn = async (docId: string, remarks: string) => {
+    if (!adminProfile) return;
+    await reviewDocument(docId, 'Returned', adminProfile.uid, remarks);
+    setReturnPopover(null);
+  };
+
   const handleReject = async (docId: string, remarks: string) => {
     if (!adminProfile) return;
     await reviewDocument(docId, 'Rejected', adminProfile.uid, remarks);
@@ -545,7 +559,7 @@ function IncomingQueueTab() {
           {uniqueOrgs.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
         </select>
         <div className="flex gap-1">
-          {["All", "Pending", "Approved", "Rejected", "Resubmitted"].map((s) => (
+          {["All", "Pending", "Approved", "Returned", "Rejected", "Resubmitted"].map((s) => (
             <button key={s} onClick={() => setStatusFilter(s)} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${statusFilter === s ? "bg-[#001A4D] text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>{s}</button>
           ))}
         </div>
@@ -631,15 +645,49 @@ function IncomingQueueTab() {
                         <td className="px-4 py-3"><StatusPill status={doc.status} /></td>
                         <td className="px-4 py-3 relative">
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button onClick={() => setPreviewDoc(doc)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-blue-50 text-blue-600 transition-colors" title="View Document"><Eye className="w-4 h-4" /></button>
-                            <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer" className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-50 text-[#001A4D] transition-colors" title="Download"><Download className="w-4 h-4" /></a>
+                            <button onClick={() => setPreviewDoc(doc)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-blue-50 text-blue-600 transition-colors cursor-pointer" title="View Document"><Eye className="w-4 h-4" /></button>
+                            <button
+                              onClick={async () => {
+                                setDownloadingId(doc.id);
+                                try {
+                                  await downloadFile(doc.fileUrl, doc.fileName);
+                                } finally {
+                                  setDownloadingId(null);
+                                }
+                              }}
+                              disabled={downloadingId === doc.id}
+                              className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-[#001A4D] transition-colors cursor-pointer"
+                              title="Download File"
+                            >
+                              {downloadingId === doc.id ? <Loader2 className="w-4 h-4 animate-spin text-[#0E4EBD]" /> : <Download className="w-4 h-4" />}
+                            </button>
                             {(doc.status === "Pending" || doc.status === "Resubmitted") && (
                               <>
-                                <button onClick={() => { setApprovePopover(approvePopover === doc.id ? null : doc.id); setRejectPopover(null); }} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-green-50 text-green-600 transition-colors"><Check className="w-4 h-4" /></button>
-                                <button onClick={() => { setRejectPopover(rejectPopover === doc.id ? null : doc.id); setApprovePopover(null); }} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-red-50 text-red-600 transition-colors"><X className="w-4 h-4" /></button>
+                                <button
+                                  onClick={() => { setApprovePopover(approvePopover === doc.id ? null : doc.id); setReturnPopover(null); setRejectPopover(null); }}
+                                  className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-green-50 text-green-600 transition-colors cursor-pointer"
+                                  title="Approve"
+                                >
+                                  <Check className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => { setReturnPopover(returnPopover === doc.id ? null : doc.id); setApprovePopover(null); setRejectPopover(null); }}
+                                  className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-amber-50 text-amber-600 transition-colors cursor-pointer"
+                                  title="Return for Revision"
+                                >
+                                  <RotateCcw className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => { setRejectPopover(rejectPopover === doc.id ? null : doc.id); setApprovePopover(null); setReturnPopover(null); }}
+                                  className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-red-50 text-red-600 transition-colors cursor-pointer"
+                                  title="Reject"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
                               </>
                             )}
                             {approvePopover === doc.id && <QuickApprovePopover doc={doc} onClose={() => setApprovePopover(null)} onApprove={(r) => handleApprove(doc.id, r)} />}
+                            {returnPopover === doc.id && <QuickReturnPopover doc={doc} onClose={() => setReturnPopover(null)} onReturn={(r) => handleReturn(doc.id, r)} />}
                             {rejectPopover === doc.id && <QuickRejectPopover doc={doc} onClose={() => setRejectPopover(null)} onReject={(r) => handleReject(doc.id, r)} />}
                           </div>
                         </td>
@@ -682,6 +730,7 @@ function SentTab() {
   const { data: sent, loading } = useSentDocuments();
   const { data: orgs } = useOrganizationStream();
   const [previewDoc, setPreviewDoc] = useState<DocumentDocument | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
   const filteredSent = useMemo(() => {
@@ -763,8 +812,22 @@ function SentTab() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => setPreviewDoc(doc)} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-blue-50 text-blue-600 transition-colors" title="View Document"><Eye className="w-3.5 h-3.5" /></button>
-                        <a href={doc.fileUrl} download className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-50 text-[#001A4D] transition-colors"><Download className="w-3.5 h-3.5" /></a>
+                        <button onClick={() => setPreviewDoc(doc)} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-blue-50 text-blue-600 transition-colors cursor-pointer" title="View Document"><Eye className="w-3.5 h-3.5" /></button>
+                        <button
+                          onClick={async () => {
+                            setDownloadingId(doc.id);
+                            try {
+                              await downloadFile(doc.fileUrl, doc.fileName);
+                            } finally {
+                              setDownloadingId(null);
+                            }
+                          }}
+                          disabled={downloadingId === doc.id}
+                          className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 text-[#001A4D] transition-colors cursor-pointer"
+                          title="Download Document"
+                        >
+                          {downloadingId === doc.id ? <Loader2 className="w-3.5 h-3.5 animate-spin text-[#0E4EBD]" /> : <Download className="w-3.5 h-3.5" />}
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -800,8 +863,8 @@ export function AdminDocuments() {
 
   const pendingCount = incoming.filter(d => d.status === "Pending" || d.status === "Resubmitted").length;
   const approvedCount = incoming.filter(d => d.status === "Approved").length;
+  const returnedCount = incoming.filter(d => d.status === "Returned").length;
   const rejectedCount = incoming.filter(d => d.status === "Rejected").length;
-  const uniqueOrgs = new Set(incoming.map(d => d.submittedByOrgId)).size;
 
   return (
     <div className="space-y-5">
@@ -812,7 +875,7 @@ export function AdminDocuments() {
         </div>
         <button
           onClick={() => setShowBroadcast(true)}
-          className="flex items-center gap-2 px-5 py-2.5 bg-[#001A4D] text-[#FFD41C] rounded-lg font-bold text-sm hover:bg-[#001A4D]/90 transition-colors"
+          className="flex items-center gap-2 px-5 py-2.5 bg-[#001A4D] text-[#FFD41C] rounded-lg font-bold text-sm hover:bg-[#001A4D]/90 transition-colors cursor-pointer"
         >
           <Radio className="w-4 h-4" />
           Broadcast Document to Clubs
@@ -845,9 +908,9 @@ export function AdminDocuments() {
         {[
           { label: "Pending Documents", value: pendingCount, note: "requires your review", gradient: "from-amber-500 to-amber-400", Icon: Clock, pulse: pendingCount > 0 },
           { label: "Approved This Semester", value: approvedCount, note: "approved submissions", gradient: "from-green-500 to-green-400", Icon: CheckCircle },
-          { label: "Rejected", value: rejectedCount, note: "awaiting resubmission", gradient: "from-red-500 to-orange-400", Icon: XCircle },
+          { label: "Returned for Revision", value: returnedCount, note: "awaiting revisions", gradient: "from-amber-600 to-orange-500", Icon: RotateCcw },
+          { label: "Rejected", value: rejectedCount, note: "rejected submissions", gradient: "from-red-500 to-orange-400", Icon: XCircle },
           { label: "Broadcast to Clubs", value: sent.length, note: "sent by SAS this semester", gradient: "from-blue-600 to-blue-400", Icon: Radio },
-          { label: "Organizations Submitting", value: uniqueOrgs, note: "active submitters", gradient: "from-[#001A4D] to-[#0E4EBD]", Icon: Building2 },
         ].map((card) => (
           <div key={card.label} className={`bg-gradient-to-br ${card.gradient} rounded-xl p-4 text-white relative`}>
             {card.pulse && <span className="absolute top-3 right-3 w-2 h-2 bg-white rounded-full animate-ping" />}
@@ -867,7 +930,7 @@ export function AdminDocuments() {
           <button
             key={key}
             onClick={() => setTab(key)}
-            className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors ${tab === key ? "bg-[#001A4D] text-white border-[#FFD41C] -mb-px rounded-t-lg" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+            className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors cursor-pointer ${tab === key ? "bg-[#001A4D] text-white border-[#FFD41C] -mb-px rounded-t-lg" : "border-transparent text-gray-500 hover:text-gray-700"}`}
           >
             {label}
             {key === "incoming" && pendingCount > 0 && (

@@ -35,7 +35,7 @@ export async function updateDocument(
 
 export async function reviewDocument(
   id: string,
-  status: 'Approved' | 'Rejected',
+  status: 'Approved' | 'Rejected' | 'Returned',
   reviewedBy: string,
   remarks: string | null,
 ): Promise<void> {

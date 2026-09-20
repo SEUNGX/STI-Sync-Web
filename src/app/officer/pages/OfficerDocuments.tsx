@@ -3,7 +3,7 @@ import {
   Upload, Clock, CheckCircle, XCircle, Mail, ArrowUp, ArrowDown,
   Eye, Download, RefreshCw, Trash2, Search, Send, Save,
   FileText, X, MessageSquare, ChevronDown, ChevronUp,
-  Mailbox, EyeOff, BellOff, Loader2, AlertCircle,
+  Mailbox, EyeOff, BellOff, Loader2, AlertCircle, RotateCcw,
 } from "lucide-react";
 import { useDocumentCategories } from '../../modules/documents/hooks/useDocumentCategories';
 import { useOfficerSubmissions, useOfficerInbox } from '../../modules/documents/hooks/useDocumentStream';
@@ -14,6 +14,7 @@ import { useOfficerProfile } from '../../auth/hooks/useOfficerProfile';
 import { useOrganizationStream } from '../../modules/organizations/hooks/useOrganizationStream';
 import { useSemesters } from '../../modules/academic/hooks/useAcademicStream';
 import { uploadToCloudinary } from '../../../services/cloudinary';
+import { downloadFile } from '../../../utils/fileDownloader';
 import { inferFileType, DOCUMENT_ACCEPTED_TYPES, DOCUMENT_MAX_BYTES } from '../../modules/documents/types/document.types';
 import type { DocumentDocument, DocStatus } from '../../modules/documents/types/document.types';
 import { formatDistanceToNow, format } from 'date-fns';
@@ -55,6 +56,7 @@ function StatusPill({ status }: { status: DocStatus }) {
     Pending: { cls: "bg-amber-500 text-white", icon: <Clock className="w-3 h-3" />, label: "Pending Review" },
     Approved: { cls: "bg-green-500 text-white", icon: <CheckCircle className="w-3 h-3" />, label: "Approved" },
     Rejected: { cls: "bg-red-500 text-white", icon: <XCircle className="w-3 h-3" />, label: "Rejected" },
+    Returned: { cls: "bg-amber-600 text-white", icon: <RotateCcw className="w-3 h-3" />, label: "Returned for Revision" },
     Resubmitted: { cls: "bg-blue-600 text-white", icon: <RefreshCw className="w-3 h-3" />, label: "Resubmitted" },
     Draft: { cls: "bg-gray-400 text-white", icon: <FileText className="w-3 h-3" />, label: "Draft" },
   };
@@ -89,13 +91,18 @@ function SubmitDocModal({ onClose, orgId, orgName, orgAcronym, orgTypeId, office
   const { data: docCategories } = useDocumentCategories();
   const activeCategories = docCategories.filter(c => c.active && c.officerCanSubmit);
   const { data: semesters } = useSemesters();
+  const activeSemester = useMemo(() => {
+    return (
+      semesters.find(s => !s.archived && s.status === 'ACTIVE') ||
+      semesters.find(s => !s.archived) ||
+      semesters[0] ||
+      null
+    );
+  }, [semesters]);
 
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
   const [categoryId, setCategoryId] = useState("");
-  const [semesterId, setSemesterId] = useState("");
-  const [academicYear, setAcademicYear] = useState("");
-  const [semesterLabel, setSemesterLabel] = useState("");
   const [notes, setNotes] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -108,7 +115,7 @@ function SubmitDocModal({ onClose, orgId, orgName, orgAcronym, orgTypeId, office
   const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const canSubmit = title.trim() && category && uploadedFile && semesterId && !submitting;
+  const canSubmit = title.trim() && category && uploadedFile && !submitting;
 
   const handleFileSelect = async (file: File) => {
     setUploadError(null);
@@ -127,15 +134,6 @@ function SubmitDocModal({ onClose, orgId, orgName, orgAcronym, orgTypeId, office
     }
   };
 
-  const handleSemesterChange = (id: string) => {
-    setSemesterId(id);
-    const sem = semesters.find(s => s.id === id);
-    if (sem) {
-      setAcademicYear(sem.academicYear);
-      setSemesterLabel(sem.semester);
-    }
-  };
-
   const handleSubmit = async () => {
     if (!canSubmit || !uploadedFile) return;
     setSubmitting(true);
@@ -151,9 +149,9 @@ function SubmitDocModal({ onClose, orgId, orgName, orgAcronym, orgTypeId, office
         fileName: uploadedFile.name,
         fileType: inferFileType(uploadedFile.name),
         fileSize: uploadedFile.size,
-        semesterId,
-        academicYear,
-        semester: semesterLabel,
+        semesterId: activeSemester?.id || '',
+        academicYear: activeSemester?.academicYear || '',
+        semester: activeSemester?.semester || '',
         referenceNumber: refNum,
         submittedBy: officerName,
         submittedByEmail: officerEmail,
@@ -197,7 +195,7 @@ function SubmitDocModal({ onClose, orgId, orgName, orgAcronym, orgTypeId, office
               <p className="text-white/80 text-xs">Student Affairs Services — STI College Ormoc</p>
             </div>
           </div>
-          <button onClick={onClose} className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10 cursor-pointer"><X className="w-5 h-5" /></button>
         </div>
 
         {submitted ? (
@@ -209,8 +207,8 @@ function SubmitDocModal({ onClose, orgId, orgName, orgAcronym, orgTypeId, office
               <p className="text-white/90 text-sm">The SAS Adviser has been notified and will review your submission.</p>
             </div>
             <div className="px-6 py-4 border-t border-gray-200 flex gap-3">
-              <button onClick={onClose} className="flex-1 py-2.5 border border-[#0E4EBD] text-[#0E4EBD] rounded-lg text-sm font-medium hover:bg-blue-50 transition-colors">Submit Another</button>
-              <button onClick={onClose} className="flex-1 py-2.5 bg-[#001A4D] text-[#FFD41C] rounded-lg text-sm font-bold hover:bg-[#001A4D]/90 transition-colors">View My Submissions</button>
+              <button onClick={onClose} className="flex-1 py-2.5 border border-[#0E4EBD] text-[#0E4EBD] rounded-lg text-sm font-medium hover:bg-blue-50 transition-colors cursor-pointer">Submit Another</button>
+              <button onClick={onClose} className="flex-1 py-2.5 bg-[#001A4D] text-[#FFD41C] rounded-lg text-sm font-bold hover:bg-[#001A4D]/90 transition-colors cursor-pointer">View My Submissions</button>
             </div>
           </div>
         ) : (
@@ -240,22 +238,6 @@ function SubmitDocModal({ onClose, orgId, orgName, orgAcronym, orgTypeId, office
                         <option key={cat.id} value={cat.name}>{cat.name}</option>
                       ))}
                     </select>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Semester <span className="text-red-500">*</span></label>
-                      <select className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD] focus:border-transparent text-sm" value={semesterId} onChange={(e) => handleSemesterChange(e.target.value)}>
-                        <option value="">Select semester...</option>
-                        {semesters.filter(s => !s.archived).map(s => (
-                          <option key={s.id} value={s.id}>{s.semester} — A.Y. {s.academicYear}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Academic Year</label>
-                      <input type="text" readOnly className="w-full px-4 py-2.5 border border-gray-200 rounded-lg bg-gray-50 text-sm text-gray-600" value={academicYear ? `A.Y. ${academicYear}` : 'Auto-filled from semester'} />
-                    </div>
                   </div>
 
                   <div>
@@ -445,10 +427,12 @@ function ResubmitModal({ doc, onClose, orgId, orgName, orgAcronym, orgTypeId, of
 
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
           {doc.remarks && (
-            <div className="p-4 bg-red-50 border border-red-200 rounded-xl">
+            <div className={`p-4 rounded-xl border ${doc.status === 'Returned' ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200'}`}>
               <div className="flex items-center gap-2 mb-2">
-                <MessageSquare className="w-4 h-4 text-red-600" />
-                <p className="text-red-600 font-bold text-xs">Rejection Reason</p>
+                <MessageSquare className={`w-4 h-4 ${doc.status === 'Returned' ? 'text-amber-600' : 'text-red-600'}`} />
+                <p className={`font-bold text-xs ${doc.status === 'Returned' ? 'text-amber-700' : 'text-red-600'}`}>
+                  {doc.status === 'Returned' ? 'SAS Revision Remarks' : 'Rejection Reason'}
+                </p>
               </div>
               <p className="text-[#001A4D] text-sm italic">{doc.remarks}</p>
             </div>
@@ -491,7 +475,7 @@ function ResubmitModal({ doc, onClose, orgId, orgName, orgAcronym, orgTypeId, of
             {uploadError && <p className="text-red-500 text-xs mt-2"><AlertCircle className="w-3 h-3 inline mr-1" />{uploadError}</p>}
             <div className="flex items-center gap-2 mt-2">
               <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
-              <p className="text-amber-700 text-xs">The original rejected file is preserved for records. Only upload the corrected version.</p>
+              <p className="text-amber-700 text-xs">The original file is preserved for records. Only upload the corrected version.</p>
             </div>
           </div>
 
@@ -521,10 +505,15 @@ function ResubmitModal({ doc, onClose, orgId, orgName, orgAcronym, orgTypeId, of
 
 // ─── Row Expansion ────────────────────────────────────────────────────────────
 function ExpandedRow({ doc }: { doc: DocumentDocument }) {
+  const isReturned = doc.status === "Returned";
   const steps = [
     { label: "Submitted to SAS", done: true, color: "bg-blue-600" },
     { label: "Under Review", done: doc.status !== "Pending", color: "bg-amber-500" },
-    { label: doc.status === "Approved" ? "Approved" : doc.status === "Rejected" ? "Rejected" : "Decision Pending", done: doc.status === "Approved" || doc.status === "Rejected", color: doc.status === "Approved" ? "bg-green-500" : "bg-red-500" },
+    {
+      label: doc.status === "Approved" ? "Approved" : doc.status === "Rejected" ? "Rejected" : isReturned ? "Returned for Revision" : "Decision Pending",
+      done: doc.status === "Approved" || doc.status === "Rejected" || isReturned,
+      color: doc.status === "Approved" ? "bg-green-500" : isReturned ? "bg-amber-500" : "bg-red-500",
+    },
   ];
 
   return (
@@ -548,8 +537,8 @@ function ExpandedRow({ doc }: { doc: DocumentDocument }) {
           )}
           {doc.remarks && (
             <div className="flex-1">
-              <p className="text-xs font-medium text-gray-500 mb-1">SAS Remarks</p>
-              <p className={`text-sm ${doc.status === "Rejected" ? "text-red-700" : "text-green-700"}`}>{doc.remarks}</p>
+              <p className="text-xs font-medium text-gray-500 mb-1">{isReturned ? "Revision Instructions" : "SAS Remarks"}</p>
+              <p className={`text-sm ${doc.status === "Rejected" ? "text-red-700" : isReturned ? "text-amber-800 font-medium" : "text-green-700"}`}>{doc.remarks}</p>
             </div>
           )}
           <div className="flex-shrink-0">
@@ -581,11 +570,12 @@ function SubmissionsTab({ orgId, orgName, orgAcronym, orgTypeId, officerName, of
   const [expanded, setExpanded] = useState<string | null>(null);
   const [resubmitDoc, setResubmitDoc] = useState<DocumentDocument | null>(null);
   const [previewDoc, setPreviewDoc] = useState<DocumentDocument | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("All");
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
 
-  const statuses: DocStatus[] = ["Pending", "Approved", "Rejected", "Resubmitted", "Draft"];
+  const statuses: DocStatus[] = ["Pending", "Approved", "Returned", "Rejected", "Resubmitted", "Draft"];
 
   const filtered = useMemo(() => {
     let list = submissions;
@@ -691,6 +681,8 @@ function SubmissionsTab({ orgId, orgName, orgAcronym, orgTypeId, officerName, of
                             <span className="text-gray-400 text-sm italic">—</span>
                           ) : doc.status === "Approved" ? (
                             <button className="flex items-center gap-1 text-green-600 text-xs font-medium hover:underline"><MessageSquare className="w-3.5 h-3.5" /> View</button>
+                          ) : doc.status === "Returned" ? (
+                            <button className="flex items-center gap-1 text-amber-700 text-xs font-medium underline"><MessageSquare className="w-3.5 h-3.5" /> View Revisions</button>
                           ) : (
                             <button className="flex items-center gap-1 text-red-600 text-xs font-medium underline"><MessageSquare className="w-3.5 h-3.5" /> View Reason</button>
                           )}
@@ -698,9 +690,23 @@ function SubmissionsTab({ orgId, orgName, orgAcronym, orgTypeId, officerName, of
                         <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button onClick={() => setPreviewDoc(doc)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-blue-50 text-blue-600 transition-colors cursor-pointer" title="View Document"><Eye className="w-4 h-4" /></button>
-                            <a href={doc.fileUrl} download className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-50 text-[#001A4D] transition-colors"><Download className="w-4 h-4" /></a>
-                            {(doc.status === "Rejected" || doc.status === "Draft") && (
-                              <button onClick={() => setResubmitDoc(doc)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-blue-50 text-[#0E4EBD] transition-colors cursor-pointer"><RefreshCw className="w-4 h-4" /></button>
+                            <button
+                              onClick={async () => {
+                                setDownloadingId(doc.id);
+                                try {
+                                  await downloadFile(doc.fileUrl, doc.fileName);
+                                } finally {
+                                  setDownloadingId(null);
+                                }
+                              }}
+                              disabled={downloadingId === doc.id}
+                              className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-[#001A4D] transition-colors cursor-pointer"
+                              title="Download File"
+                            >
+                              {downloadingId === doc.id ? <Loader2 className="w-4 h-4 animate-spin text-[#0E4EBD]" /> : <Download className="w-4 h-4" />}
+                            </button>
+                            {(doc.status === "Rejected" || doc.status === "Returned" || doc.status === "Draft") && (
+                              <button onClick={() => setResubmitDoc(doc)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-blue-50 text-[#0E4EBD] transition-colors cursor-pointer" title="Resubmit with Corrections"><RefreshCw className="w-4 h-4" /></button>
                             )}
                             {expanded === doc.id ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
                           </div>
@@ -737,6 +743,7 @@ function SubmissionsTab({ orgId, orgName, orgAcronym, orgTypeId, officerName, of
 function InboxTab({ orgId }: { orgId: string }) {
   const { data: inbox, loading } = useOfficerInbox(orgId);
   const [previewDoc, setPreviewDoc] = useState<DocumentDocument | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [showUnreadOnly, setShowUnreadOnly] = useState(false);
 
@@ -780,12 +787,17 @@ function InboxTab({ orgId }: { orgId: string }) {
       {/* Context card */}
       <div className="flex items-start justify-between p-4 bg-blue-50/70 border border-blue-200 rounded-xl shadow-xs">
         <div className="flex items-start gap-3">
-          <Mail className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+          <Mail className="w-5 h-5 text-[#0E4EBD] flex-shrink-0 mt-0.5" />
           <div>
-            <p className="text-blue-700 font-bold text-sm mb-0.5">Official Documents from SAS</p>
+            <p className="text-[#0E4EBD] font-bold text-sm mb-0.5">Official Documents from SAS</p>
             <p className="text-gray-700 text-sm">These are official memos, guidelines, approved forms, and files sent directly to your organization by the Student Affairs Services.</p>
           </div>
         </div>
+        {unreadCount > 0 && (
+          <span className="px-2.5 py-1 bg-amber-100 text-amber-800 text-xs font-bold rounded-full flex-shrink-0">
+            {unreadCount} Unread
+          </span>
+        )}
       </div>
 
       {/* Filter */}
@@ -872,10 +884,24 @@ function InboxTab({ orgId }: { orgId: string }) {
                           <EyeOff className="w-4 h-4 text-amber-500" />
                         )}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button onClick={() => handleOpenDoc(doc)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-blue-50 text-blue-600 transition-colors cursor-pointer" title="View Document"><Eye className="w-4 h-4" /></button>
-                          <a href={doc.fileUrl} download className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-50 text-[#001A4D] transition-colors"><Download className="w-4 h-4" /></a>
+                          <button
+                            onClick={async () => {
+                              setDownloadingId(doc.id);
+                              try {
+                                await downloadFile(doc.fileUrl, doc.fileName);
+                              } finally {
+                                setDownloadingId(null);
+                              }
+                            }}
+                            disabled={downloadingId === doc.id}
+                            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-[#001A4D] transition-colors cursor-pointer"
+                            title="Download Document"
+                          >
+                            {downloadingId === doc.id ? <Loader2 className="w-4 h-4 animate-spin text-[#0E4EBD]" /> : <Download className="w-4 h-4" />}
+                          </button>
                         </div>
                       </td>
                     </tr>

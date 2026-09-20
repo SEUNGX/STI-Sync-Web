@@ -70,7 +70,14 @@ export function FinancialLiquidations() {
   const [searchParams] = useSearchParams();
   const targetId = searchParams.get('id') || searchParams.get('liquidationId');
 
-  const [lightboxData, setLightboxData] = useState<{ url: string; title: string; vendor?: string; amount?: number } | null>(null);
+  const [lightboxData, setLightboxData] = useState<{
+    url: string;
+    title: string;
+    vendor?: string;
+    amount?: number;
+    fileName?: string;
+    fileType?: string;
+  } | null>(null);
 
   const [activeTab, setActiveTab] = useState<TabValue>('all');
   const [selectedReport, setSelectedReport] = useState<LiquidationDocument | null>(null);
@@ -787,21 +794,58 @@ export function FinancialLiquidations() {
                               {item.vendorName || '—'} {item.receiptNumber ? `(${item.receiptNumber})` : ''}
                             </td>
                             <td className="p-3">
-                              {item.receiptUrl ? (
-                                <button
-                                  onClick={() => setLightboxData({
-                                    url: item.receiptUrl,
-                                    title: item.description,
-                                    vendor: item.vendorName,
-                                    amount: item.totalCost,
-                                  })}
-                                  className="text-[#0E4EBD] hover:underline font-semibold text-xs flex items-center gap-1 cursor-pointer"
-                                >
-                                  View Image <ExternalLink className="w-3 h-3" />
-                                </button>
-                              ) : (
-                                <span className="text-gray-400">No Image</span>
-                              )}
+                              {(() => {
+                                const files =
+                                  item.receiptFiles && item.receiptFiles.length > 0
+                                    ? item.receiptFiles
+                                    : item.receiptUrls && item.receiptUrls.length > 0
+                                    ? item.receiptUrls.map((u, i) => ({
+                                        id: `${i}`,
+                                        url: u,
+                                        name: `Receipt ${i + 1}`,
+                                        fileType: 'other' as const,
+                                      }))
+                                    : item.receiptUrl
+                                    ? [
+                                        {
+                                          id: '1',
+                                          url: item.receiptUrl,
+                                          name: 'Receipt Attachment',
+                                          fileType: 'other' as const,
+                                        },
+                                      ]
+                                    : [];
+
+                                if (files.length === 0) {
+                                  return <span className="text-gray-400">No Proof</span>;
+                                }
+
+                                return (
+                                  <div className="flex flex-col gap-1">
+                                    {files.map((f, fIdx) => (
+                                      <button
+                                        key={f.id || fIdx}
+                                        type="button"
+                                        onClick={() =>
+                                          setLightboxData({
+                                            url: f.url,
+                                            title: item.description,
+                                            vendor: item.vendorName,
+                                            amount: item.totalCost,
+                                            fileName: f.name,
+                                            fileType: (f as any).fileType,
+                                          })
+                                        }
+                                        className="text-[#0E4EBD] hover:underline font-semibold text-xs flex items-center gap-1 cursor-pointer truncate text-left max-w-[170px]"
+                                        title={f.name}
+                                      >
+                                        <Eye className="w-3 h-3 flex-shrink-0" />
+                                        <span className="truncate">{f.name || `Receipt #${fIdx + 1}`}</span>
+                                      </button>
+                                    ))}
+                                  </div>
+                                );
+                              })()}
                             </td>
                           </tr>
                         );
@@ -918,6 +962,8 @@ export function FinancialLiquidations() {
         itemTitle={lightboxData?.title}
         vendorName={lightboxData?.vendor}
         amount={lightboxData?.amount}
+        fileName={lightboxData?.fileName}
+        fileType={lightboxData?.fileType}
       />
 
       {/* Liquidation Excel Export Preview Modal */}

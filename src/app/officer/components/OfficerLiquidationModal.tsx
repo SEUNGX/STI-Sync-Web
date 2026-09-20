@@ -1,17 +1,35 @@
 import { useState, useEffect, useMemo } from 'react';
-import { X, Plus, Trash2, Upload, AlertCircle, CheckCircle2, Loader2, DollarSign } from 'lucide-react';
+import {
+  X,
+  Plus,
+  Trash2,
+  Upload,
+  AlertCircle,
+  CheckCircle2,
+  Loader2,
+  DollarSign,
+  FileText,
+  FileSpreadsheet,
+  Image as ImageIcon,
+  File,
+  Eye,
+  Paperclip,
+  ExternalLink,
+} from 'lucide-react';
 import { uploadToCloudinary } from '../../../services/cloudinary';
 import { useAllEvents } from '../../modules/events/hooks/useEventStream';
 import {
   createLiquidationReport,
   updateLiquidationReport,
-  submitLiquidationReport
+  submitLiquidationReport,
 } from '../../modules/finance/services/liquidation.service';
 import type {
   LiquidationDocument,
-  ExpenseLineItem
+  ExpenseLineItem,
+  ReceiptAttachment,
 } from '../../modules/finance/types/liquidation.types';
 import { formatCurrency, formatVariance } from '../../utils/currency';
+import ReceiptLightboxModal from '../../modules/finance/components/ReceiptLightboxModal';
 
 interface OfficerLiquidationModalProps {
   isOpen: boolean;
@@ -33,6 +51,54 @@ const EXPENSE_CATEGORIES = [
   'Equipment Rental',
   'Miscellaneous',
 ];
+
+function getFileTypeCategory(fileName: string, mimeType?: string): 'image' | 'pdf' | 'document' | 'spreadsheet' | 'other' {
+  const name = fileName.toLowerCase();
+  const mime = (mimeType || '').toLowerCase();
+  if (mime.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif|svg|bmp|heic)$/i.test(name)) return 'image';
+  if (mime === 'application/pdf' || name.endsWith('.pdf')) return 'pdf';
+  if (name.endsWith('.doc') || name.endsWith('.docx') || name.endsWith('.rtf') || name.endsWith('.odt') || name.endsWith('.txt')) return 'document';
+  if (name.endsWith('.xls') || name.endsWith('.xlsx') || name.endsWith('.csv') || name.endsWith('.ods')) return 'spreadsheet';
+  return 'other';
+}
+
+function formatFileSize(bytes?: number): string {
+  if (!bytes || bytes <= 0) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function normalizeLineItems(items: ExpenseLineItem[]): ExpenseLineItem[] {
+  return items.map((item, idx) => {
+    let files: ReceiptAttachment[] = item.receiptFiles ? [...item.receiptFiles] : [];
+    if (files.length === 0) {
+      if (Array.isArray(item.receiptUrls) && item.receiptUrls.length > 0) {
+        files = item.receiptUrls.map((url, uIdx) => ({
+          id: `receipt-url-${uIdx}-${Date.now()}`,
+          url,
+          name: `Receipt File ${uIdx + 1}`,
+          fileType: getFileTypeCategory(url),
+        }));
+      } else if (item.receiptUrl) {
+        files = [
+          {
+            id: `legacy-${Date.now()}-${idx}`,
+            url: item.receiptUrl,
+            name: 'Receipt Attachment',
+            fileType: getFileTypeCategory(item.receiptUrl),
+          },
+        ];
+      }
+    }
+    return {
+      ...item,
+      receiptFiles: files,
+      receiptUrls: files.map((f) => f.url),
+      receiptUrl: files.length > 0 ? files[0].url : '',
+    };
+  });
+}
 
 export default function OfficerLiquidationModal({
   isOpen,
@@ -81,7 +147,8 @@ export default function OfficerLiquidationModal({
 
         // Exclude events that went through proposal approval workflow (have approvedBy or submitted history)
         const hasApprovedBy = Boolean(e.approvedBy);
-        const hasSubmittedHistory = Array.isArray(e.proposalHistory) &&
+        const hasSubmittedHistory =
+          Array.isArray(e.proposalHistory) &&
           e.proposalHistory.some((h: any) => h?.action === 'submitted' || h?.action === 'resubmitted');
 
         if (hasApprovedBy || hasSubmittedHistory) return false;
@@ -114,13 +181,21 @@ export default function OfficerLiquidationModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadingIndex, setUploadingIndex] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [lightboxData, setLightboxData] = useState<{
+    url: string;
+    title: string;
+    vendor?: string;
+    amount?: number;
+    fileName?: string;
+    fileType?: string;
+  } | null>(null);
 
   // Pre-fill if editing an existing / returned report
   useEffect(() => {
     if (editingReport) {
       setSelectedEventId(editingReport.eventId);
       setAllocatedBudget(editingReport.allocatedBudget || 0);
-      setLineItems(editingReport.lineItems || []);
+      setLineItems(normalizeLineItems(editingReport.lineItems || []));
     } else {
       setSelectedEventId('');
       setAllocatedBudget(0);
@@ -135,6 +210,8 @@ export default function OfficerLiquidationModal({
           vendorName: '',
           receiptNumber: '',
           receiptUrl: '',
+          receiptUrls: [],
+          receiptFiles: [],
         },
       ]);
     }
@@ -151,7 +228,7 @@ export default function OfficerLiquidationModal({
       // Auto-fetch budgetItems from the event proposal if not editing existing report
       if (!editingReport && (event as any).budgetItems && (event as any).budgetItems.length > 0) {
         const fetchedItems: ExpenseLineItem[] = (event as any).budgetItems.map((bi: any, i: number) => {
-          const allocatedCost = bi.approvedAmount || (bi.quantity * bi.unitCost) || bi.totalCost || 0;
+          const allocatedCost = bi.approvedAmount || bi.quantity * bi.unitCost || bi.totalCost || 0;
           const propQty = bi.quantity || 1;
           const propUnit = bi.unitCost || (allocatedCost > 0 ? Math.round(allocatedCost / propQty) : 0);
 
@@ -168,6 +245,8 @@ export default function OfficerLiquidationModal({
             totalCost: 0,
             vendorName: '',
             receiptUrl: '',
+            receiptUrls: [],
+            receiptFiles: [],
           };
         });
         setLineItems(fetchedItems);
@@ -202,6 +281,8 @@ export default function OfficerLiquidationModal({
         totalCost: 0,
         vendorName: '',
         receiptUrl: '',
+        receiptUrls: [],
+        receiptFiles: [],
       },
     ]);
   };
@@ -211,17 +292,64 @@ export default function OfficerLiquidationModal({
     setLineItems(lineItems.filter((_, i) => i !== index));
   };
 
-  const handleReceiptUpload = async (index: number, file: File) => {
-    if (!file) return;
+  // Upload one or more receipt files
+  const handleReceiptUpload = async (index: number, files: FileList | File[]) => {
+    if (!files || files.length === 0) return;
     setUploadingIndex(index);
+    setError(null);
+
     try {
-      const res = await uploadToCloudinary(file, { folder: `liquidations/${selectedEventId || 'general'}` });
-      handleLineItemChange(index, 'receiptUrl', res.secureUrl);
+      const fileArray = Array.from(files);
+      const newAttachments: ReceiptAttachment[] = [];
+
+      for (const file of fileArray) {
+        const res = await uploadToCloudinary(file, {
+          folder: `liquidations/${selectedEventId || 'general'}`,
+          acceptedTypes: ['*/*'],
+        });
+
+        newAttachments.push({
+          id: `rec-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+          url: res.secureUrl,
+          name: file.name,
+          fileType: getFileTypeCategory(file.name, file.type),
+          size: file.size,
+          publicId: res.publicId,
+        });
+      }
+
+      const updated = [...lineItems];
+      const existingFiles = updated[index].receiptFiles || [];
+      const mergedFiles = [...existingFiles, ...newAttachments];
+
+      updated[index] = {
+        ...updated[index],
+        receiptFiles: mergedFiles,
+        receiptUrls: mergedFiles.map((f) => f.url),
+        receiptUrl: mergedFiles.length > 0 ? mergedFiles[0].url : '',
+      };
+      setLineItems(updated);
     } catch (err: any) {
-      setError('Failed to upload receipt image. Please try again.');
+      console.error('[OfficerLiquidationModal] Upload error:', err);
+      setError(err?.message || 'Failed to upload receipt file(s). Please try again.');
     } finally {
       setUploadingIndex(null);
     }
+  };
+
+  // Remove a specific receipt file from an item
+  const handleRemoveReceiptFile = (itemIndex: number, fileId: string) => {
+    const updated = [...lineItems];
+    const currentFiles = updated[itemIndex].receiptFiles || [];
+    const filteredFiles = currentFiles.filter((f) => f.id !== fileId);
+
+    updated[itemIndex] = {
+      ...updated[itemIndex],
+      receiptFiles: filteredFiles,
+      receiptUrls: filteredFiles.map((f) => f.url),
+      receiptUrl: filteredFiles.length > 0 ? filteredFiles[0].url : '',
+    };
+    setLineItems(updated);
   };
 
   // Live Calculations
@@ -248,7 +376,7 @@ export default function OfficerLiquidationModal({
       const eventTitle = selectedEvent ? selectedEvent.title : editingReport?.eventTitle || 'Event Liquidation';
 
       const isAdmin = userRole === 'admin';
-      const nextStatus = isAdmin ? 'approved' : (shouldSubmit ? 'pending' : 'draft');
+      const nextStatus = isAdmin ? 'approved' : shouldSubmit ? 'pending' : 'draft';
 
       const payload: Omit<LiquidationDocument, 'id' | 'createdAt' | 'updatedAt'> = {
         eventId: selectedEventId,
@@ -289,7 +417,6 @@ export default function OfficerLiquidationModal({
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
       <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden border border-gray-100">
-
         {/* Modal Header */}
         <div className="px-6 py-4 bg-[#001A4D] text-white flex items-center justify-between">
           <div>
@@ -297,10 +424,13 @@ export default function OfficerLiquidationModal({
               {editingReport ? 'Edit Financial Liquidation Report' : 'Create Liquidation Report'}
             </h2>
             <p className="text-xs text-white/80 mt-0.5">
-              Submit actual spendings, attach receipt evidence, and verify budget variance.
+              Submit actual spendings, attach multiple receipt proofs/documents, and verify budget variance.
             </p>
           </div>
-          <button onClick={onClose} className="p-1 hover:bg-white/10 rounded-lg transition-colors text-white cursor-pointer">
+          <button
+            onClick={onClose}
+            className="p-1 hover:bg-white/10 rounded-lg transition-colors text-white cursor-pointer"
+          >
             <X className="w-6 h-6" />
           </button>
         </div>
@@ -374,7 +504,11 @@ export default function OfficerLiquidationModal({
               <div className="text-lg font-bold text-[#0E4EBD] mt-1">{formatCurrency(totalActualSpending)}</div>
             </div>
 
-            <div className={`p-3 bg-white border rounded-lg shadow-xs ${isDeficit ? 'border-red-200' : 'border-green-200'}`}>
+            <div
+              className={`p-3 bg-white border rounded-lg shadow-xs ${
+                isDeficit ? 'border-red-200' : 'border-green-200'
+              }`}
+            >
               <div className="text-xs text-gray-500 font-medium">
                 {isDeficit ? 'Net Deficit (Over Budget)' : 'Net Surplus (Remaining)'}
               </div>
@@ -390,204 +524,348 @@ export default function OfficerLiquidationModal({
               <h3 className="text-base font-bold text-[#001A4D]">Expense Line Items & Receipts</h3>
               <button
                 onClick={handleAddLineItem}
-                className="px-3 py-1.5 bg-[#1E70E8] text-white text-xs font-medium rounded-lg hover:bg-[#0E4EBD] flex items-center gap-1.5 transition-colors"
+                className="px-3 py-1.5 bg-[#1E70E8] text-white text-xs font-medium rounded-lg hover:bg-[#0E4EBD] flex items-center gap-1.5 transition-colors cursor-pointer"
               >
                 <Plus className="w-4 h-4" /> Add Line Item
               </button>
             </div>
 
             <div className="space-y-4">
-              {lineItems.map((item, index) => (
-                <div key={item.id} className="p-4 border border-gray-200 rounded-xl bg-white space-y-3 relative group">
-                  <div className="flex items-center justify-between border-b border-gray-100 pb-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                        Item #{index + 1}
-                      </span>
-                      {item.isPreFilled && (
-                        <span className="text-[10px] font-bold px-2 py-0.5 bg-blue-50 text-[#0E4EBD] rounded border border-blue-200 uppercase">
-                          Proposal Budget Item
-                        </span>
-                      )}
-                      {item.allocatedCost !== undefined && item.allocatedCost > 0 && (
-                        <span className="text-[11px] font-semibold px-2.5 py-0.5 bg-blue-50 text-blue-800 rounded border border-blue-200">
-                          Allocated: {formatCurrency(item.allocatedCost)}
-                        </span>
-                      )}
-                    </div>
+              {lineItems.map((item, index) => {
+                const attachedFiles = item.receiptFiles || [];
 
-                    <div className="flex items-center gap-3">
-                      {item.allocatedCost !== undefined && item.allocatedCost > 0 && (
-                        <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded ${(item.allocatedCost - item.totalCost) < 0
-                            ? 'bg-red-100 text-red-800'
-                            : 'bg-green-100 text-green-800'
-                          }`}>
-                          {(item.allocatedCost - item.totalCost) < 0
-                            ? `Item Deficit (-${formatCurrency(Math.abs(item.allocatedCost - item.totalCost))})`
-                            : `Item Surplus (+${formatCurrency(item.allocatedCost - item.totalCost)})`}
-                        </span>
-                      )}
-                      {!item.isPreFilled && lineItems.length > 1 && (
-                        <button
-                          onClick={() => handleRemoveLineItem(index)}
-                          className="text-red-500 hover:text-red-700 p-1 cursor-pointer"
-                          title="Remove custom item"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div className="sm:col-span-2">
-                      <label className="block text-xs text-gray-600 mb-1">Description / Item Name *</label>
-                      <input
-                        type="text"
-                        value={item.description}
-                        disabled={item.isPreFilled}
-                        onChange={(e) => handleLineItemChange(index, 'description', e.target.value)}
-                        placeholder="e.g. Lunch Catering for 50 Pax"
-                        className={`w-full px-3 py-1.5 border border-gray-300 rounded text-sm ${item.isPreFilled ? 'bg-gray-100 font-semibold text-gray-700 cursor-not-allowed' : 'focus:ring-1 focus:ring-[#0E4EBD]'
-                          }`}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">Category</label>
-                      <select
-                        value={item.category}
-                        disabled={item.isPreFilled}
-                        onChange={(e) => handleLineItemChange(index, 'category', e.target.value)}
-                        className={`w-full px-3 py-1.5 border border-gray-300 rounded text-sm ${item.isPreFilled ? 'bg-gray-100 font-semibold text-gray-700 cursor-not-allowed' : 'focus:ring-1 focus:ring-[#0E4EBD]'
-                          }`}
-                      >
-                        {EXPENSE_CATEGORIES.map((cat) => (
-                          <option key={cat} value={cat}>
-                            {cat}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Side-by-Side Proposed vs Actual Comparison Banner */}
-                  {item.allocatedCost !== undefined && item.allocatedCost > 0 && (
-                    <div className="p-2.5 bg-blue-50/60 border border-blue-200 rounded-lg flex flex-wrap items-center justify-between gap-2 text-xs">
-                      <div className="flex flex-wrap items-center gap-3">
-                        <div>
-                          <span className="text-gray-500 font-medium">Proposed Baseline:</span>
-                          <span className="ml-1.5 font-bold text-[#001A4D]">
-                            {item.proposedQuantity || item.quantity || 1} Qty × {formatCurrency(item.proposedUnitCost || 0)} = {formatCurrency(item.allocatedCost || 0)}
-                          </span>
-                        </div>
-                        <span className="text-blue-300 hidden sm:inline">|</span>
-                        <div>
-                          <span className="text-gray-500 font-medium">Actual Input:</span>
-                          <span className="ml-1.5 font-bold text-[#0E4EBD]">
-                            {item.quantity} Qty × {formatCurrency(item.unitCost)} = {formatCurrency(item.totalCost)}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className={`font-bold px-2 py-0.5 rounded text-[11px] ${((item.allocatedCost || 0) - item.totalCost) < 0
-                          ? 'bg-red-100 text-red-800'
-                          : 'bg-green-100 text-green-800'
-                        }`}>
-                        {((item.allocatedCost || 0) - item.totalCost) < 0
-                          ? `Deficit: -${formatCurrency(Math.abs((item.allocatedCost || 0) - item.totalCost))}`
-                          : `Surplus: +${formatCurrency(((item.allocatedCost || 0) - item.totalCost))}`}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">Actual Quantity</label>
-                      <input
-                        type="number"
-                        min="1"
-                        value={item.quantity}
-                        onChange={(e) => handleLineItemChange(index, 'quantity', e.target.value)}
-                        className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm font-medium"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">Actual Unit Cost (₱)</label>
-                      <input
-                        type="number"
-                        min="0"
-                        value={item.unitCost}
-                        onChange={(e) => handleLineItemChange(index, 'unitCost', e.target.value)}
-                        className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm font-medium text-gray-900"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">Total Actual Cost (₱)</label>
-                      <input
-                        type="number"
-                        readOnly
-                        value={item.totalCost}
-                        className="w-full px-3 py-1.5 border border-gray-200 bg-gray-50 rounded text-sm font-bold text-[#0E4EBD]"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Vendor Name & Receipt Upload */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-gray-100">
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">Vendor / Store Name *</label>
-                      <input
-                        type="text"
-                        value={item.vendorName}
-                        onChange={(e) => handleLineItemChange(index, 'vendorName', e.target.value)}
-                        placeholder="e.g. Jollibee Ormoc"
-                        className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">Upload Receipt Image *</label>
+                return (
+                  <div
+                    key={item.id}
+                    className="p-4 border border-gray-200 rounded-xl bg-white space-y-3 relative group"
+                  >
+                    <div className="flex items-center justify-between border-b border-gray-100 pb-2">
                       <div className="flex items-center gap-2">
-                        {item.receiptUrl ? (
-                          <div className="flex items-center gap-2 px-3 py-1 bg-green-50 border border-green-200 rounded text-xs text-green-700 flex-1">
-                            <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0" />
-                            <a
-                              href={item.receiptUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="underline truncate font-medium"
-                            >
-                              Receipt Uploaded ↗
-                            </a>
-                          </div>
-                        ) : (
-                          <label className="cursor-pointer flex items-center justify-center gap-2 px-3 py-1.5 border border-dashed border-gray-300 rounded-lg hover:bg-gray-50 text-xs font-medium text-gray-600 flex-1 transition-colors">
-                            {uploadingIndex === index ? (
-                              <Loader2 className="w-4 h-4 animate-spin text-[#0E4EBD]" />
-                            ) : (
-                              <Upload className="w-4 h-4 text-gray-500" />
-                            )}
-                            <span>{uploadingIndex === index ? 'Uploading...' : 'Upload Receipt'}</span>
-                            <input
-                              type="file"
-                              accept="image/*"
-                              className="hidden"
-                              onChange={(e) => {
-                                if (e.target.files?.[0]) {
-                                  handleReceiptUpload(index, e.target.files[0]);
-                                }
-                              }}
-                            />
-                          </label>
+                        <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                          Item #{index + 1}
+                        </span>
+                        {item.isPreFilled && (
+                          <span className="text-[10px] font-bold px-2 py-0.5 bg-blue-50 text-[#0E4EBD] rounded border border-blue-200 uppercase">
+                            Proposal Budget Item
+                          </span>
+                        )}
+                        {item.allocatedCost !== undefined && item.allocatedCost > 0 && (
+                          <span className="text-[11px] font-semibold px-2.5 py-0.5 bg-blue-50 text-blue-800 rounded border border-blue-200">
+                            Allocated: {formatCurrency(item.allocatedCost)}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        {item.allocatedCost !== undefined && item.allocatedCost > 0 && (
+                          <span
+                            className={`text-[11px] font-bold px-2.5 py-0.5 rounded ${
+                              item.allocatedCost - item.totalCost < 0
+                                ? 'bg-red-100 text-red-800'
+                                : 'bg-green-100 text-green-800'
+                            }`}
+                          >
+                            {item.allocatedCost - item.totalCost < 0
+                              ? `Item Deficit (-${formatCurrency(Math.abs(item.allocatedCost - item.totalCost))})`
+                              : `Item Surplus (+${formatCurrency(item.allocatedCost - item.totalCost)})`}
+                          </span>
+                        )}
+                        {!item.isPreFilled && lineItems.length > 1 && (
+                          <button
+                            onClick={() => handleRemoveLineItem(index)}
+                            className="text-red-500 hover:text-red-700 p-1 cursor-pointer"
+                            title="Remove custom item"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         )}
                       </div>
                     </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="sm:col-span-2">
+                        <label className="block text-xs text-gray-600 mb-1">Description / Item Name *</label>
+                        <input
+                          type="text"
+                          value={item.description}
+                          disabled={item.isPreFilled}
+                          onChange={(e) => handleLineItemChange(index, 'description', e.target.value)}
+                          placeholder="e.g. Lunch Catering for 50 Pax"
+                          className={`w-full px-3 py-1.5 border border-gray-300 rounded text-sm ${
+                            item.isPreFilled
+                              ? 'bg-gray-100 font-semibold text-gray-700 cursor-not-allowed'
+                              : 'focus:ring-1 focus:ring-[#0E4EBD]'
+                          }`}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Category</label>
+                        <select
+                          value={item.category}
+                          disabled={item.isPreFilled}
+                          onChange={(e) => handleLineItemChange(index, 'category', e.target.value)}
+                          className={`w-full px-3 py-1.5 border border-gray-300 rounded text-sm ${
+                            item.isPreFilled
+                              ? 'bg-gray-100 font-semibold text-gray-700 cursor-not-allowed'
+                              : 'focus:ring-1 focus:ring-[#0E4EBD]'
+                          }`}
+                        >
+                          {EXPENSE_CATEGORIES.map((cat) => (
+                            <option key={cat} value={cat}>
+                              {cat}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Side-by-Side Proposed vs Actual Comparison Banner */}
+                    {item.allocatedCost !== undefined && item.allocatedCost > 0 && (
+                      <div className="p-2.5 bg-blue-50/60 border border-blue-200 rounded-lg flex flex-wrap items-center justify-between gap-2 text-xs">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <div>
+                            <span className="text-gray-500 font-medium">Proposed Baseline:</span>
+                            <span className="ml-1.5 font-bold text-[#001A4D]">
+                              {item.proposedQuantity || item.quantity || 1} Qty ×{' '}
+                              {formatCurrency(item.proposedUnitCost || 0)} = {formatCurrency(item.allocatedCost || 0)}
+                            </span>
+                          </div>
+                          <span className="text-blue-300 hidden sm:inline">|</span>
+                          <div>
+                            <span className="text-gray-500 font-medium">Actual Input:</span>
+                            <span className="ml-1.5 font-bold text-[#0E4EBD]">
+                              {item.quantity} Qty × {formatCurrency(item.unitCost)} = {formatCurrency(item.totalCost)}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div
+                          className={`font-bold px-2 py-0.5 rounded text-[11px] ${
+                            (item.allocatedCost || 0) - item.totalCost < 0
+                              ? 'bg-red-100 text-red-800'
+                              : 'bg-green-100 text-green-800'
+                          }`}
+                        >
+                          {(item.allocatedCost || 0) - item.totalCost < 0
+                            ? `Deficit: -${formatCurrency(Math.abs((item.allocatedCost || 0) - item.totalCost))}`
+                            : `Surplus: +${formatCurrency((item.allocatedCost || 0) - item.totalCost)}`}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Actual Quantity</label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={item.quantity}
+                          onChange={(e) => handleLineItemChange(index, 'quantity', e.target.value)}
+                          className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm font-medium"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Actual Unit Cost (₱)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={item.unitCost}
+                          onChange={(e) => handleLineItemChange(index, 'unitCost', e.target.value)}
+                          className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm font-medium text-gray-900"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Total Actual Cost (₱)</label>
+                        <input
+                          type="number"
+                          readOnly
+                          value={item.totalCost}
+                          className="w-full px-3 py-1.5 border border-gray-200 bg-gray-50 rounded text-sm font-bold text-[#0E4EBD]"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Vendor Name & Multi-Receipt Upload Section */}
+                    <div className="space-y-3 pt-2 border-t border-gray-100">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">Vendor / Store Name *</label>
+                          <input
+                            type="text"
+                            value={item.vendorName}
+                            onChange={(e) => handleLineItemChange(index, 'vendorName', e.target.value)}
+                            placeholder="e.g. Jollibee Ormoc, National Book Store"
+                            className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">Receipt / Invoice Ref Number (Optional)</label>
+                          <input
+                            type="text"
+                            value={item.receiptNumber || ''}
+                            onChange={(e) => handleLineItemChange(index, 'receiptNumber', e.target.value)}
+                            placeholder="e.g. OR #104928"
+                            className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Multi-file Receipt Proof Attachments */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="block text-xs font-semibold text-gray-700">
+                            Receipts & Proof Documents ({attachedFiles.length})
+                          </label>
+                          <span className="text-[11px] text-gray-500">
+                            Allowed: Images (PNG/JPG), PDF, Word, Excel/CSV, Text
+                          </span>
+                        </div>
+
+                        {/* List of uploaded receipt files */}
+                        {attachedFiles.length > 0 && (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
+                            {attachedFiles.map((file) => {
+                              const isImg = file.fileType === 'image';
+                              const isPdf = file.fileType === 'pdf';
+                              const isSheet = file.fileType === 'spreadsheet';
+                              const isDoc = file.fileType === 'document';
+
+                              return (
+                                <div
+                                  key={file.id}
+                                  className="flex items-center justify-between gap-2 p-2 bg-gray-50 hover:bg-gray-100/80 border border-gray-200 rounded-lg transition-colors group/file text-xs"
+                                >
+                                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                                    {isImg ? (
+                                      <div className="w-7 h-7 rounded border border-gray-200 overflow-hidden bg-gray-200 flex-shrink-0 flex items-center justify-center">
+                                        <img
+                                          src={file.url}
+                                          alt={file.name}
+                                          className="w-full h-full object-cover"
+                                          onError={(e) => {
+                                            (e.target as HTMLElement).style.display = 'none';
+                                          }}
+                                        />
+                                      </div>
+                                    ) : isPdf ? (
+                                      <div className="w-7 h-7 rounded bg-red-50 text-red-600 flex items-center justify-center flex-shrink-0 border border-red-200">
+                                        <FileText className="w-4 h-4" />
+                                      </div>
+                                    ) : isSheet ? (
+                                      <div className="w-7 h-7 rounded bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0 border border-emerald-200">
+                                        <FileSpreadsheet className="w-4 h-4" />
+                                      </div>
+                                    ) : isDoc ? (
+                                      <div className="w-7 h-7 rounded bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0 border border-blue-200">
+                                        <FileText className="w-4 h-4" />
+                                      </div>
+                                    ) : (
+                                      <div className="w-7 h-7 rounded bg-gray-100 text-gray-600 flex items-center justify-center flex-shrink-0 border border-gray-200">
+                                        <File className="w-4 h-4" />
+                                      </div>
+                                    )}
+
+                                    <div className="min-w-0 flex-1">
+                                      <div
+                                        className="font-semibold text-gray-800 truncate"
+                                        title={file.name}
+                                      >
+                                        {file.name}
+                                      </div>
+                                      <div className="text-[10px] text-gray-500 flex items-center gap-1.5">
+                                        <span className="uppercase">{file.fileType}</span>
+                                        {file.size ? (
+                                          <>
+                                            <span>•</span>
+                                            <span>{formatFileSize(file.size)}</span>
+                                          </>
+                                        ) : null}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex items-center gap-1 flex-shrink-0">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setLightboxData({
+                                          url: file.url,
+                                          title: item.description || 'Receipt File',
+                                          vendor: item.vendorName,
+                                          amount: item.totalCost,
+                                          fileName: file.name,
+                                          fileType: file.fileType,
+                                        })
+                                      }
+                                      className="p-1 text-gray-500 hover:text-[#0E4EBD] hover:bg-blue-50 rounded transition-colors cursor-pointer"
+                                      title="Preview Receipt"
+                                    >
+                                      <Eye className="w-4 h-4" />
+                                    </button>
+
+                                    <a
+                                      href={file.url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="p-1 text-gray-500 hover:text-[#0E4EBD] hover:bg-blue-50 rounded transition-colors"
+                                      title="Open in new tab"
+                                    >
+                                      <ExternalLink className="w-3.5 h-3.5" />
+                                    </a>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveReceiptFile(index, file.id)}
+                                      className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors cursor-pointer"
+                                      title="Remove file"
+                                    >
+                                      <X className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {/* Upload trigger button / dropzone */}
+                        <label className="cursor-pointer flex items-center justify-center gap-2 px-4 py-2.5 border border-dashed border-gray-300 hover:border-[#1E70E8] rounded-xl hover:bg-blue-50/40 text-xs font-semibold text-gray-700 transition-colors">
+                          {uploadingIndex === index ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin text-[#0E4EBD]" />
+                              <span className="text-[#0E4EBD]">Uploading files to secure storage...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="w-4 h-4 text-[#1E70E8]" />
+                              <span>
+                                {attachedFiles.length > 0 ? '+ Upload Additional Receipts / Files' : 'Upload Receipt Files (Select multiple files)'}
+                              </span>
+                            </>
+                          )}
+                          <input
+                            type="file"
+                            multiple
+                            accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.rtf"
+                            disabled={uploadingIndex === index}
+                            className="hidden"
+                            onChange={(e) => {
+                              if (e.target.files && e.target.files.length > 0) {
+                                handleReceiptUpload(index, e.target.files);
+                                e.target.value = ''; // Reset input
+                              }
+                            }}
+                          />
+                        </label>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
@@ -595,21 +873,21 @@ export default function OfficerLiquidationModal({
         {/* Modal Footer */}
         <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
           <div className="text-xs text-gray-500">
-            * All liquidations require receipt proof for approval.
+            * All liquidations require receipt proof/invoices for validation.
           </div>
 
           <div className="flex items-center gap-3">
             <button
               onClick={onClose}
               disabled={isSubmitting}
-              className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-100 transition-colors"
+              className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-100 transition-colors cursor-pointer"
             >
               Cancel
             </button>
             <button
               onClick={() => handleSave(false)}
               disabled={isSubmitting}
-              className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg text-sm font-medium hover:bg-gray-300 transition-colors flex items-center gap-2"
+              className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg text-sm font-medium hover:bg-gray-300 transition-colors flex items-center gap-2 cursor-pointer"
             >
               {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
               Save Draft
@@ -624,8 +902,22 @@ export default function OfficerLiquidationModal({
             </button>
           </div>
         </div>
-
       </div>
+
+      {/* Lightbox / Document Viewer */}
+      {lightboxData && (
+        <ReceiptLightboxModal
+          isOpen={!!lightboxData}
+          onClose={() => setLightboxData(null)}
+          imageUrl={lightboxData.url}
+          itemTitle={lightboxData.title}
+          vendorName={lightboxData.vendor}
+          amount={lightboxData.amount}
+          fileName={lightboxData.fileName}
+          fileType={lightboxData.fileType}
+        />
+      )}
     </div>
   );
 }
+
