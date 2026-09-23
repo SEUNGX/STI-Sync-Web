@@ -12,11 +12,12 @@ import { DocumentPreviewModal } from '../../modules/documents/components/Documen
 import { TablePagination } from '../../components/common/TablePagination';
 import { useOfficerProfile } from '../../auth/hooks/useOfficerProfile';
 import { useOrganizationStream } from '../../modules/organizations/hooks/useOrganizationStream';
-import { useSemesters } from '../../modules/academic/hooks/useAcademicStream';
+import { useSemesters, useActiveAcademicPeriods } from '../../modules/academic/hooks/useAcademicStream';
 import { uploadToCloudinary } from '../../../services/cloudinary';
 import { downloadFile } from '../../../utils/fileDownloader';
 import { inferFileType, DOCUMENT_ACCEPTED_TYPES, DOCUMENT_MAX_BYTES } from '../../modules/documents/types/document.types';
 import type { DocumentDocument, DocStatus } from '../../modules/documents/types/document.types';
+import { AcademicPeriodCell } from '../../admin/pages/AdminDocuments';
 import { formatDistanceToNow, format } from 'date-fns';
 import { Timestamp } from 'firebase/firestore';
 
@@ -90,15 +91,30 @@ function SubmitDocModal({ onClose, orgId, orgName, orgAcronym, orgTypeId, office
 }) {
   const { data: docCategories } = useDocumentCategories();
   const activeCategories = docCategories.filter(c => c.active && c.officerCanSubmit);
-  const { data: semesters } = useSemesters();
-  const activeSemester = useMemo(() => {
-    return (
-      semesters.find(s => !s.archived && s.status === 'ACTIVE') ||
-      semesters.find(s => !s.archived) ||
-      semesters[0] ||
-      null
-    );
-  }, [semesters]);
+  const { data: orgs } = useOrganizationStream();
+  const { activeCollegePeriod, activeShsPeriod, periods: semesters } = useActiveAcademicPeriods();
+
+  const currentOrg = orgs.find(o => o.id === orgId);
+  const isShsOrg = currentOrg?.academicLevel === 'SHS' || /senior high|shs/i.test(orgName) || /senior high|shs/i.test(orgAcronym);
+
+  const [selectedPeriodId, setSelectedPeriodId] = useState<string>('');
+
+  useEffect(() => {
+    if (semesters.length > 0 && !selectedPeriodId) {
+      if (isShsOrg && activeShsPeriod) {
+        setSelectedPeriodId(activeShsPeriod.id);
+      } else if (activeCollegePeriod) {
+        setSelectedPeriodId(activeCollegePeriod.id);
+      } else {
+        const active = semesters.find(s => !s.archived && s.status === 'ACTIVE') || semesters.find(s => !s.archived) || semesters[0];
+        if (active) setSelectedPeriodId(active.id);
+      }
+    }
+  }, [semesters, selectedPeriodId, isShsOrg, activeShsPeriod, activeCollegePeriod]);
+
+  const targetPeriod = useMemo(() => {
+    return semesters.find(s => s.id === selectedPeriodId) || (isShsOrg ? activeShsPeriod : activeCollegePeriod) || semesters[0] || null;
+  }, [semesters, selectedPeriodId, isShsOrg, activeShsPeriod, activeCollegePeriod]);
 
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
@@ -139,6 +155,9 @@ function SubmitDocModal({ onClose, orgId, orgName, orgAcronym, orgTypeId, office
     setSubmitting(true);
     try {
       const refNum = await getNextReferenceNumber('DOC');
+      const isTargetShs = targetPeriod?.academicLevel === 'SHS' || String(targetPeriod?.semester).includes('Trimester') || isShsOrg;
+      const termStr = targetPeriod?.semester || (targetPeriod?.term as string) || '';
+
       await createDocument({
         type: 'submission',
         title,
@@ -149,9 +168,11 @@ function SubmitDocModal({ onClose, orgId, orgName, orgAcronym, orgTypeId, office
         fileName: uploadedFile.name,
         fileType: inferFileType(uploadedFile.name),
         fileSize: uploadedFile.size,
-        semesterId: activeSemester?.id || '',
-        academicYear: activeSemester?.academicYear || '',
-        semester: activeSemester?.semester || '',
+        semesterId: targetPeriod?.id || '',
+        academicYear: targetPeriod?.academicYear || activeCollegePeriod?.academicYear || activeShsPeriod?.academicYear || '',
+        semester: !isTargetShs ? termStr : (activeCollegePeriod?.semester || termStr),
+        trimester: isTargetShs ? termStr : (activeShsPeriod?.semester || ''),
+        trimesterId: isTargetShs ? (targetPeriod?.id || '') : (activeShsPeriod?.id || ''),
         referenceNumber: refNum,
         submittedBy: officerName,
         submittedByEmail: officerEmail,
@@ -226,18 +247,35 @@ function SubmitDocModal({ onClose, orgId, orgName, orgAcronym, orgTypeId, office
                     <p className="text-right text-xs text-gray-400 mt-0.5">{title.length}/150</p>
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Category <span className="text-red-500">*</span></label>
-                    <select className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD] focus:border-transparent text-sm" value={category} onChange={(e) => {
-                      setCategory(e.target.value);
-                      const cat = activeCategories.find(c => c.name === e.target.value);
-                      setCategoryId(cat?.id ?? '');
-                    }}>
-                      <option value="">Select document category...</option>
-                      {activeCategories.map(cat => (
-                        <option key={cat.id} value={cat.name}>{cat.name}</option>
-                      ))}
-                    </select>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Category <span className="text-red-500">*</span></label>
+                      <select className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD] focus:border-transparent text-sm bg-white" value={category} onChange={(e) => {
+                        setCategory(e.target.value);
+                        const cat = activeCategories.find(c => c.name === e.target.value);
+                        setCategoryId(cat?.id ?? '');
+                      }}>
+                        <option value="">Select document category...</option>
+                        {activeCategories.map(cat => (
+                          <option key={cat.id} value={cat.name}>{cat.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Academic Period</label>
+                      <select
+                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD] focus:border-transparent text-sm bg-white"
+                        value={selectedPeriodId}
+                        onChange={(e) => setSelectedPeriodId(e.target.value)}
+                      >
+                        {semesters.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            SY {s.academicYear} · {s.semester || s.term || ''} {s.status === 'ACTIVE' ? '(Active)' : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
 
                   <div>
@@ -382,6 +420,8 @@ function ResubmitModal({ doc, onClose, orgId, orgName, orgAcronym, orgTypeId, of
         semesterId: doc.semesterId,
         academicYear: doc.academicYear,
         semester: doc.semester,
+        trimester: doc.trimester || '',
+        trimesterId: doc.trimesterId || '',
         referenceNumber: refNum,
         submittedBy: officerName,
         submittedByEmail: officerEmail,
@@ -567,26 +607,83 @@ function SubmissionsTab({ orgId, orgName, orgAcronym, orgTypeId, officerName, of
 }) {
   const { data: submissions, loading } = useOfficerSubmissions(orgId);
   const { data: docCategories } = useDocumentCategories();
+  const { data: semesters } = useSemesters();
   const [expanded, setExpanded] = useState<string | null>(null);
   const [resubmitDoc, setResubmitDoc] = useState<DocumentDocument | null>(null);
   const [previewDoc, setPreviewDoc] = useState<DocumentDocument | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("All");
   const [categoryFilter, setCategoryFilter] = useState("All");
+  const [periodFilter, setPeriodFilter] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
 
   const statuses: DocStatus[] = ["Pending", "Approved", "Returned", "Rejected", "Resubmitted", "Draft"];
+
+  const uniqueCategories = useMemo(() => [...new Set(submissions.map(d => d.category))], [submissions]);
+
+  const availablePeriods = useMemo(() => {
+    const periodMap = new Map<string, { key: string; label: string; sy: string; term: string }>();
+
+    semesters.forEach(s => {
+      const termName = s.semester || s.term || '';
+      if (s.academicYear) {
+        const key = `${s.academicYear}__${termName}`;
+        const label = termName ? `SY ${s.academicYear} · ${termName}` : `SY ${s.academicYear}`;
+        if (!periodMap.has(key)) {
+          periodMap.set(key, { key, label, sy: s.academicYear, term: termName });
+        }
+      }
+    });
+
+    submissions.forEach(d => {
+      const docAy = d.academicYear || (d.semesterId ? semesters.find(s => s.id === d.semesterId)?.academicYear : '');
+      const docTerm = d.semester || d.trimester || (d.semesterId ? semesters.find(s => s.id === d.semesterId)?.semester : '');
+      if (docAy) {
+        const key = `${docAy}__${docTerm || ''}`;
+        const label = docTerm ? `SY ${docAy} · ${docTerm}` : `SY ${docAy}`;
+        if (!periodMap.has(key)) {
+          periodMap.set(key, { key, label, sy: docAy, term: docTerm || '' });
+        }
+      }
+    });
+
+    return Array.from(periodMap.values()).sort((a, b) => {
+      if (b.sy !== a.sy) return b.sy.localeCompare(a.sy);
+      return a.term.localeCompare(b.term);
+    });
+  }, [semesters, submissions]);
+
+  const hasActiveFilters = searchQuery.trim() !== "" || statusFilter !== "All" || categoryFilter !== "All" || periodFilter !== "All";
+
+  const resetFilters = () => {
+    setSearchQuery("");
+    setStatusFilter("All");
+    setCategoryFilter("All");
+    setPeriodFilter("All");
+  };
 
   const filtered = useMemo(() => {
     let list = submissions;
     if (statusFilter !== "All") list = list.filter(d => d.status === statusFilter);
     if (categoryFilter !== "All") list = list.filter(d => d.category === categoryFilter);
+    if (periodFilter !== "All") {
+      const [targetSy, targetTerm] = periodFilter.split("__");
+      list = list.filter(d => {
+        const docAy = d.academicYear || (d.semesterId ? semesters.find(s => s.id === d.semesterId)?.academicYear : '');
+        const docSem = d.semester || (d.semesterId ? semesters.find(s => s.id === d.semesterId)?.semester : '');
+        const docTri = d.trimester;
+        
+        if (docAy !== targetSy) return false;
+        if (!targetTerm) return true;
+        return docSem === targetTerm || docTri === targetTerm || String(docSem).includes(targetTerm);
+      });
+    }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       list = list.filter(d => d.title.toLowerCase().includes(q) || d.referenceNumber.toLowerCase().includes(q));
     }
     return list;
-  }, [submissions, statusFilter, categoryFilter, searchQuery]);
+  }, [submissions, statusFilter, categoryFilter, periodFilter, searchQuery, semesters]);
 
   // Pagination State (8 rows per page standard)
   const PER_PAGE = 8;
@@ -594,15 +691,13 @@ function SubmissionsTab({ orgId, orgName, orgAcronym, orgTypeId, officerName, of
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [statusFilter, categoryFilter, searchQuery]);
+  }, [statusFilter, categoryFilter, periodFilter, searchQuery]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
   const paginatedSubmissions = useMemo(() => {
     const start = (currentPage - 1) * PER_PAGE;
     return filtered.slice(start, start + PER_PAGE);
   }, [filtered, currentPage]);
-
-  const uniqueCategories = useMemo(() => [...new Set(submissions.map(d => d.category))], [submissions]);
 
   if (loading) return <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 text-[#0E4EBD] animate-spin" /></div>;
 
@@ -614,16 +709,29 @@ function SubmissionsTab({ orgId, orgName, orgAcronym, orgTypeId, officerName, of
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input type="text" placeholder="Search by document title or reference..." className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
         </div>
-        <select className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
+        <select className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] bg-white" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
           <option value="All">All Categories</option>
           {uniqueCategories.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
-        <div className="flex gap-1">
+        <select className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] bg-white min-w-[170px]" value={periodFilter} onChange={(e) => setPeriodFilter(e.target.value)}>
+          <option value="All">All Academic Periods</option>
+          {availablePeriods.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
+        </select>
+        <div className="flex gap-1 flex-wrap">
           {["All", ...statuses].map((s) => (
             <button key={s} onClick={() => setStatusFilter(s)} className={`px-3 py-1.5 rounded-full text-xs font-bold transition-colors cursor-pointer ${statusFilter === s ? "bg-[#001A4D] text-white shadow-xs" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>{s}</button>
           ))}
         </div>
-        <p className="text-gray-400 text-xs ml-auto">Showing {filtered.length} documents</p>
+        {hasActiveFilters && (
+          <button
+            type="button"
+            onClick={resetFilters}
+            className="flex items-center gap-1 px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer ml-auto"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            Reset
+          </button>
+        )}
       </div>
 
       {/* Table */}
@@ -640,7 +748,7 @@ function SubmissionsTab({ orgId, orgName, orgAcronym, orgTypeId, officerName, of
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-[#E0E0E0]">
                 <tr>
-                  {["Reference #", "Document Title", "Category", "Date Submitted", "Last Updated", "Status", "SAS Remarks", "Actions"].map((h) => (
+                  {["Reference #", "Document Title", "Category", "Academic Period", "Date Submitted", "Last Updated", "Status", "SAS Remarks", "Actions"].map((h) => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -666,6 +774,9 @@ function SubmissionsTab({ orgId, orgName, orgAcronym, orgTypeId, officerName, of
                           </div>
                         </td>
                         <td className="px-4 py-3"><CategoryPill category={doc.category} /></td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <AcademicPeriodCell doc={doc} semesters={semesters} />
+                        </td>
                         <td className="px-4 py-3">
                           {createdDate && (
                             <>
@@ -742,20 +853,79 @@ function SubmissionsTab({ orgId, orgName, orgAcronym, orgTypeId, officerName, of
 // ─── Inbox Tab ─────────────────────────────────────────────────────────────────
 function InboxTab({ orgId }: { orgId: string }) {
   const { data: inbox, loading } = useOfficerInbox(orgId);
+  const { data: semesters } = useSemesters();
   const [previewDoc, setPreviewDoc] = useState<DocumentDocument | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("All");
+  const [periodFilter, setPeriodFilter] = useState("All");
   const [showUnreadOnly, setShowUnreadOnly] = useState(false);
+
+  const uniqueCategories = useMemo(() => [...new Set(inbox.map(d => d.category).filter(Boolean))], [inbox]);
+
+  const availablePeriods = useMemo(() => {
+    const periodMap = new Map<string, { key: string; label: string; sy: string; term: string }>();
+
+    semesters.forEach(s => {
+      const termName = s.semester || s.term || '';
+      if (s.academicYear) {
+        const key = `${s.academicYear}__${termName}`;
+        const label = termName ? `SY ${s.academicYear} · ${termName}` : `SY ${s.academicYear}`;
+        if (!periodMap.has(key)) {
+          periodMap.set(key, { key, label, sy: s.academicYear, term: termName });
+        }
+      }
+    });
+
+    inbox.forEach(d => {
+      const docAy = d.academicYear || (d.semesterId ? semesters.find(s => s.id === d.semesterId)?.academicYear : '');
+      const docTerm = d.semester || d.trimester || (d.semesterId ? semesters.find(s => s.id === d.semesterId)?.semester : '');
+      if (docAy) {
+        const key = `${docAy}__${docTerm || ''}`;
+        const label = docTerm ? `SY ${docAy} · ${docTerm}` : `SY ${docAy}`;
+        if (!periodMap.has(key)) {
+          periodMap.set(key, { key, label, sy: docAy, term: docTerm || '' });
+        }
+      }
+    });
+
+    return Array.from(periodMap.values()).sort((a, b) => {
+      if (b.sy !== a.sy) return b.sy.localeCompare(a.sy);
+      return a.term.localeCompare(b.term);
+    });
+  }, [semesters, inbox]);
+
+  const hasActiveFilters = searchQuery.trim() !== "" || categoryFilter !== "All" || periodFilter !== "All" || showUnreadOnly;
+
+  const resetFilters = () => {
+    setSearchQuery("");
+    setCategoryFilter("All");
+    setPeriodFilter("All");
+    setShowUnreadOnly(false);
+  };
 
   const filtered = useMemo(() => {
     let list = inbox;
     if (showUnreadOnly) list = list.filter(d => !d.readBy?.[orgId]);
+    if (categoryFilter !== "All") list = list.filter(d => d.category === categoryFilter);
+    if (periodFilter !== "All") {
+      const [targetSy, targetTerm] = periodFilter.split("__");
+      list = list.filter(d => {
+        const docAy = d.academicYear || (d.semesterId ? semesters.find(s => s.id === d.semesterId)?.academicYear : '');
+        const docSem = d.semester || (d.semesterId ? semesters.find(s => s.id === d.semesterId)?.semester : '');
+        const docTri = d.trimester;
+        
+        if (docAy !== targetSy) return false;
+        if (!targetTerm) return true;
+        return docSem === targetTerm || docTri === targetTerm || String(docSem).includes(targetTerm);
+      });
+    }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      list = list.filter(d => d.title.toLowerCase().includes(q));
+      list = list.filter(d => d.title.toLowerCase().includes(q) || d.referenceNumber.toLowerCase().includes(q));
     }
     return list;
-  }, [inbox, showUnreadOnly, searchQuery, orgId]);
+  }, [inbox, showUnreadOnly, categoryFilter, periodFilter, searchQuery, orgId, semesters]);
 
   // Pagination State (8 rows per page standard)
   const PER_PAGE = 8;
@@ -763,7 +933,7 @@ function InboxTab({ orgId }: { orgId: string }) {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [showUnreadOnly, searchQuery]);
+  }, [showUnreadOnly, categoryFilter, periodFilter, searchQuery]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
   const paginatedInbox = useMemo(() => {
@@ -801,15 +971,33 @@ function InboxTab({ orgId }: { orgId: string }) {
       </div>
 
       {/* Filter */}
-      <div className="bg-white border border-[#E0E0E0] rounded-xl p-4 flex items-center gap-3 shadow-xs">
-        <div className="relative flex-1">
+      <div className="bg-white border border-[#E0E0E0] rounded-xl p-4 flex items-center gap-3 flex-wrap shadow-xs">
+        <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input type="text" placeholder="Search documents from SAS..." className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
         </div>
+        <select className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] bg-white" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
+          <option value="All">All Categories</option>
+          {uniqueCategories.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <select className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] bg-white min-w-[170px]" value={periodFilter} onChange={(e) => setPeriodFilter(e.target.value)}>
+          <option value="All">All Academic Periods</option>
+          {availablePeriods.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
+        </select>
         <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
           <input type="checkbox" className="accent-[#0E4EBD]" checked={showUnreadOnly} onChange={(e) => setShowUnreadOnly(e.target.checked)} />
           Show Unread Only
         </label>
+        {hasActiveFilters && (
+          <button
+            type="button"
+            onClick={resetFilters}
+            className="flex items-center gap-1 px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            Reset
+          </button>
+        )}
       </div>
 
       {/* Table */}
@@ -827,7 +1015,7 @@ function InboxTab({ orgId }: { orgId: string }) {
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-[#E0E0E0]">
                 <tr>
-                  {["Document Title", "Sent By", "Category", "Date Sent", "For", "Opened", "Actions"].map((h) => (
+                  {["Document Title", "Sent By", "Category", "Academic Period", "Date Sent", "For", "Opened", "Actions"].map((h) => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -859,6 +1047,9 @@ function InboxTab({ orgId }: { orgId: string }) {
                         </div>
                       </td>
                       <td className="px-4 py-3"><CategoryPill category={doc.category} /></td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <AcademicPeriodCell doc={doc} semesters={semesters} />
+                      </td>
                       <td className="px-4 py-3">
                         {createdDate && (
                           <>

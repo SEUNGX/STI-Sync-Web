@@ -248,7 +248,7 @@ export default function DocumentManagementSettings() {
   // Local form state for Retention & Archival
   const [retentionYears, setRetentionYears] = useState(DEFAULT_DOCUMENT_SETTINGS.retentionYears);
   const [autoArchiveCompleted, setAutoArchiveCompleted] = useState(DEFAULT_DOCUMENT_SETTINGS.autoArchiveCompleted);
-  const [archiveAfterSemesters, setArchiveAfterSemesters] = useState(DEFAULT_DOCUMENT_SETTINGS.archiveAfterSemesters);
+  const [archiveAfterWeeks, setArchiveAfterWeeks] = useState(DEFAULT_DOCUMENT_SETTINGS.archiveAfterWeeks);
   const [allowOfficerDelete, setAllowOfficerDelete] = useState(DEFAULT_DOCUMENT_SETTINGS.allowOfficerDelete);
   const [draftExpiryDays, setDraftExpiryDays] = useState(DEFAULT_DOCUMENT_SETTINGS.draftExpiryDays);
   const [retDirty, setRetDirty] = useState(false);
@@ -264,7 +264,7 @@ export default function DocumentManagementSettings() {
 
       setRetentionYears(settings.retentionYears ?? DEFAULT_DOCUMENT_SETTINGS.retentionYears);
       setAutoArchiveCompleted(settings.autoArchiveCompleted ?? DEFAULT_DOCUMENT_SETTINGS.autoArchiveCompleted);
-      setArchiveAfterSemesters(settings.archiveAfterSemesters ?? DEFAULT_DOCUMENT_SETTINGS.archiveAfterSemesters);
+      setArchiveAfterWeeks(settings.archiveAfterWeeks ?? (settings.archiveAfterSemesters ? settings.archiveAfterSemesters * 18 : DEFAULT_DOCUMENT_SETTINGS.archiveAfterWeeks));
       setAllowOfficerDelete(settings.allowOfficerDelete ?? DEFAULT_DOCUMENT_SETTINGS.allowOfficerDelete);
       setDraftExpiryDays(settings.draftExpiryDays ?? DEFAULT_DOCUMENT_SETTINGS.draftExpiryDays);
     }
@@ -283,14 +283,15 @@ export default function DocumentManagementSettings() {
 
   const checkRetDirty = useCallback(() => {
     const saved = settings ?? DEFAULT_DOCUMENT_SETTINGS;
+    const savedWeeks = saved.archiveAfterWeeks ?? (saved.archiveAfterSemesters ? saved.archiveAfterSemesters * 18 : DEFAULT_DOCUMENT_SETTINGS.archiveAfterWeeks);
     const dirty =
       retentionYears !== (saved.retentionYears ?? DEFAULT_DOCUMENT_SETTINGS.retentionYears) ||
       autoArchiveCompleted !== (saved.autoArchiveCompleted ?? DEFAULT_DOCUMENT_SETTINGS.autoArchiveCompleted) ||
-      archiveAfterSemesters !== (saved.archiveAfterSemesters ?? DEFAULT_DOCUMENT_SETTINGS.archiveAfterSemesters) ||
+      archiveAfterWeeks !== savedWeeks ||
       allowOfficerDelete !== (saved.allowOfficerDelete ?? DEFAULT_DOCUMENT_SETTINGS.allowOfficerDelete) ||
       draftExpiryDays !== (saved.draftExpiryDays ?? DEFAULT_DOCUMENT_SETTINGS.draftExpiryDays);
     setRetDirty(dirty);
-  }, [retentionYears, autoArchiveCompleted, archiveAfterSemesters, allowOfficerDelete, draftExpiryDays, settings]);
+  }, [retentionYears, autoArchiveCompleted, archiveAfterWeeks, allowOfficerDelete, draftExpiryDays, settings]);
 
   useEffect(() => { checkRefDirty(); }, [checkRefDirty]);
   useEffect(() => { checkRetDirty(); }, [checkRetDirty]);
@@ -308,7 +309,7 @@ export default function DocumentManagementSettings() {
   const saveRetSettings = async () => {
     setRetSaving(true);
     try {
-      await saveDocumentSettings({ retentionYears, autoArchiveCompleted, archiveAfterSemesters, allowOfficerDelete, draftExpiryDays });
+      await saveDocumentSettings({ retentionYears, autoArchiveCompleted, archiveAfterWeeks, allowOfficerDelete, draftExpiryDays });
     } finally {
       setRetSaving(false);
     }
@@ -546,16 +547,16 @@ export default function DocumentManagementSettings() {
 
             {autoArchiveCompleted && (
               <div className="ml-4 pl-3 border-l-2 border-[#0E4EBD]/30">
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Archive After (semesters past)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Archive After (weeks past)</label>
                 <input
                   type="number"
                   min={1}
-                  max={10}
-                  value={archiveAfterSemesters}
-                  onChange={(e) => setArchiveAfterSemesters(+e.target.value)}
+                  max={52}
+                  value={archiveAfterWeeks}
+                  onChange={(e) => setArchiveAfterWeeks(+e.target.value)}
                   className="w-40 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
                 />
-                <p className="text-xs text-gray-500 mt-1">Documents from semesters older than this threshold are archived automatically.</p>
+                <p className="text-xs text-gray-500 mt-1">Completed (approved/rejected) documents older than this number of weeks are archived automatically.</p>
               </div>
             )}
 

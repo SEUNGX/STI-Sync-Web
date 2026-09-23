@@ -1,11 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { X, Download, FileText, AlertCircle, Mail, Loader2 } from 'lucide-react';
+import { X, Download, FileText, AlertCircle, Mail, Loader2, Check, RotateCcw } from 'lucide-react';
 import type { DocumentDocument } from '../types/document.types';
 import { downloadFile } from '../../../../utils/fileDownloader';
 
 interface DocumentPreviewModalProps {
   doc: DocumentDocument;
   onClose: () => void;
+  onApprove?: (remarks: string) => Promise<void> | void;
+  onReturn?: (remarks: string) => Promise<void> | void;
+  onReject?: (remarks: string) => Promise<void> | void;
+  isAdmin?: boolean;
 }
 
 function formatBytes(bytes: number): string {
@@ -22,7 +26,14 @@ function getPdfUrl(url: string) {
   return url;
 }
 
-export function DocumentPreviewModal({ doc, onClose }: DocumentPreviewModalProps) {
+export function DocumentPreviewModal({
+  doc,
+  onClose,
+  onApprove,
+  onReturn,
+  onReject,
+  isAdmin,
+}: DocumentPreviewModalProps) {
   const type = doc.fileType?.toUpperCase() || 'UNKNOWN';
   const isImage = ['JPG', 'JPEG', 'PNG', 'GIF', 'WEBP', 'SVG'].includes(type);
   const isPdf = type === 'PDF';
@@ -35,12 +46,38 @@ export function DocumentPreviewModal({ doc, onClose }: DocumentPreviewModalProps
   const [pdfError, setPdfError] = useState<{message: string, status?: number} | null>(null);
   const [downloading, setDownloading] = useState(false);
 
+  // Review states
+  const [actionType, setActionType] = useState<'Approve' | 'Return' | 'Reject' | null>(null);
+  const [remarks, setRemarks] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const isPendingReview = doc.type === 'submission' && (doc.status === 'Pending' || doc.status === 'Resubmitted');
+  const canReview = !!(onApprove || onReturn || onReject || isAdmin);
+
   const handleDownload = async () => {
     setDownloading(true);
     try {
       await downloadFile(doc.fileUrl, doc.fileName);
     } finally {
       setDownloading(false);
+    }
+  };
+
+  const handleExecuteReview = async () => {
+    if (!actionType) return;
+    setSubmitting(true);
+    try {
+      if (actionType === 'Approve' && onApprove) {
+        await onApprove(remarks);
+      } else if (actionType === 'Return' && onReturn) {
+        await onReturn(remarks);
+      } else if (actionType === 'Reject' && onReject) {
+        await onReject(remarks);
+      }
+      setActionType(null);
+      setRemarks('');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -117,12 +154,30 @@ export function DocumentPreviewModal({ doc, onClose }: DocumentPreviewModalProps
               <h3 className="text-white font-bold text-base truncate" title={doc.title}>
                 {doc.title}
               </h3>
-              <div className="flex items-center gap-2 mt-0.5">
+              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                 <span className="text-white/70 text-xs font-mono">{doc.referenceNumber}</span>
                 <span className="text-white/30 text-xs">•</span>
                 <span className="text-white/70 text-xs truncate" title={doc.fileName}>{doc.fileName}</span>
                 <span className="text-white/30 text-xs">•</span>
                 <span className="text-[#FFD41C] text-xs font-medium">{formatBytes(doc.fileSize)}</span>
+                {doc.academicYear && (
+                  <>
+                    <span className="text-white/30 text-xs">•</span>
+                    <span className="text-blue-200 text-xs">SY {doc.academicYear}</span>
+                  </>
+                )}
+                {doc.semester && (
+                  <>
+                    <span className="text-white/30 text-xs">•</span>
+                    <span className="text-blue-200 text-xs">{doc.semester}</span>
+                  </>
+                )}
+                {doc.trimester && doc.trimester !== doc.semester && (
+                  <>
+                    <span className="text-white/30 text-xs">•</span>
+                    <span className="text-blue-200 text-xs">{doc.trimester}</span>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -202,10 +257,99 @@ export function DocumentPreviewModal({ doc, onClose }: DocumentPreviewModalProps
             <DirectDownload />
           )}
         </div>
+
+        {/* Inline Review Remarks Panel (When an action button is clicked) */}
+        {actionType && (
+          <div className="bg-white border-t border-gray-200 p-4 shadow-lg animate-in slide-in-from-bottom-2">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                {actionType === 'Approve' && <Check className="w-4 h-4 text-green-600" />}
+                {actionType === 'Return' && <RotateCcw className="w-4 h-4 text-amber-600" />}
+                {actionType === 'Reject' && <X className="w-4 h-4 text-red-600" />}
+                <span className={`text-xs font-bold ${
+                  actionType === 'Approve' ? 'text-green-700' :
+                  actionType === 'Return' ? 'text-amber-700' : 'text-red-700'
+                }`}>
+                  {actionType === 'Approve' ? 'Approve Document' :
+                   actionType === 'Return' ? 'Return Document for Revision' : 'Reject Document'}
+                </span>
+                <span className="text-gray-400 text-xs">· {doc.title}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setActionType(null); setRemarks(''); }}
+                className="text-gray-400 hover:text-gray-600 text-xs cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+            <div className="space-y-3">
+              <textarea
+                rows={2}
+                placeholder={
+                  actionType === 'Approve'
+                    ? 'Optional remarks or approval notes for the officer...'
+                    : actionType === 'Return'
+                    ? 'Specify required revisions or feedback (Required)...'
+                    : 'Specify rejection reason (Required)...'
+                }
+                value={remarks}
+                onChange={(e) => setRemarks(e.target.value)}
+                className="w-full px-3 py-2 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] outline-none resize-none"
+                autoFocus
+              />
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] text-gray-500">
+                  {actionType === 'Approve'
+                    ? 'Remarks are optional.'
+                    : 'Remarks are required so the officer understands the decision.'}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { setActionType(null); setRemarks(''); }}
+                    className="px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={submitting || ((actionType === 'Return' || actionType === 'Reject') && !remarks.trim())}
+                    onClick={handleExecuteReview}
+                    className={`px-4 py-1.5 text-xs font-bold rounded-lg text-white transition-all flex items-center gap-1.5 cursor-pointer shadow-sm ${
+                      actionType === 'Approve'
+                        ? 'bg-gradient-to-r from-green-500 to-green-400 hover:opacity-90 disabled:opacity-50 cursor-not-allowed disabled:cursor-not-allowed'
+                        : actionType === 'Return'
+                        ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:opacity-90 disabled:opacity-50 cursor-not-allowed disabled:cursor-not-allowed'
+                        : 'bg-gradient-to-r from-red-500 to-orange-500 hover:opacity-90 disabled:opacity-50 cursor-not-allowed disabled:cursor-not-allowed'
+                    }`}
+                  >
+                    {submitting ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Processing...</span>
+                      </>
+                    ) : (
+                      <>
+                        {actionType === 'Approve' && <Check className="w-3.5 h-3.5" />}
+                        {actionType === 'Return' && <RotateCcw className="w-3.5 h-3.5" />}
+                        {actionType === 'Reject' && <X className="w-3.5 h-3.5" />}
+                        <span>
+                          {actionType === 'Approve' ? 'Confirm Approval' :
+                           actionType === 'Return' ? 'Return for Revision' : 'Confirm Rejection'}
+                        </span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
         
-        {/* Footer info (optional, helps show what we are looking at) */}
-        <div className="bg-white border-t border-gray-200 px-6 py-3 flex items-center justify-between flex-shrink-0">
-          <div className="flex items-center gap-4">
+        {/* Footer info & Action Buttons */}
+        <div className="bg-white border-t border-gray-200 px-6 py-3 flex items-center justify-between flex-shrink-0 flex-wrap gap-3">
+          <div className="flex items-center gap-4 flex-wrap">
             <div className="flex flex-col">
               <span className="text-gray-400 text-[10px] uppercase font-bold tracking-wider">Type</span>
               <span className="text-[#001A4D] text-xs font-medium">{doc.type === 'submission' ? 'Submission to SAS' : 'Broadcast from SAS'}</span>
@@ -215,19 +359,45 @@ export function DocumentPreviewModal({ doc, onClose }: DocumentPreviewModalProps
               <span className="text-gray-400 text-[10px] uppercase font-bold tracking-wider">Category</span>
               <span className="text-[#001A4D] text-xs font-medium">{doc.category}</span>
             </div>
-            <div className="w-px h-8 bg-gray-200"></div>
-            <div className="flex flex-col">
-              <span className="text-gray-400 text-[10px] uppercase font-bold tracking-wider">Status</span>
-              <span className={`text-xs font-bold ${
-                doc.status === 'Approved' ? 'text-green-600' : 
-                doc.status === 'Rejected' ? 'text-red-600' : 
-                doc.status === 'Pending' ? 'text-amber-500' : 'text-blue-600'
-              }`}>{doc.status}</span>
-            </div>
+            {doc.type === 'submission' && (
+              <>
+                <div className="w-px h-8 bg-gray-200"></div>
+                <div className="flex flex-col">
+                  <span className="text-gray-400 text-[10px] uppercase font-bold tracking-wider">Status</span>
+                  <span className={`text-xs font-bold ${
+                    doc.status === 'Approved' ? 'text-green-600' : 
+                    doc.status === 'Rejected' ? 'text-red-600' : 
+                    doc.status === 'Returned' ? 'text-amber-700' :
+                    doc.status === 'Pending' ? 'text-amber-500' : 'text-blue-600'
+                  }`}>{doc.status}</span>
+                </div>
+              </>
+            )}
+            {doc.type === 'broadcast' && (
+              <>
+                <div className="w-px h-8 bg-gray-200"></div>
+                <div className="flex flex-col">
+                  <span className="text-gray-400 text-[10px] uppercase font-bold tracking-wider">Distribution</span>
+                  <span className="text-[#0E4EBD] text-xs font-semibold">
+                    {doc.distribution === 'all' ? 'All Organizations' : `${doc.targetOrgIds?.length || 0} Organizations`}
+                  </span>
+                </div>
+              </>
+            )}
+            {doc.submittedByOrgName && (
+              <>
+                <div className="w-px h-8 bg-gray-200"></div>
+                <div className="flex flex-col">
+                  <span className="text-gray-400 text-[10px] uppercase font-bold tracking-wider">Submitted By</span>
+                  <span className="text-[#001A4D] text-xs font-medium">{doc.submittedByOrgName}</span>
+                </div>
+              </>
+            )}
           </div>
           
-          <div className="flex items-center gap-2">
-            {(doc.type === 'submission' && doc.remarks) && (
+          <div className="flex items-center gap-3">
+            {/* Show Remarks if already provided */}
+            {(doc.type === 'submission' && doc.remarks && !actionType) && (
               <div className="flex items-center gap-2 max-w-md bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200">
                 <AlertCircle className="w-4 h-4 text-[#0E4EBD] flex-shrink-0" />
                 <p className="text-[#001A4D] text-xs truncate" title={doc.remarks}>
@@ -235,12 +405,49 @@ export function DocumentPreviewModal({ doc, onClose }: DocumentPreviewModalProps
                 </p>
               </div>
             )}
+
             {(doc.type === 'broadcast' && doc.description) && (
               <div className="flex items-center gap-2 max-w-md bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200">
                 <Mail className="w-4 h-4 text-blue-600 flex-shrink-0" />
                 <p className="text-blue-800 text-xs truncate" title={doc.description}>
                   <span className="font-bold">Message:</span> {doc.description}
                 </p>
+              </div>
+            )}
+
+            {/* Admin Review Action Buttons */}
+            {canReview && isPendingReview && !actionType && (
+              <div className="flex items-center gap-2">
+                {onApprove && (
+                  <button
+                    type="button"
+                    onClick={() => { setActionType('Approve'); setRemarks(''); }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-green-500 to-green-400 hover:opacity-90 text-white text-xs font-bold rounded-lg transition-all cursor-pointer shadow-sm"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Approve</span>
+                  </button>
+                )}
+                {onReturn && (
+                  <button
+                    type="button"
+                    onClick={() => { setActionType('Return'); setRemarks(''); }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:opacity-90 text-white text-xs font-bold rounded-lg transition-all cursor-pointer shadow-sm"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Return</span>
+                  </button>
+                )}
+                {onReject && (
+                  <button
+                    type="button"
+                    onClick={() => { setActionType('Reject'); setRemarks(''); }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-red-500 to-orange-500 hover:opacity-90 text-white text-xs font-bold rounded-lg transition-all cursor-pointer shadow-sm"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                    <span>Reject</span>
+                  </button>
+                )}
               </div>
             )}
           </div>

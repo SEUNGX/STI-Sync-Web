@@ -1,5 +1,5 @@
 import { Search, AlertTriangle, X } from "lucide-react";
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import SettingsNavigation from '../components/settings/SettingsNavigation';
 import AdviserProfile from '../components/settings/AdviserProfile';
 import SecurityPassword from '../components/settings/SecurityPassword';

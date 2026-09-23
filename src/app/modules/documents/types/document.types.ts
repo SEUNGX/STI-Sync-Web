@@ -26,6 +26,8 @@ export interface DocumentDocument {
   semesterId: string;
   academicYear: string;
   semester: string;
+  trimester?: string;
+  trimesterId?: string;
 
   // ─── Reference ───
   referenceNumber: string;
@@ -112,7 +114,8 @@ export interface DocumentSettingsDocument {
   // Retention & Archival
   retentionYears: number;
   autoArchiveCompleted: boolean;
-  archiveAfterSemesters: number;
+  archiveAfterWeeks: number;
+  archiveAfterSemesters?: number;
   allowOfficerDelete: boolean;
   draftExpiryDays: number;
 
@@ -128,6 +131,7 @@ export const DEFAULT_DOCUMENT_SETTINGS: Omit<DocumentSettingsDocument, 'updatedA
 
   retentionYears: 5,
   autoArchiveCompleted: true,
+  archiveAfterWeeks: 4,
   archiveAfterSemesters: 2,
   allowOfficerDelete: false,
   draftExpiryDays: 30,

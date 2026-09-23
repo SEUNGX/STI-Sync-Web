@@ -12,13 +12,76 @@ import { DocumentPreviewModal } from '../../modules/documents/components/Documen
 import { TablePagination } from '../../components/common/TablePagination';
 import { useOrganizationStream } from '../../modules/organizations/hooks/useOrganizationStream';
 import { useAdviserProfile } from '../../modules/auth/hooks/useAdviserProfile';
-import { useSemesters } from '../../modules/academic/hooks/useAcademicStream';
+import { useSemesters, useActiveAcademicPeriods } from '../../modules/academic/hooks/useAcademicStream';
+import type { SemesterDocument } from '../../modules/academic/types/academic.types';
 import { uploadToCloudinary } from '../../../services/cloudinary';
 import { downloadFile } from '../../../utils/fileDownloader';
 import { inferFileType, DOCUMENT_ACCEPTED_TYPES, DOCUMENT_MAX_BYTES } from '../../modules/documents/types/document.types';
 import type { DocumentDocument, DocStatus } from '../../modules/documents/types/document.types';
 import { formatDistanceToNow, format } from 'date-fns';
 import { Timestamp } from 'firebase/firestore';
+
+// ─── Academic Period Helper Component ─────────────────────────────────────────
+export function AcademicPeriodCell({ doc, semesters }: { doc: DocumentDocument; semesters: SemesterDocument[] }) {
+  let ay = doc.academicYear;
+  if (!ay && doc.semesterId) {
+    const matched = semesters.find(s => s.id === doc.semesterId);
+    if (matched) ay = matched.academicYear;
+  }
+
+  let sem = doc.semester;
+  let tri = doc.trimester;
+
+  // If doc only has semesterId and neither sem nor tri are set
+  if (!sem && !tri && doc.semesterId) {
+    const matched = semesters.find(s => s.id === doc.semesterId);
+    if (matched) {
+      if (matched.academicLevel === 'SHS' || String(matched.semester).includes('Trimester')) {
+        tri = matched.semester || (matched.term as string);
+      } else {
+        sem = matched.semester || (matched.term as string);
+      }
+    }
+  }
+
+  // If stored semester string is literally a Trimester and trimester field is empty
+  if (sem && sem.includes('Trimester') && !tri) {
+    tri = sem;
+    sem = undefined;
+  }
+
+  // If we have an academic year, check if we can resolve the active or corresponding college and SHS terms for that AY
+  if (ay) {
+    if (!sem) {
+      const colSem = semesters.find(s => s.academicYear === ay && (s.academicLevel === 'COLLEGE' || (!s.academicLevel && !String(s.semester).includes('Trimester'))));
+      if (colSem) sem = colSem.semester || (colSem.term as string);
+    }
+    if (!tri) {
+      const shsSem = semesters.find(s => s.academicYear === ay && (s.academicLevel === 'SHS' || String(s.semester).includes('Trimester')));
+      if (shsSem) tri = shsSem.semester || (shsSem.term as string);
+    }
+  }
+
+  if (!ay && !sem && !tri) {
+    return <span className="text-gray-400 text-xs">—</span>;
+  }
+
+  let termLabel = '';
+  if (sem && tri && sem !== tri) {
+    termLabel = `${sem} · ${tri}`;
+  } else if (sem) {
+    termLabel = sem;
+  } else if (tri) {
+    termLabel = tri;
+  }
+
+  return (
+    <div className="whitespace-nowrap">
+      {ay && <p className="text-xs font-semibold text-[#001A4D]">SY {ay}</p>}
+      <p className="text-[10px] text-gray-500">{termLabel || '—'}</p>
+    </div>
+  );
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const CATEGORY_COLORS: Record<string, string> = {
@@ -159,8 +222,13 @@ function BroadcastModal({ onClose }: { onClose: () => void }) {
   const activeCategories = docCategories.filter(c => c.active);
   const { data: orgs } = useOrganizationStream();
   const { profile: adminProfile } = useAdviserProfile();
-  const { data: semesters } = useSemesters();
-  const activeSemester = semesters.find(s => s.status === 'ACTIVE');
+  const { activeCollegePeriod, activeShsPeriod, periods: semesters } = useActiveAcademicPeriods();
+
+  const resolvedAy = activeCollegePeriod?.academicYear || activeShsPeriod?.academicYear || semesters[0]?.academicYear || '';
+  const resolvedSemester = activeCollegePeriod?.semester || activeCollegePeriod?.term || (semesters.find(s => s.academicLevel === 'COLLEGE' || (!s.academicLevel && !String(s.semester).includes('Trimester'))))?.semester || '';
+  const resolvedTrimester = activeShsPeriod?.semester || activeShsPeriod?.term || (semesters.find(s => s.academicLevel === 'SHS' || String(s.semester).includes('Trimester')))?.semester || '';
+  const resolvedSemesterId = activeCollegePeriod?.id || semesters.find(s => s.status === 'ACTIVE')?.id || semesters[0]?.id || '';
+  const resolvedTrimesterId = activeShsPeriod?.id || '';
 
   const [distribution, setDistribution] = useState<"all" | "specific">("all");
   const [selectedOrgs, setSelectedOrgs] = useState<string[]>([]);
@@ -235,9 +303,11 @@ function BroadcastModal({ onClose }: { onClose: () => void }) {
         fileName: uploadedFile.name,
         fileType: inferFileType(uploadedFile.name),
         fileSize: uploadedFile.size,
-        semesterId: activeSemester?.id ?? '',
-        academicYear: activeSemester?.academicYear ?? '',
-        semester: activeSemester?.semester ?? '',
+        semesterId: resolvedSemesterId,
+        academicYear: resolvedAy,
+        semester: resolvedSemester || resolvedTrimester || '',
+        trimester: resolvedTrimester,
+        trimesterId: resolvedTrimesterId,
         referenceNumber: refNum,
         // submission fields (unused for broadcast)
         submittedBy: '',
@@ -477,11 +547,12 @@ function OrgChecklist({ orgs, selectedOrgs, toggleOrg, setSelectedOrgs, search, 
   );
 }
 
-// ─── Incoming Queue Tab ────────────────────────────────────────────────────────
-function IncomingQueueTab() {
+// ─── Inbox Tab ────────────────────────────────────────────────────────────────
+function InboxTab() {
   const navigate = useNavigate();
   const { data: incoming, loading } = useIncomingDocuments();
-  const { data: orgs } = useOrganizationStream();
+  const { data: categories } = useDocumentCategories();
+  const { data: semesters } = useSemesters();
   const { profile: adminProfile } = useAdviserProfile();
   const [approvePopover, setApprovePopover] = useState<string | null>(null);
   const [returnPopover, setReturnPopover] = useState<string | null>(null);
@@ -489,20 +560,99 @@ function IncomingQueueTab() {
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [previewDoc, setPreviewDoc] = useState<DocumentDocument | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
-  const [statusFilter, setStatusFilter] = useState("All");
+  
+  // Filter States
   const [searchQuery, setSearchQuery] = useState("");
   const [orgFilter, setOrgFilter] = useState("All");
+  const [categoryFilter, setCategoryFilter] = useState("All");
+  const [periodFilter, setPeriodFilter] = useState("All");
+  const [statusFilter, setStatusFilter] = useState("All");
+
+  const uniqueOrgs = useMemo(() => {
+    const map = new Map<string, string>();
+    incoming.forEach(d => { if (d.submittedByOrgId) map.set(d.submittedByOrgId, d.submittedByOrgName); });
+    return Array.from(map.entries());
+  }, [incoming]);
+
+  const availableCategories = useMemo(() => {
+    const set = new Set<string>();
+    categories.forEach(c => { if (c.name) set.add(c.name); });
+    incoming.forEach(d => { if (d.category) set.add(d.category); });
+    return Array.from(set).sort();
+  }, [categories, incoming]);
+
+  const availablePeriods = useMemo(() => {
+    const periodMap = new Map<string, { key: string; label: string; sy: string; term: string }>();
+
+    // From semesters in database
+    semesters.forEach(s => {
+      const termName = s.semester || s.term || '';
+      if (s.academicYear) {
+        const key = `${s.academicYear}__${termName}`;
+        const label = termName ? `SY ${s.academicYear} · ${termName}` : `SY ${s.academicYear}`;
+        if (!periodMap.has(key)) {
+          periodMap.set(key, { key, label, sy: s.academicYear, term: termName });
+        }
+      }
+    });
+
+    // From incoming documents
+    incoming.forEach(d => {
+      const docAy = d.academicYear || (d.semesterId ? semesters.find(s => s.id === d.semesterId)?.academicYear : '');
+      const docTerm = d.semester || d.trimester || (d.semesterId ? semesters.find(s => s.id === d.semesterId)?.semester : '');
+      if (docAy) {
+        const key = `${docAy}__${docTerm || ''}`;
+        const label = docTerm ? `SY ${docAy} · ${docTerm}` : `SY ${docAy}`;
+        if (!periodMap.has(key)) {
+          periodMap.set(key, { key, label, sy: docAy, term: docTerm || '' });
+        }
+      }
+    });
+
+    return Array.from(periodMap.values()).sort((a, b) => {
+      if (b.sy !== a.sy) return b.sy.localeCompare(a.sy);
+      return a.term.localeCompare(b.term);
+    });
+  }, [semesters, incoming]);
+
+  const hasActiveFilters = searchQuery.trim() !== "" || orgFilter !== "All" || categoryFilter !== "All" || periodFilter !== "All" || statusFilter !== "All";
+
+  const resetFilters = () => {
+    setSearchQuery("");
+    setOrgFilter("All");
+    setCategoryFilter("All");
+    setPeriodFilter("All");
+    setStatusFilter("All");
+  };
 
   const filtered = useMemo(() => {
     let list = incoming;
     if (statusFilter !== "All") list = list.filter(d => d.status === statusFilter);
     if (orgFilter !== "All") list = list.filter(d => d.submittedByOrgId === orgFilter);
+    if (categoryFilter !== "All") list = list.filter(d => d.category === categoryFilter || d.categoryId === categoryFilter);
+    if (periodFilter !== "All") {
+      const [targetSy, targetTerm] = periodFilter.split("__");
+      list = list.filter(d => {
+        const docAy = d.academicYear || (d.semesterId ? semesters.find(s => s.id === d.semesterId)?.academicYear : '');
+        const docSem = d.semester || (d.semesterId ? semesters.find(s => s.id === d.semesterId)?.semester : '');
+        const docTri = d.trimester;
+        
+        if (docAy !== targetSy) return false;
+        if (!targetTerm) return true;
+        return docSem === targetTerm || docTri === targetTerm || String(docSem).includes(targetTerm);
+      });
+    }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      list = list.filter(d => d.title.toLowerCase().includes(q) || d.referenceNumber.toLowerCase().includes(q) || d.submittedByOrgName.toLowerCase().includes(q));
+      list = list.filter(d =>
+        d.title.toLowerCase().includes(q) ||
+        d.referenceNumber.toLowerCase().includes(q) ||
+        d.submittedByOrgName.toLowerCase().includes(q) ||
+        (d.submittedBy && d.submittedBy.toLowerCase().includes(q))
+      );
     }
     return list;
-  }, [incoming, statusFilter, orgFilter, searchQuery]);
+  }, [incoming, statusFilter, orgFilter, categoryFilter, periodFilter, searchQuery, semesters]);
 
   // Pagination State (8 rows per page standard)
   const PER_PAGE = 8;
@@ -510,7 +660,7 @@ function IncomingQueueTab() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [statusFilter, orgFilter, searchQuery]);
+  }, [statusFilter, orgFilter, categoryFilter, periodFilter, searchQuery]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
   const paginatedDocs = useMemo(() => {
@@ -538,32 +688,89 @@ function IncomingQueueTab() {
 
   const toggleSelect = (id: string) => setSelected(p => p.includes(id) ? p.filter(s => s !== id) : [...p, id]);
 
-  const uniqueOrgs = useMemo(() => {
-    const map = new Map<string, string>();
-    incoming.forEach(d => { if (d.submittedByOrgId) map.set(d.submittedByOrgId, d.submittedByOrgName); });
-    return Array.from(map.entries());
-  }, [incoming]);
-
   if (loading) return <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 text-[#0E4EBD] animate-spin" /></div>;
 
   return (
     <div className="space-y-4">
       {/* Filter bar */}
-      <div className="bg-white border border-[#E0E0E0] rounded-xl p-4 flex items-center gap-3 flex-wrap">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input type="text" placeholder="Search document title, org name, or reference..." className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD] focus:border-transparent" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+      <div className="bg-white border border-[#E0E0E0] rounded-xl p-4 space-y-3">
+        {/* Row 1: Search & Dropdowns */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="relative flex-1 min-w-[220px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search document title, org name, or reference..."
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD] focus:border-transparent outline-none"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+
+          {/* Org Filter */}
+          <select
+            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD] focus:border-transparent outline-none bg-white min-w-[150px]"
+            value={orgFilter}
+            onChange={(e) => setOrgFilter(e.target.value)}
+          >
+            <option value="All">All Organizations</option>
+            {uniqueOrgs.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+          </select>
+
+          {/* Category Filter */}
+          <select
+            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD] focus:border-transparent outline-none bg-white min-w-[140px]"
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+          >
+            <option value="All">All Categories</option>
+            {availableCategories.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+
+          {/* Combined Academic Period (SY & Semester) Filter */}
+          <select
+            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD] focus:border-transparent outline-none bg-white min-w-[190px]"
+            value={periodFilter}
+            onChange={(e) => setPeriodFilter(e.target.value)}
+          >
+            <option value="All">All Academic Periods</option>
+            {availablePeriods.map((p) => (
+              <option key={p.key} value={p.key}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="flex items-center gap-1 px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              Reset Filters
+            </button>
+          )}
         </div>
-        <select className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD] focus:border-transparent" value={orgFilter} onChange={(e) => setOrgFilter(e.target.value)}>
-          <option value="All">All Organizations</option>
-          {uniqueOrgs.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-        </select>
-        <div className="flex gap-1">
-          {["All", "Pending", "Approved", "Returned", "Rejected", "Resubmitted"].map((s) => (
-            <button key={s} onClick={() => setStatusFilter(s)} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${statusFilter === s ? "bg-[#001A4D] text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>{s}</button>
-          ))}
+
+        {/* Row 2: Status Pills & Summary */}
+        <div className="flex items-center justify-between gap-2 flex-wrap pt-2 border-t border-gray-100">
+          <div className="flex gap-1.5 flex-wrap items-center">
+            <span className="text-xs font-bold text-gray-400 mr-1 uppercase">Status:</span>
+            {["All", "Pending", "Approved", "Returned", "Rejected", "Resubmitted"].map((s) => (
+              <button
+                key={s}
+                onClick={() => setStatusFilter(s)}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors cursor-pointer ${
+                  statusFilter === s ? "bg-[#001A4D] text-white shadow-sm" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                }`}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+          <p className="text-gray-400 text-xs font-medium">Showing {filtered.length} of {incoming.length} documents</p>
         </div>
-        <p className="text-gray-400 text-xs ml-auto">Showing {filtered.length} documents</p>
       </div>
 
       {/* Table */}
@@ -573,7 +780,7 @@ function IncomingQueueTab() {
             <FileText className="w-12 h-12 text-gray-300 mx-auto mb-4" />
             <p className="text-[#001A4D] font-bold text-lg mb-1">No documents found</p>
             <p className="text-gray-500 text-sm">
-              {incoming.length === 0 ? "No submissions yet. Officer documents will appear here." : "Try adjusting your filters."}
+              {incoming.length === 0 ? "No submissions yet. Officer documents will appear in your Inbox." : "Try adjusting your filters or search terms."}
             </p>
           </div>
         ) : (
@@ -585,7 +792,7 @@ function IncomingQueueTab() {
                     <th className="px-4 py-3 w-10">
                       <input type="checkbox" className="accent-[#0E4EBD]" onChange={(e) => setSelected(e.target.checked ? filtered.map(d => d.id) : [])} />
                     </th>
-                    {["Reference #", "Document Title", "Organization", "Category", "Submitted By", "Date Submitted", "Status", "Actions"].map((h) => (
+                    {["Reference #", "Document Title", "Organization", "Category", "Academic Period", "Submitted By", "Date Submitted", "Status", "Actions"].map((h) => (
                       <th key={h} className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -622,10 +829,13 @@ function IncomingQueueTab() {
                           </div>
                         </td>
                         <td className="px-4 py-3"><CategoryPill category={doc.category} /></td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <AcademicPeriodCell doc={doc} semesters={semesters} />
+                        </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1.5">
                             <div className="w-6 h-6 bg-[#E8F0FF] rounded-full flex items-center justify-center text-[#0E4EBD] text-[10px] font-bold flex-shrink-0">
-                              {doc.submittedBy.split(" ").map(n => n[0]).join("").slice(0, 2)}
+                              {doc.submittedBy ? doc.submittedBy.split(" ").map(n => n[0]).join("").slice(0, 2) : '??'}
                             </div>
                             <div>
                               <p className="text-gray-600 text-xs">{doc.submittedBy}</p>
@@ -638,7 +848,7 @@ function IncomingQueueTab() {
                             <>
                               <p className="text-gray-600 text-xs">{format(createdDate, 'MMM dd, yyyy')}</p>
                               <p className="text-gray-400 text-[10px] italic">{formatDistanceToNow(createdDate, { addSuffix: true })}</p>
-                              {isPending && daysInQueue > 2 && <p className="text-amber-600 text-[10px] italic">{daysInQueue} days in queue</p>}
+                              {isPending && daysInQueue > 2 && <p className="text-amber-600 text-[10px] italic">{daysInQueue} days in inbox</p>}
                             </>
                           )}
                         </td>
@@ -720,7 +930,25 @@ function IncomingQueueTab() {
         </div>
       )}
 
-      {previewDoc && <DocumentPreviewModal doc={previewDoc} onClose={() => setPreviewDoc(null)} />}
+      {previewDoc && (
+        <DocumentPreviewModal
+          doc={previewDoc}
+          isAdmin={true}
+          onClose={() => setPreviewDoc(null)}
+          onApprove={async (remarks) => {
+            await handleApprove(previewDoc.id, remarks);
+            setPreviewDoc(null);
+          }}
+          onReturn={async (remarks) => {
+            await handleReturn(previewDoc.id, remarks);
+            setPreviewDoc(null);
+          }}
+          onReject={async (remarks) => {
+            await handleReject(previewDoc.id, remarks);
+            setPreviewDoc(null);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -729,15 +957,84 @@ function IncomingQueueTab() {
 function SentTab() {
   const { data: sent, loading } = useSentDocuments();
   const { data: orgs } = useOrganizationStream();
+  const { data: categories } = useDocumentCategories();
+  const { data: semesters } = useSemesters();
   const [previewDoc, setPreviewDoc] = useState<DocumentDocument | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  
+  // Filter States
   const [searchQuery, setSearchQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("All");
+  const [periodFilter, setPeriodFilter] = useState("All");
+
+  const availableCategories = useMemo(() => {
+    const set = new Set<string>();
+    categories.forEach(c => { if (c.name) set.add(c.name); });
+    sent.forEach(d => { if (d.category) set.add(d.category); });
+    return Array.from(set).sort();
+  }, [categories, sent]);
+
+  const availablePeriods = useMemo(() => {
+    const periodMap = new Map<string, { key: string; label: string; sy: string; term: string }>();
+
+    semesters.forEach(s => {
+      const termName = s.semester || s.term || '';
+      if (s.academicYear) {
+        const key = `${s.academicYear}__${termName}`;
+        const label = termName ? `SY ${s.academicYear} · ${termName}` : `SY ${s.academicYear}`;
+        if (!periodMap.has(key)) {
+          periodMap.set(key, { key, label, sy: s.academicYear, term: termName });
+        }
+      }
+    });
+
+    sent.forEach(d => {
+      const docAy = d.academicYear || (d.semesterId ? semesters.find(s => s.id === d.semesterId)?.academicYear : '');
+      const docTerm = d.semester || d.trimester || (d.semesterId ? semesters.find(s => s.id === d.semesterId)?.semester : '');
+      if (docAy) {
+        const key = `${docAy}__${docTerm || ''}`;
+        const label = docTerm ? `SY ${docAy} · ${docTerm}` : `SY ${docAy}`;
+        if (!periodMap.has(key)) {
+          periodMap.set(key, { key, label, sy: docAy, term: docTerm || '' });
+        }
+      }
+    });
+
+    return Array.from(periodMap.values()).sort((a, b) => {
+      if (b.sy !== a.sy) return b.sy.localeCompare(a.sy);
+      return a.term.localeCompare(b.term);
+    });
+  }, [semesters, sent]);
+
+  const hasActiveFilters = searchQuery.trim() !== "" || categoryFilter !== "All" || periodFilter !== "All";
+
+  const resetFilters = () => {
+    setSearchQuery("");
+    setCategoryFilter("All");
+    setPeriodFilter("All");
+  };
 
   const filteredSent = useMemo(() => {
-    if (!searchQuery.trim()) return sent;
-    const q = searchQuery.toLowerCase().trim();
-    return sent.filter((d) => d.title.toLowerCase().includes(q) || d.referenceNumber.toLowerCase().includes(q));
-  }, [sent, searchQuery]);
+    let list = sent;
+    if (categoryFilter !== "All") list = list.filter(d => d.category === categoryFilter || d.categoryId === categoryFilter);
+    if (periodFilter !== "All") {
+      const [targetSy, targetTerm] = periodFilter.split("__");
+      list = list.filter(d => {
+        const docAy = d.academicYear || (d.semesterId ? semesters.find(s => s.id === d.semesterId)?.academicYear : '');
+        const docSem = d.semester || (d.semesterId ? semesters.find(s => s.id === d.semesterId)?.semester : '');
+        const docTri = d.trimester;
+        
+        if (docAy !== targetSy) return false;
+        if (!targetTerm) return true;
+        return docSem === targetTerm || docTri === targetTerm || String(docSem).includes(targetTerm);
+      });
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      list = list.filter((d) => d.title.toLowerCase().includes(q) || d.referenceNumber.toLowerCase().includes(q));
+    }
+    return list;
+  }, [sent, categoryFilter, periodFilter, searchQuery, semesters]);
 
   // Pagination State (8 rows per page standard)
   const PER_PAGE = 8;
@@ -745,7 +1042,7 @@ function SentTab() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery]);
+  }, [categoryFilter, periodFilter, searchQuery]);
 
   const totalPages = Math.max(1, Math.ceil(filteredSent.length / PER_PAGE));
   const paginatedSent = useMemo(() => {
@@ -757,16 +1054,54 @@ function SentTab() {
 
   return (
     <div className="space-y-4">
-      <div className="bg-white border border-[#E0E0E0] rounded-xl p-4 flex items-center gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search sent documents..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD] focus:border-transparent"
-          />
+      {/* Filter bar */}
+      <div className="bg-white border border-[#E0E0E0] rounded-xl p-4 space-y-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="relative flex-1 min-w-[220px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search sent documents..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD] focus:border-transparent outline-none"
+            />
+          </div>
+
+          {/* Category Filter */}
+          <select
+            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD] focus:border-transparent outline-none bg-white min-w-[140px]"
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+          >
+            <option value="All">All Categories</option>
+            {availableCategories.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+
+          {/* Combined Academic Period (SY & Semester) Filter */}
+          <select
+            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD] focus:border-transparent outline-none bg-white min-w-[190px]"
+            value={periodFilter}
+            onChange={(e) => setPeriodFilter(e.target.value)}
+          >
+            <option value="All">All Academic Periods</option>
+            {availablePeriods.map((p) => (
+              <option key={p.key} value={p.key}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="flex items-center gap-1 px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              Reset Filters
+            </button>
+          )}
         </div>
       </div>
 
@@ -776,12 +1111,18 @@ function SentTab() {
           <p className="text-[#001A4D] font-bold text-lg mb-1">No broadcasts yet</p>
           <p className="text-gray-500 text-sm">Documents you broadcast to clubs will appear here.</p>
         </div>
+      ) : filteredSent.length === 0 ? (
+        <div className="text-center py-16 bg-white border border-[#E0E0E0] rounded-2xl">
+          <FileText className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+          <p className="text-[#001A4D] font-bold text-lg mb-1">No broadcasts match filters</p>
+          <p className="text-gray-500 text-sm">Try adjusting your filters or search terms.</p>
+        </div>
       ) : (
         <div className="bg-white border border-[#E0E0E0] rounded-2xl overflow-hidden">
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-[#E0E0E0]">
               <tr>
-                {["Reference #", "Document Title", "Category", "Date Sent", "Sent To", "Read By", "Actions"].map((h) => (
+                {["Reference #", "Document Title", "Category", "Academic Period", "Date Sent", "Sent To", "Read By", "Actions"].map((h) => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -799,6 +1140,9 @@ function SentTab() {
                       <div className="flex items-center gap-1.5 mt-1"><FileChip type={doc.fileType} /></div>
                     </td>
                     <td className="px-4 py-3"><CategoryPill category={doc.category} /></td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <AcademicPeriodCell doc={doc} semesters={semesters} />
+                    </td>
                     <td className="px-4 py-3 text-gray-600 text-sm">{createdDate ? format(createdDate, 'MMM dd, yyyy') : '—'}</td>
                     <td className="px-4 py-3">
                       {doc.distribution === "all" ? (
@@ -926,7 +1270,7 @@ export function AdminDocuments() {
 
       {/* Tabs */}
       <div className="flex border-b border-gray-200">
-        {([["incoming", "Incoming Queue"], ["sent", "Sent to Clubs"]] as const).map(([key, label]) => (
+        {([["incoming", "Inbox"], ["sent", "Sent to Clubs"]] as const).map(([key, label]) => (
           <button
             key={key}
             onClick={() => setTab(key)}
@@ -940,7 +1284,7 @@ export function AdminDocuments() {
         ))}
       </div>
 
-      {tab === "incoming" ? <IncomingQueueTab /> : <SentTab />}
+      {tab === "incoming" ? <InboxTab /> : <SentTab />}
 
       {showBroadcast && <BroadcastModal onClose={() => setShowBroadcast(false)} />}
     </div>
