@@ -131,11 +131,10 @@ export default function CertificateDashboard({ isAdmin, organizationId, onGenera
                   <span className="bg-[#22C55E]/10 text-[#22C55E] text-xs font-semibold px-2.5 py-1 rounded-full">{ev.attended} Attendees</span>
                   <button
                     onClick={() => onGenerate(ev.id)}
-                    className={`text-xs font-semibold px-3.5 py-1.5 rounded-lg transition-colors ${
-                      isAdmin
+                    className={`text-xs font-semibold px-3.5 py-1.5 rounded-lg transition-colors ${isAdmin
                         ? "bg-[#FFD41C] text-[#001A4D] hover:bg-[#FFC107]"
                         : "bg-[#83358E] text-white hover:bg-[#6D2A78]"
-                    }`}
+                      }`}
                   >
                     Generate Certificates
                   </button>
@@ -184,3 +183,4 @@ export default function CertificateDashboard({ isAdmin, organizationId, onGenera
     </div>
   );
 }
+

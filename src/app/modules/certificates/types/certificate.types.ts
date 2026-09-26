@@ -1,5 +1,22 @@
 import { Timestamp } from 'firebase/firestore';
 
+export type CertificateStatus = 'Published' | 'Draft' | 'Pending' | 'Approved' | 'Rejected';
+
+export type CertificateCategory = 
+  | 'Participation' 
+  | 'Recognition' 
+  | 'Appreciation' 
+  | 'Achievement' 
+  | 'Completion' 
+  | 'Excellence';
+
+export type CertificateDesignPreset = 
+  | 'classic_gold' 
+  | 'modern_blue' 
+  | 'emerald_merit' 
+  | 'purple_excellence' 
+  | 'minimalist_navy';
+
 export interface CertificatePosition {
   xPercent: number; // 0 to 100 percentage from left
   yPercent: number; // 0 to 100 percentage from top
@@ -11,16 +28,70 @@ export interface CertificatePosition {
   textAlign: 'left' | 'center' | 'right';
 }
 
-export interface CertificateTemplate {
+export type PaperSize = 'a4' | 'short' | 'long' | 'letter' | 'legal' | 'custom';
+export type PaperOrientation = 'landscape' | 'portrait';
+
+export type CertificateElementType =
+  | 'recipient_name'
+  | 'title'
+  | 'event_name'
+  | 'body_text'
+  | 'date'
+  | 'signatory_1'
+  | 'signatory_2'
+  | 'custom_text';
+
+export interface CertificateElement {
   id: string;
+  type?: CertificateElementType | string;
+  label?: string;
+  text: string;
+  xPercent: number;
+  yPercent: number;
+  widthPercent: number;
+  fontSizePt: number;
+  fontFamily: string;
+  fontWeight: string;
+  textColor: string;
+  textAlign: 'left' | 'center' | 'right';
+  isLocked?: boolean;
+}
+
+export interface CertificateItem {
+  id: string;
+  title: string;
+  name?: string; // fallback alias for title
+  category: CertificateCategory;
+  status: CertificateStatus;
+  organizationId: string;
+  organizationName: string;
+  eventId?: string;
+  eventName?: string;
+  imageUrl?: string;
+  designPreset?: CertificateDesignPreset;
+  isDefault?: boolean;
+  paperSize?: PaperSize;
+  orientation?: PaperOrientation;
+  namePosition: CertificatePosition;
+  elements?: CertificateElement[];
+  signatoryName?: string;
+  signatoryTitle?: string;
+  secondarySignatoryName?: string;
+  secondarySignatoryTitle?: string;
+  issuedCount?: number;
+  createdAt?: any;
+  updatedAt?: any;
+  createdBy?: string;
+  createdByName?: string;
+  rejectionReason?: string;
+  approvalNotes?: string;
+}
+
+// Backward-compatible alias
+export interface CertificateTemplate extends CertificateItem {
   name: string;
   imageUrl: string;
-  isDefault: boolean;
-  namePosition: CertificatePosition;
   createdBy: string;
-  organizationId?: string | null;
-  createdAt?: Timestamp;
-  updatedAt?: Timestamp;
 }
 
 export interface CertificateRecipient {
@@ -45,3 +116,6 @@ export interface IssuedCertificateRecord {
   issuedAt: Timestamp;
   issuedBy: string;
 }
+
+// Report export alias
+export type CertificateDocument = IssuedCertificateRecord;

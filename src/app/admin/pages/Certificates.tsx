@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { Award, Plus, ChevronRight } from "lucide-react";
-import { CertificateDashboard, TemplateLibrary, TemplateEditor, GenerateCertificates } from "../../modules/certificates";
+import { CertificateDashboard, CertificateLibrary, TemplateEditor, GenerateCertificates } from "../../modules/certificates";
 
-type Screen = "dashboard" | "template-library" | "template-editor" | "generate";
+type Screen = "dashboard" | "certificate-library" | "template-library" | "template-editor" | "generate";
 
 export function Certificates() {
   const [screen, setScreen] = useState<Screen>("dashboard");
@@ -19,32 +19,44 @@ export function Certificates() {
     setScreen("template-editor");
   };
 
-  const breadcrumbs: Record<Screen, string[]> = {
+  const breadcrumbs: Record<string, string[]> = {
     "dashboard": ["Certificates"],
-    "template-library": ["Certificates", "Template Library"],
-    "template-editor": ["Certificates", "Template Library", "Configure Template"],
+    "certificate-library": ["Certificates", "Certificate Library"],
+    "template-library": ["Certificates", "Certificate Library"],
+    "template-editor": ["Certificates", "Certificate Library", editTemplateId ? "Edit Certificate" : "Create Certificate"],
     "generate": ["Certificates", "Generate Certificates"],
   };
 
-  const screenTitles: Record<Screen, string> = {
+  const screenTitles: Record<string, string> = {
     "dashboard": "Certificates",
-    "template-library": "Certificate Templates",
-    "template-editor": "Configure Certificate Template",
+    "certificate-library": "Certificate Library",
+    "template-library": "Certificate Library",
+    "template-editor": editTemplateId ? "Edit Certificate" : "Create Certificate",
     "generate": "Generate Certificates",
   };
+
+  const currentBreadcrumbs =
+    screen === "template-editor"
+      ? ["Certificates", "Certificate Library", editTemplateId ? "Edit Certificate" : "Create Certificate"]
+      : (breadcrumbs[screen] || breadcrumbs["dashboard"] || ["Certificates"]);
+  const currentTitle =
+    screen === "template-editor"
+      ? (editTemplateId ? "Edit Certificate" : "Create Certificate")
+      : (screenTitles[screen] || "Certificates");
 
   return (
     <div className="p-6 space-y-5">
       {/* Page Header */}
       <div className="flex items-start justify-between">
         <div>
-          <nav className="flex items-center gap-1.5">
-            {breadcrumbs[screen].map((crumb, i, arr) => (
+          <h1 className="text-[#001A4D] font-bold text-2xl">{currentTitle}</h1>
+          <nav className="flex items-center gap-1.5 mt-1">
+            {currentBreadcrumbs.map((crumb, i, arr) => (
               <span key={crumb} className="flex items-center gap-1.5">
                 <button
                   onClick={() => {
                     if (i === 0) setScreen("dashboard");
-                    if (i === 1 && arr.length > 2) setScreen("template-library");
+                    if (i === 1 && arr.length > 2) setScreen("certificate-library");
                   }}
                   className={`text-xs transition-colors ${i === arr.length - 1 ? "text-[#001A4D] font-semibold" : "text-[#9E9E9E] hover:text-[#001A4D]"}`}
                 >
@@ -58,7 +70,7 @@ export function Certificates() {
         {screen !== "template-editor" && (
           <button
             onClick={() => { setEditTemplateId(""); setScreen("template-editor"); }}
-            className="flex items-center gap-2 px-4 py-2.5 bg-[#001A4D] text-[#FFD41C] font-semibold text-sm rounded-xl hover:bg-[#0E4EBD] transition-colors"
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#001A4D] text-[#FFD41C] font-semibold text-sm rounded-xl hover:bg-[#0E4EBD] transition-colors cursor-pointer"
           >
             <Award className="w-4 h-4" />
             <Plus className="w-3.5 h-3.5" />
@@ -72,22 +84,23 @@ export function Certificates() {
         <CertificateDashboard
           isAdmin={true}
           onGenerate={handleGenerate}
-          onOpenTemplateLibrary={() => setScreen("template-library")}
+          onOpenTemplateLibrary={() => setScreen("certificate-library")}
           onOpenEditor={() => { setEditTemplateId(""); setScreen("template-editor"); }}
         />
       )}
-      {screen === "template-library" && (
-        <TemplateLibrary
+      {(screen === "certificate-library" || screen === "template-library") && (
+        <CertificateLibrary
           isAdmin={true}
           onEditTemplate={handleEditTemplate}
-          onUploadNew={() => { setEditTemplateId(""); setScreen("template-editor"); }}
+          onCreateCertificate={() => { setEditTemplateId(""); setScreen("template-editor"); }}
+          onGenerateCertificates={handleGenerate}
         />
       )}
       {screen === "template-editor" && (
         <TemplateEditor
           isAdmin={true}
           templateId={editTemplateId}
-          onSave={() => setScreen("template-library")}
+          onSave={() => setScreen("certificate-library")}
         />
       )}
       {screen === "generate" && (

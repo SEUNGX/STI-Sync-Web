@@ -49,15 +49,36 @@ export default function ExportModal({ isAdmin = false, eventId, eventName, recip
     setProgress(5);
 
     try {
-      // 1. Create Landscape A4 jsPDF instance (297mm x 210mm)
-      const doc = new jsPDF({
-        orientation: "landscape",
-        unit: "mm",
-        format: "a4",
-      });
+      // 1. Determine dynamic paper dimensions and orientation
+      const orientation = (template?.orientation || "landscape").toLowerCase() as "landscape" | "portrait";
+      const paperSize = (template?.paperSize || "a4").toLowerCase();
 
-      const pageWidth = 297;
-      const pageHeight = 210;
+      let widthMM = 210;
+      let heightMM = 297;
+
+      if (paperSize === "short" || paperSize === "letter") {
+        widthMM = 215.9;
+        heightMM = 279.4;
+      } else if (paperSize === "long") {
+        widthMM = 215.9;
+        heightMM = 330.2;
+      } else if (paperSize === "legal") {
+        widthMM = 215.9;
+        heightMM = 355.6;
+      } else {
+        // A4 default
+        widthMM = 210;
+        heightMM = 297;
+      }
+
+      const pageWidth = orientation === "landscape" ? Math.max(widthMM, heightMM) : Math.min(widthMM, heightMM);
+      const pageHeight = orientation === "landscape" ? Math.min(widthMM, heightMM) : Math.max(widthMM, heightMM);
+
+      const doc = new jsPDF({
+        orientation: orientation,
+        unit: "mm",
+        format: [pageWidth, pageHeight],
+      });
 
       // Extract template position settings
       const pos = template?.namePosition || {
@@ -76,7 +97,7 @@ export default function ExportModal({ isAdmin = false, eventId, eventName, recip
       for (let i = 0; i < eligibleRecipients.length; i++) {
         const r = eligibleRecipients[i];
         if (i > 0) {
-          doc.addPage("a4", "landscape");
+          doc.addPage([pageWidth, pageHeight], orientation);
         }
 
         // Render Background Template Image if exists
@@ -90,36 +111,68 @@ export default function ExportModal({ isAdmin = false, eventId, eventName, recip
           }
         }
 
-        // Configure font & size
-        const fontSize = pos.fontSizePt || 32;
-        doc.setFontSize(fontSize);
-        doc.setTextColor(pos.textColor || "#001A4D");
+        // Render all template elements or fallback to single namePosition
+        if (template?.elements && template.elements.length > 0) {
+          for (const elem of template.elements) {
+            const font = (elem.fontFamily || "helvetica").toLowerCase();
+            const isBold = elem.fontWeight?.toLowerCase().includes("bold");
+            const isItalic = elem.fontWeight?.toLowerCase().includes("italic");
+            const style = isBold && isItalic ? "bolditalic" : isBold ? "bold" : isItalic ? "italic" : "normal";
 
-        // Set font family style
-        try {
-          const font = (pos.fontFamily || "helvetica").toLowerCase();
-          const isBold = pos.fontWeight?.toLowerCase().includes("bold");
-          const isItalic = pos.fontWeight?.toLowerCase().includes("italic");
-          const style = isBold && isItalic ? "bolditalic" : isBold ? "bold" : isItalic ? "italic" : "normal";
-          
-          if (font.includes("times")) {
-            doc.setFont("times", style);
-          } else if (font.includes("georgia")) {
-            doc.setFont("times", style);
-          } else {
-            doc.setFont("helvetica", style);
+            try {
+              if (font.includes("times") || font.includes("georgia") || font.includes("playfair")) {
+                doc.setFont("times", style);
+              } else if (font.includes("courier")) {
+                doc.setFont("courier", style);
+              } else {
+                doc.setFont("helvetica", style);
+              }
+            } catch (_) {
+              doc.setFont("helvetica", "normal");
+            }
+
+            doc.setFontSize(elem.fontSizePt || 14);
+            doc.setTextColor(elem.textColor || "#001A4D");
+
+            const xMM = ((elem.xPercent ?? 50) / 100) * pageWidth;
+            const yMM = ((elem.yPercent ?? 50) / 100) * pageHeight;
+            const align = elem.textAlign || "center";
+
+            let text = elem.text || "";
+            if (elem.type === "recipient_name" || text.includes("{recipientName}") || text.includes("{name}")) {
+              text = text.replace(/{recipientName}|{name}/g, r.name);
+            }
+
+            const lines = text.split("\n");
+            doc.text(lines, xMM, yMM, { align: align as any });
           }
-        } catch (_) {
-          doc.setFont("helvetica", "bold");
+        } else {
+          // Fallback single namePosition
+          const fontSize = pos.fontSizePt || 32;
+          doc.setFontSize(fontSize);
+          doc.setTextColor(pos.textColor || "#001A4D");
+
+          try {
+            const font = (pos.fontFamily || "helvetica").toLowerCase();
+            const isBold = pos.fontWeight?.toLowerCase().includes("bold");
+            const isItalic = pos.fontWeight?.toLowerCase().includes("italic");
+            const style = isBold && isItalic ? "bolditalic" : isBold ? "bold" : isItalic ? "italic" : "normal";
+            
+            if (font.includes("times") || font.includes("georgia")) {
+              doc.setFont("times", style);
+            } else {
+              doc.setFont("helvetica", style);
+            }
+          } catch (_) {
+            doc.setFont("helvetica", "bold");
+          }
+
+          const xMM = ((pos.xPercent || 50) / 100) * pageWidth;
+          const yMM = ((pos.yPercent || 45) / 100) * pageHeight;
+          const align = pos.textAlign || "center";
+
+          doc.text(r.name, xMM, yMM, { align: align as any });
         }
-
-        // Position coordinates
-        const xMM = ((pos.xPercent || 50) / 100) * pageWidth;
-        const yMM = ((pos.yPercent || 45) / 100) * pageHeight;
-        const align = pos.textAlign || "center";
-
-        // Print attendee full name
-        doc.text(r.name, xMM, yMM, { align: align as any });
 
         const pct = Math.round(((i + 1) / eligibleRecipients.length) * 100);
         setProgress(pct);

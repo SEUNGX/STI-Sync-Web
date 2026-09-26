@@ -152,7 +152,7 @@ export default function GenerateCertificates({ isAdmin, organizationId, eventId,
           ) : (
             templates.map(t => (
               <option key={t.id} value={t.id}>
-                {t.name} ({t.namePosition?.fontFamily || 'Arial'}) {t.isDefault ? '— Default' : ''}
+                {t.name} ({t.namePosition?.fontFamily || 'Arial'})
               </option>
             ))
           )}

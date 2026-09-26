@@ -1,4 +1,5 @@
 export { default as CertificateDashboard } from './components/CertificateDashboard';
+export { default as CertificateLibrary } from './components/CertificateLibrary';
 export { default as TemplateLibrary } from './components/TemplateLibrary';
 export { default as TemplateEditor } from './components/TemplateEditor';
 export { default as GenerateCertificates } from './components/GenerateCertificates';
