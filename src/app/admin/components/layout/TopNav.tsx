@@ -1,6 +1,5 @@
 import { useState } from "react";
-import { Search, Bell, ChevronDown, LogOut, Settings, User, Zap } from "lucide-react";
-import { Input } from "../../../components/ui/input";
+import { Bell, ChevronDown, LogOut, Settings, Zap } from "lucide-react";
 import { useAdviserProfile, signOutAdviser } from '../../../modules/auth';
 import { DevDataSeederModal } from '../../../../dev/components/DevDataSeederModal';
 
@@ -12,7 +11,7 @@ interface TopNavProps {
   onNavigateSettings?: () => void;
 }
 
-export function TopNav({ title, globalSearch, onSearchChange, onLogout, onNavigateSettings }: TopNavProps) {
+export function TopNav({ title, onLogout, onNavigateSettings }: TopNavProps) {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showSeederModal, setShowSeederModal] = useState(false);
   const { profile } = useAdviserProfile();
@@ -35,7 +34,7 @@ export function TopNav({ title, globalSearch, onSearchChange, onLogout, onNaviga
     }
   };
   return (
-    <div className="h-14 bg-white/95 backdrop-blur-md border-b border-[#E0E0E0] flex items-center justify-between px-6 sticky top-0 z-30">
+    <header className="sticky top-0 z-40 h-14 bg-white/95 backdrop-blur-md border-b border-[#E0E0E0] flex items-center justify-between px-6 shrink-0 shadow-xs">
       {/* Page Title */}
       <h1 className="text-lg font-bold text-[#001A4D]">{title}</h1>
 
@@ -52,18 +51,6 @@ export function TopNav({ title, globalSearch, onSearchChange, onLogout, onNaviga
             <span className="hidden sm:inline">Dev Seeder</span>
           </button>
         )}
-
-        {/* Search */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <Input
-            type="search"
-            placeholder="Search..."
-            value={globalSearch || ""}
-            onChange={(e) => onSearchChange?.(e.target.value)}
-            className="pl-9 w-64 h-9 border-[#E0E0E0] focus-visible:ring-[#1E70E8]"
-          />
-        </div>
 
         {/* Notifications */}
         <button className="relative p-2 hover:bg-gray-100 rounded-lg transition-colors">
@@ -111,10 +98,6 @@ export function TopNav({ title, globalSearch, onSearchChange, onLogout, onNaviga
                   </p>
                 </div>
                 <div className="py-2">
-                  <button className="w-full flex items-center gap-3 px-4 py-2 hover:bg-gray-50 transition-colors text-left">
-                    <User className="w-4 h-4 text-gray-600" />
-                    <span className="text-sm text-[#001A4D]">Profile</span>
-                  </button>
                   <button
                     onClick={handleSettings}
                     className="w-full flex items-center gap-3 px-4 py-2 hover:bg-gray-50 transition-colors text-left"
@@ -142,6 +125,6 @@ export function TopNav({ title, globalSearch, onSearchChange, onLogout, onNaviga
       {import.meta.env.DEV && (
         <DevDataSeederModal isOpen={showSeederModal} onClose={() => setShowSeederModal(false)} />
       )}
-    </div>
+    </header>
   );
 }

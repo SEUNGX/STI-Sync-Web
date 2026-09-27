@@ -1,5 +1,5 @@
-import { Link, useLocation, useNavigate } from 'react-router';
-import stiSyncLogo from '../../../imports/STI_SYNC_LOGO.jpg';
+import { Link, useLocation } from 'react-router';
+import stiOrmocLogo from '../../../imports/STI_ORMOC_LOGO.jpg';
 import {
   LayoutDashboard,
   Calendar,
@@ -9,7 +9,6 @@ import {
   Users,
   Bell,
   Settings,
-  LogOut,
   ChevronDown,
   Wallet,
   Files,
@@ -54,39 +53,35 @@ const navGroups = [
 
 export function OfficerSidebar() {
   const location = useLocation();
-  const navigate = useNavigate();
-  const { profile, logout } = useOfficerProfile();
+  const { profile } = useOfficerProfile();
   const { data: orgs } = useOrganizationStream();
 
   const activeOrg = orgs.find(org => org.id === profile?.activeOrganizationId);
 
-  const handleLogout = () => {
-    logout();
-    navigate('/officer/login');
-  };
-
-  const initials = profile?.studentName
-    ?.split(' ')
-    .map(n => n[0])
-    .join('')
-    .substring(0, 2)
-    .toUpperCase() || 'OG';
-
   return (
     <div className="fixed left-0 top-0 h-screen w-[240px] bg-white border-r border-[#E0E0E0] flex flex-col">
-      {/* Logo and Org Switcher */}
-      <div className="p-4 border-b border-[#E0E0E0]">
-        <div className="flex items-center gap-2 mb-3">
-          <img src={stiSyncLogo} alt="STI Sync" className="w-8 h-8 object-cover rounded-lg" />
-          <span className="text-[#001A4D] font-bold text-lg">STI Sync</span>
+      {/* Centered Large Circular Logo Section (No White Border) & Org Switcher */}
+      <div className="p-5 border-b border-[#E0E0E0] flex flex-col items-center text-center">
+        <div className="w-20 h-20 rounded-full overflow-hidden shadow-md mb-3 flex items-center justify-center bg-white">
+          <img
+            src={stiOrmocLogo}
+            alt="STI College Logo"
+            className="w-full h-full object-cover"
+          />
         </div>
+        <h1 className="text-[#001A4D] font-black text-lg tracking-tight leading-tight">
+          STI Sync
+        </h1>
+        <p className="text-[#0E4EBD] text-[11px] font-bold tracking-wider uppercase mt-0.5 mb-3">
+          STI College Ormoc
+        </p>
 
         {/* Organization Context Switcher */}
         <button className="w-full flex items-center justify-between px-3 py-2 bg-blue-50/70 border border-blue-200/80 rounded-lg hover:bg-blue-100/70 transition-colors">
-          <span className="text-[#0E4EBD] text-sm font-semibold truncate pr-2" title={activeOrg?.name || ''}>
+          <span className="text-[#0E4EBD] text-xs font-semibold truncate pr-2" title={activeOrg?.name || ''}>
             {activeOrg ? activeOrg.name : (profile?.activeOrganizationId ? 'Managing Organization...' : 'Select Organization')}
           </span>
-          <ChevronDown className="text-[#0E4EBD] flex-shrink-0 w-4 h-4" />
+          <ChevronDown className="text-[#0E4EBD] flex-shrink-0 w-3.5 h-3.5" />
         </button>
       </div>
 
@@ -130,26 +125,6 @@ export function OfficerSidebar() {
           </div>
         ))}
       </nav>
-
-      {/* Officer Profile */}
-      <div className="p-4 border-t border-[#E0E0E0]">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-[#001A4D] to-[#0E4EBD] rounded-full flex items-center justify-center text-white font-bold text-sm shadow-xs flex-shrink-0">
-            {initials}
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-[#001A4D] text-sm font-semibold truncate">{profile?.studentName || 'Officer'}</div>
-            <div className="text-gray-400 text-xs truncate">Organization Officer</div>
-          </div>
-          <button
-            onClick={handleLogout}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
-            title="Logout"
-          >
-            <LogOut className="w-4 h-4 text-gray-500 hover:text-red-600" />
-          </button>
-        </div>
-      </div>
     </div>
   );
 }

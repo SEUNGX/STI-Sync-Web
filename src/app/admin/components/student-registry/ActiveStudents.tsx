@@ -18,6 +18,24 @@ interface ActiveStudentsProps {
   students: StudentDocument[];
 }
 
+const YEAR_NUM_MAP: Record<string, number> = {
+  'Grade 11': 11,
+  'Grade 12': 12,
+  '1st Year': 1,
+  '2nd Year': 2,
+  '3rd Year': 3,
+  '4th Year': 4,
+};
+
+const NUM_TO_YEAR_STR: Record<number, string> = {
+  11: 'Grade 11',
+  12: 'Grade 12',
+  1: '1st Year',
+  2: '2nd Year',
+  3: '3rd Year',
+  4: '4th Year',
+};
+
 export default function ActiveStudents({ students: activeStudents }: ActiveStudentsProps) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedStudentForDetail, setSelectedStudentForDetail] = useState<StudentDocument | null>(null);
@@ -26,7 +44,7 @@ export default function ActiveStudents({ students: activeStudents }: ActiveStude
 
   // Filters State
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCourse, setSelectedCourse] = useState('All Courses');
+  const [selectedCourse, setSelectedCourse] = useState('All Programs');
   const [selectedYear, setSelectedYear] = useState('All Year Levels');
   const [selectedSection, setSelectedSection] = useState('All Sections');
 
@@ -131,17 +149,88 @@ export default function ActiveStudents({ students: activeStudents }: ActiveStude
     return map;
   }, [allPayables]);
 
-  // Available unique sections from active students and section config
+  // Connected Filter Change Handlers
+  const handleCourseChange = (courseCode: string) => {
+    setSelectedCourse(courseCode);
+    if (courseCode !== 'All Programs' && selectedSection !== 'All Sections') {
+      const secDoc = sections.find((s) => s.name === selectedSection);
+      const cDoc = courses.find((c) => c.code === courseCode);
+      if (secDoc && cDoc && secDoc.courseId !== cDoc.id) {
+        setSelectedSection('All Sections');
+      }
+    }
+  };
+
+  const handleYearChange = (year: string) => {
+    setSelectedYear(year);
+    if (year !== 'All Year Levels' && selectedSection !== 'All Sections') {
+      const secDoc = sections.find((s) => s.name === selectedSection);
+      const yNum = YEAR_NUM_MAP[year];
+      if (secDoc && yNum && Number(secDoc.yearLevel) !== yNum) {
+        setSelectedSection('All Sections');
+      }
+    }
+  };
+
+  const handleSectionChange = (sectionName: string) => {
+    setSelectedSection(sectionName);
+    if (sectionName !== 'All Sections') {
+      // Find section in sections collection or from students to auto-select Program and Year
+      const secDoc = sections.find((s) => s.name === sectionName);
+      if (secDoc) {
+        if (secDoc.courseId) {
+          const cDoc = courses.find((c) => c.id === secDoc.courseId);
+          if (cDoc) setSelectedCourse(cDoc.code);
+        }
+        if (secDoc.yearLevel) {
+          const yNum = Number(secDoc.yearLevel);
+          const yStr = NUM_TO_YEAR_STR[yNum];
+          if (yStr) setSelectedYear(yStr);
+        }
+      } else {
+        const studentWithSec = activeStudents.find((s) => s.section === sectionName);
+        if (studentWithSec) {
+          if (studentWithSec.courseCode) setSelectedCourse(studentWithSec.courseCode);
+          if (studentWithSec.yearLevel) setSelectedYear(studentWithSec.yearLevel);
+        }
+      }
+    }
+  };
+
+  // Available unique sections cascade-filtered by selected Program & Year Level
   const availableSections = useMemo(() => {
+    let secList = [...sections];
+
+    if (selectedCourse !== 'All Programs') {
+      const matchedCourse = courses.find((c) => c.code === selectedCourse || c.name === selectedCourse);
+      if (matchedCourse) {
+        secList = secList.filter((s) => s.courseId === matchedCourse.id);
+      }
+    }
+
+    if (selectedYear !== 'All Year Levels') {
+      const yNum = YEAR_NUM_MAP[selectedYear];
+      if (yNum) {
+        secList = secList.filter((s) => Number(s.yearLevel) === yNum);
+      }
+    }
+
     const sectionSet = new Set<string>();
+    secList.forEach((s) => {
+      if (s.name) sectionSet.add(s.name);
+    });
+
+    // Also include sections from active students matching current course & year
     activeStudents.forEach((s) => {
-      if (s.section) sectionSet.add(s.section);
+      const matchCourse = selectedCourse === 'All Programs' || s.courseCode === selectedCourse || s.courseName === selectedCourse;
+      const matchYear = selectedYear === 'All Year Levels' || s.yearLevel === selectedYear;
+      if (matchCourse && matchYear && s.section) {
+        sectionSet.add(s.section);
+      }
     });
-    sections.forEach((sec) => {
-      if (sec.name) sectionSet.add(sec.name);
-    });
+
     return Array.from(sectionSet).sort();
-  }, [activeStudents, sections]);
+  }, [sections, courses, selectedCourse, selectedYear, activeStudents]);
 
   // Filtered Students
   const filteredStudents = useMemo(() => {
@@ -159,8 +248,8 @@ export default function ActiveStudents({ students: activeStudents }: ActiveStude
         }
       }
 
-      // 2. Course Filter
-      if (selectedCourse !== 'All Courses') {
+      // 2. Program Filter
+      if (selectedCourse !== 'All Programs') {
         if (student.courseCode !== selectedCourse && student.courseName !== selectedCourse) {
           return false;
         }
@@ -235,7 +324,6 @@ export default function ActiveStudents({ students: activeStudents }: ActiveStude
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-[#001A4D]">Active Students</h2>
-          <p className="text-sm text-gray-500">Dashboard → Student Registry → Active Students</p>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -258,17 +346,11 @@ export default function ActiveStudents({ students: activeStudents }: ActiveStude
 
       {/* Summary Bar */}
       <div className="bg-white border border-[#E0E0E0] rounded-xl p-6 shadow-sm">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 divide-y sm:divide-y-0 sm:divide-x divide-gray-100">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 divide-y sm:divide-y-0 sm:divide-x divide-gray-100">
           <div className="flex items-center gap-4">
             <div>
               <div className="text-3xl font-bold text-[#001A4D]">{summaryStats.totalActive}</div>
               <div className="text-sm text-gray-500 font-medium">Total Active Students</div>
-            </div>
-          </div>
-          <div className="flex items-center gap-4 sm:pl-6 pt-4 sm:pt-0">
-            <div>
-              <div className="text-3xl font-bold text-green-600">+{summaryStats.newThisSemester}</div>
-              <div className="text-sm text-gray-500 font-medium">New This Semester</div>
             </div>
           </div>
           <div className="flex items-center gap-4 sm:pl-6 pt-4 sm:pt-0">
@@ -298,10 +380,10 @@ export default function ActiveStudents({ students: activeStudents }: ActiveStude
 
           <select
             value={selectedCourse}
-            onChange={(e) => setSelectedCourse(e.target.value)}
+            onChange={(e) => handleCourseChange(e.target.value)}
             className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] outline-none bg-white text-gray-700"
           >
-            <option value="All Courses">All Courses</option>
+            <option value="All Programs">All Programs</option>
             {courses.map((c) => (
               <option key={c.id} value={c.code}>{c.code} — {c.name}</option>
             ))}
@@ -309,10 +391,12 @@ export default function ActiveStudents({ students: activeStudents }: ActiveStude
 
           <select
             value={selectedYear}
-            onChange={(e) => setSelectedYear(e.target.value)}
+            onChange={(e) => handleYearChange(e.target.value)}
             className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] outline-none bg-white text-gray-700"
           >
             <option value="All Year Levels">All Year Levels</option>
+            <option value="Grade 11">Grade 11</option>
+            <option value="Grade 12">Grade 12</option>
             <option value="1st Year">1st Year</option>
             <option value="2nd Year">2nd Year</option>
             <option value="3rd Year">3rd Year</option>
@@ -321,7 +405,7 @@ export default function ActiveStudents({ students: activeStudents }: ActiveStude
 
           <select
             value={selectedSection}
-            onChange={(e) => setSelectedSection(e.target.value)}
+            onChange={(e) => handleSectionChange(e.target.value)}
             className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] outline-none bg-white text-gray-700"
           >
             <option value="All Sections">All Sections</option>
@@ -331,13 +415,13 @@ export default function ActiveStudents({ students: activeStudents }: ActiveStude
           </select>
         </div>
 
-        {(searchQuery || selectedCourse !== 'All Courses' || selectedYear !== 'All Year Levels' || selectedSection !== 'All Sections') && (
+        {(searchQuery || selectedCourse !== 'All Programs' || selectedYear !== 'All Year Levels' || selectedSection !== 'All Sections') && (
           <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100 text-xs text-gray-500">
             <span>Showing {filteredStudents.length} of {activeStudents.length} active students</span>
             <button
               onClick={() => {
                 setSearchQuery('');
-                setSelectedCourse('All Courses');
+                setSelectedCourse('All Programs');
                 setSelectedYear('All Year Levels');
                 setSelectedSection('All Sections');
               }}

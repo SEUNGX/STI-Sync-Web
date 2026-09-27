@@ -315,6 +315,11 @@ export async function archiveSemester(id: string): Promise<void> {
   await updateDoc(ref, { archived: true, status: 'COMPLETED', updatedAt: Timestamp.now() });
 }
 
+export async function unarchiveSemester(id: string): Promise<void> {
+  const ref = doc(db, SEMESTERS_COLLECTION, id);
+  await updateDoc(ref, { archived: false, updatedAt: Timestamp.now() });
+}
+
 export async function deleteSemester(id: string): Promise<void> {
   const ref = doc(db, SEMESTERS_COLLECTION, id);
   await deleteDoc(ref);
@@ -329,7 +334,7 @@ export async function deleteSemester(id: string): Promise<void> {
 export async function executeSemesterRollover(
   closingSemester: SemesterDocument,
   targetSemester: SemesterDocument,
-  options?: { academicLevel?: AcademicLevel; carryBudget?: boolean; autoInactivate?: boolean; flagOfficers?: boolean; resetCompliance?: boolean },
+  options?: { academicLevel?: AcademicLevel },
   adminUid?: string
 ): Promise<{ success: boolean; closingLabel: string; targetLabel: string; eventsArchivedCount: number }> {
   const { writeBatch, collection: firestoreCollection, query: firestoreQuery, where: firestoreWhere, getDocs: firestoreGetDocs } = await import('firebase/firestore');

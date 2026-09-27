@@ -4,11 +4,18 @@ import {
   ArrowLeft, Download, Clock, CheckCircle, CheckCircle2, XCircle, RotateCcw,
   Calendar, Users, Shield, Receipt, FileText, History,
   ChevronRight, Eye, Send, Gavel, Check, X, AlertTriangle, AlertCircle, Rocket,
-  FileImage, Coins
+  FileImage, Coins, FolderArchive, Trash2
 } from 'lucide-react';
 import type { EventDocument } from '../../modules/events/types/event.types';
 import { approveEvent, rejectEvent, returnEvent, updateAdviserRemarks } from '../../modules/events/services/event.service';
-import { CancelEventModal, canCancelEvent } from '../../modules/events';
+import {
+  CancelEventModal,
+  canCancelEvent,
+  ConcludeEventModal,
+  ArchiveEventModal,
+  DeleteArchivedEventModal,
+  getEventTimingStatus
+} from '../../modules/events';
 import { useAdviserProfile } from '../../modules/auth/hooks/useAdviserProfile';
 import { useOrganizationStream } from '../../modules/organizations/hooks/useOrganizationStream';
 import { useEventTypesStream, useVenuesStream } from '../../modules/events/hooks/useEventConfigStream';
@@ -111,6 +118,11 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
     event.proposalStatus === 'returned' ? 'returned' : 'none';
 
   const [decision, setDecision] = useState<Decision>(initialDecision);
+  const [showConcludeModal, setShowConcludeModal] = useState(false);
+  const [showArchiveModal, setShowArchiveModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+
+  const timing = getEventTimingStatus(event);
 
   // Budget calculations
   const budgetItems = event.budgetItems || [];
@@ -345,6 +357,45 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
             <Download className="w-3.5 h-3.5" />
             <span>{exportingPdf ? 'Exporting...' : 'Export PDF'}</span>
           </button>
+
+          {/* Conclude Event Action (if approved and not yet completed) */}
+          {event.proposalStatus === 'approved' && event.status !== 'completed' && !event.isArchived && (
+            <button
+              type="button"
+              onClick={() => setShowConcludeModal(true)}
+              className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
+              title="Conclude event and lock attendance scanner"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>Conclude Event</span>
+            </button>
+          )}
+
+          {/* Archive Event Action (if completed and not archived) */}
+          {(event.status === 'completed' || event.proposalStatus === 'completed' || timing === 'completed') && !event.isArchived && (
+            <button
+              type="button"
+              onClick={() => setShowArchiveModal(true)}
+              className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
+              title="Archive completed event"
+            >
+              <FolderArchive className="w-3.5 h-3.5" />
+              <span>Archive Event</span>
+            </button>
+          )}
+
+          {/* Delete Action (if already archived) */}
+          {event.isArchived && (
+            <button
+              type="button"
+              onClick={() => setShowDeleteModal(true)}
+              className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
+              title="Delete archived event"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Delete Event</span>
+            </button>
+          )}
 
           {/* Cancel Event Action */}
           {!isCancelled && cancelCheck.canCancel && (
@@ -1403,6 +1454,51 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
           onClose={() => setShowCancelModal(false)}
           onSuccess={() => {
             setShowCancelModal(false);
+            onClose();
+          }}
+        />
+      )}
+
+      {/* CONCLUDE EVENT MODAL */}
+      {showConcludeModal && (
+        <ConcludeEventModal
+          event={event}
+          isOpen={showConcludeModal}
+          onClose={() => setShowConcludeModal(false)}
+          adminUid={profile?.uid || 'admin-user'}
+          adminName={profile?.displayName || 'SAO Admin'}
+          onSuccess={() => {
+            setShowConcludeModal(false);
+            onClose();
+          }}
+        />
+      )}
+
+      {/* ARCHIVE EVENT MODAL */}
+      {showArchiveModal && (
+        <ArchiveEventModal
+          event={event}
+          isOpen={showArchiveModal}
+          onClose={() => setShowArchiveModal(false)}
+          adminUid={profile?.uid || 'admin-user'}
+          adminName={profile?.displayName || 'SAO Admin'}
+          onSuccess={() => {
+            setShowArchiveModal(false);
+            onClose();
+          }}
+        />
+      )}
+
+      {/* DELETE ARCHIVED EVENT MODAL */}
+      {showDeleteModal && (
+        <DeleteArchivedEventModal
+          event={event}
+          isOpen={showDeleteModal}
+          onClose={() => setShowDeleteModal(false)}
+          adminUid={profile?.uid || 'admin-user'}
+          adminName={profile?.displayName || 'SAO Admin'}
+          onSuccess={() => {
+            setShowDeleteModal(false);
             onClose();
           }}
         />

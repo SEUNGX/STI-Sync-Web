@@ -124,7 +124,6 @@ export default function PendingVerification({ students, initialStudentId }: Pend
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-[#001A4D]">Pending Verification</h2>
-          <p className="text-sm text-gray-500">Dashboard → Student Registry → Pending Verification</p>
         </div>
       </div>
 
@@ -188,7 +187,7 @@ export default function PendingVerification({ students, initialStudentId }: Pend
             value={courseFilter}
             onChange={(e) => setCourseFilter(e.target.value)}
           >
-            <option value="">All Courses</option>
+            <option value="">All Programs</option>
             {activeCourses.map(c => (
               <option key={c.id} value={c.code}>{c.code}</option>
             ))}
@@ -266,9 +265,8 @@ export default function PendingVerification({ students, initialStudentId }: Pend
                   <div>
                     <div className="flex items-center justify-between mb-1.5 px-1">
                       <span className="text-xs font-bold text-[#001A4D] uppercase tracking-wider">
-                        Official Student ID Card (Front)
+                        Official Student ID Card
                       </span>
-                      <span className="text-[11px] text-gray-400">Portrait View</span>
                     </div>
                     <div className="w-full max-w-[280px] h-[360px] aspect-[3/4] mx-auto bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl border-2 border-[#001A4D] shadow-md overflow-hidden p-2 flex items-center justify-center relative group">
                       {student.schoolIdPhotoUrl ? (
@@ -302,7 +300,7 @@ export default function PendingVerification({ students, initialStudentId }: Pend
                     <div className="font-bold text-[#001A4D]">{student.studentId}</div>
                   </div>
                   <div>
-                    <div className="text-xs text-gray-500">Course</div>
+                    <div className="text-xs text-gray-500">Program</div>
                     <div className="text-gray-700">{student.courseCode} - {student.courseName}</div>
                   </div>
                   <div>

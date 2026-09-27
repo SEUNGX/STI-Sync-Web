@@ -1,5 +1,5 @@
-import { Link, useLocation, useNavigate } from "react-router";
-import stiSyncLogo from '../../../../imports/STI_SYNC_LOGO.jpg';
+import { Link, useLocation } from "react-router";
+import stiOrmocLogo from '../../../../imports/STI_ORMOC_LOGO.jpg';
 import {
   LayoutDashboard,
   Building2,
@@ -10,20 +10,17 @@ import {
   BarChart3,
   Award,
   Bell,
-  Shield,
   Settings,
-  LogOut,
   GraduationCap,
   Banknote,
   Files,
 } from "lucide-react";
-import { useAdviserProfile, signOutAdviser } from '../../../modules/auth';
 
 const navGroups = [
   {
     title: "Main",
     items: [
-      { icon: LayoutDashboard, label: "Dashboard Overview", path: "/home" },
+      { icon: LayoutDashboard, label: "Dashboard", path: "/home" },
       { icon: Users, label: "Student Registry", path: "/home/students" },
       { icon: GraduationCap, label: "Academic Semester", path: "/home/academic-semester" },
     ]
@@ -32,7 +29,7 @@ const navGroups = [
     title: "Organizations & Activities",
     items: [
       { icon: Building2, label: "Organization Management", path: "/home/organizations" },
-      { icon: CalendarCheck, label: "Event Approvals", path: "/home/event-approvals" },
+      { icon: CalendarCheck, label: "Events", path: "/home/event-approvals" },
       { icon: QrCode, label: "Attendance Monitoring", path: "/home/attendance" },
     ]
   },
@@ -50,7 +47,6 @@ const navGroups = [
     items: [
       { icon: Bell, label: "Announcements", path: "/home/announcements" },
       { icon: BarChart3, label: "Reports & Analytics", path: "/home/reports" },
-      { icon: Shield, label: "Audit Logs", path: "/home/audit-logs" },
       { icon: Settings, label: "System Settings", path: "/home/settings" },
     ]
   }
@@ -58,30 +54,24 @@ const navGroups = [
 
 export function Sidebar() {
   const location = useLocation();
-  const navigate = useNavigate();
-  const { profile } = useAdviserProfile();
-
-  // Derive initials from live profile, fallback to '?' while loading
-  const initials = profile
-    ? `${profile.firstName.charAt(0)}${profile.lastName.charAt(0)}`.toUpperCase()
-    : '?';
-
-  const handleLogout = async () => {
-    await signOutAdviser();
-    navigate('/');
-  };
 
   return (
     <div className="fixed left-0 top-0 h-screen w-[260px] bg-[#001A4D] flex flex-col">
-      {/* Logo and Role */}
-      <div className="p-6 border-b border-white/10">
-        <div className="flex items-center gap-2 mb-3">
-          <img src={stiSyncLogo} alt="STI Sync" className="w-8 h-8 object-cover rounded-lg" />
-          <span className="text-white font-bold text-lg">STI Sync</span>
+      {/* Centered Large Circular Logo Section (No White Border) */}
+      <div className="p-6 border-b border-white/10 flex flex-col items-center text-center">
+        <div className="w-20 h-20 rounded-full overflow-hidden shadow-xl mb-3 flex items-center justify-center bg-[#001A4D]">
+          <img
+            src={stiOrmocLogo}
+            alt="STI College Logo"
+            className="w-full h-full object-cover"
+          />
         </div>
-        <div className="inline-flex items-center px-3 py-1 rounded-full bg-[#FFC107] text-[#001A4D] text-xs font-semibold">
-          SAS Admin
-        </div>
+        <h1 className="text-white font-black text-lg tracking-tight leading-tight">
+          STI Sync
+        </h1>
+        <p className="text-[#FFD41C] text-[11px] font-bold tracking-wider uppercase mt-1">
+          STI College Ormoc
+        </p>
       </div>
 
       {/* Navigation Items */}
@@ -117,38 +107,6 @@ export function Sidebar() {
           </div>
         ))}
       </nav>
-
-      {/* User Profile */}
-      <div className="p-4 border-t border-white/10">
-        <div className="flex items-center gap-3">
-          {profile?.avatarUrl ? (
-            <img
-              src={profile.avatarUrl}
-              alt={profile.displayName}
-              className="w-10 h-10 rounded-full object-cover flex-shrink-0"
-            />
-          ) : (
-            <div className="w-10 h-10 bg-gradient-to-br from-[#0E4EBD] to-[#1E70E8] rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0">
-              {initials}
-            </div>
-          )}
-          <div className="flex-1 min-w-0">
-            <div className="text-white text-sm font-medium truncate">
-              {profile?.displayName ?? 'Loading...'}
-            </div>
-            <div className="text-[#FFD54F] text-xs truncate">
-              {profile?.position ?? ''}
-            </div>
-          </div>
-          <button
-            onClick={handleLogout}
-            className="p-2 hover:bg-white/10 rounded-lg transition-colors"
-            title="Logout"
-          >
-            <LogOut className="w-4 h-4 text-white" />
-          </button>
-        </div>
-      </div>
     </div>
   );
 }

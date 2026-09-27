@@ -69,14 +69,15 @@ export default function StudentDetailModal({
                 <h2 className="text-2xl font-bold truncate">
                   {student.firstName} {student.middleName ? `${student.middleName} ` : ''}{student.lastName}
                 </h2>
-                <span className={`px-3 py-0.5 rounded-full text-xs font-semibold uppercase tracking-wider ${
-                  student.status === 'ACTIVE' ? 'bg-green-500/90 text-white' :
-                  student.status === 'ARCHIVED' ? 'bg-gray-400 text-white' :
-                  student.status === 'INACTIVE' ? 'bg-amber-500/90 text-white' :
-                  'bg-blue-500 text-white'
-                }`}>
-                  {student.status}
-                </span>
+                {student.status !== 'ACTIVE' && (
+                  <span className={`px-3 py-0.5 rounded-full text-xs font-semibold uppercase tracking-wider ${
+                    student.status === 'ARCHIVED' ? 'bg-gray-400 text-white' :
+                    student.status === 'INACTIVE' ? 'bg-amber-500/90 text-white' :
+                    'bg-blue-500 text-white'
+                  }`}>
+                    {student.status}
+                  </span>
+                )}
                 {student.archiveReason && (
                   <span className="px-2.5 py-0.5 rounded-full text-xs bg-white/20 text-white">
                     Reason: {student.archiveReason}
@@ -218,13 +219,13 @@ export default function StudentDetailModal({
                     <Building2 className="w-4 h-4 text-[#0E4EBD]" />
                     Academic & Enrollment
                   </h3>
-                  <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
                     <div>
                       <span className="text-xs text-gray-500 font-medium block">Department</span>
                       <span className="font-medium text-[#001A4D]">{student.departmentName || student.departmentId}</span>
                     </div>
                     <div>
-                      <span className="text-xs text-gray-500 font-medium block">Course</span>
+                      <span className="text-xs text-gray-500 font-medium block">Program</span>
                       <span className="font-medium text-[#001A4D]">{student.courseName} ({student.courseCode})</span>
                     </div>
                     <div>
@@ -238,10 +239,6 @@ export default function StudentDetailModal({
                     <div>
                       <span className="text-xs text-gray-500 font-medium block">School Year</span>
                       <span className="font-medium text-gray-800">{student.schoolYear}</span>
-                    </div>
-                    <div>
-                      <span className="text-xs text-gray-500 font-medium block">Semester</span>
-                      <span className="font-medium text-gray-800">{student.semester}</span>
                     </div>
                   </div>
                 </div>
@@ -520,15 +517,14 @@ export default function StudentDetailModal({
                       <tr>
                         <th className="px-5 py-3">Event Name</th>
                         <th className="px-5 py-3">Host / Organizer</th>
-                        <th className="px-5 py-3">Check-In</th>
-                        <th className="px-5 py-3">Check-Out</th>
+                        <th className="px-5 py-3">Attendance Checks</th>
                         <th className="px-5 py-3">Status</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {attendances.length === 0 ? (
                         <tr>
-                          <td colSpan={5} className="px-5 py-8 text-center text-gray-400">
+                          <td colSpan={4} className="px-5 py-8 text-center text-gray-400">
                             No attendance logs recorded for this student yet.
                           </td>
                         </tr>
@@ -536,9 +532,20 @@ export default function StudentDetailModal({
                         attendances.map((a) => (
                           <tr key={a.id} className="hover:bg-gray-50/80">
                             <td className="px-5 py-3.5 font-semibold text-[#001A4D]">{a.event}</td>
-                            <td className="px-5 py-3.5 text-gray-600 text-xs">{a.org || 'SAO Event'}</td>
-                            <td className="px-5 py-3.5 text-xs text-gray-700 font-mono">{a.checkIn || '—'}</td>
-                            <td className="px-5 py-3.5 text-xs text-gray-700 font-mono">{a.checkOut || '—'}</td>
+                            <td className="px-5 py-3.5 text-gray-600 text-xs font-medium">
+                              {a.hostOrgName || a.org || 'SAO Event'}
+                            </td>
+                            <td className="px-5 py-3.5 text-xs font-mono">
+                              <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold ${
+                                a.completedChecks >= a.totalExpectedChecks
+                                  ? 'bg-green-100 text-green-800'
+                                  : a.completedChecks > 0
+                                  ? 'bg-amber-100 text-amber-800'
+                                  : 'bg-red-100 text-red-800'
+                              }`}>
+                                {a.completedChecks} / {a.totalExpectedChecks}
+                              </span>
+                            </td>
                             <td className="px-5 py-3.5">
                               <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
                                 a.status === 'Complete' || a.status === 'Checked In' ? 'bg-green-100 text-green-700' :

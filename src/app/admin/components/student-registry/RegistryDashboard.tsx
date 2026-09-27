@@ -2,7 +2,7 @@ import { RefreshCw, Download, Clock, UserCheck, UserX, CircleCheck } from 'lucid
 import { StudentDocument } from '../../../modules/students/types/student.types';
 import { SemesterDocument } from '../../../modules/academic/types/academic.types';
 import { getMillis } from '../../../modules/students/utils/date.utils';
-import { formatAppDate } from '../../../utils/date';
+import { formatAppDate, isDeadlinePassed } from '../../../utils/date';
 
 interface RegistryDashboardProps {
   onNavigate: (view: string, studentIdOrSearch?: string) => void;
@@ -13,18 +13,58 @@ interface RegistryDashboardProps {
     archived: StudentDocument[];
     reenrollment: StudentDocument[];
   };
-  activeSemester: SemesterDocument | undefined;
+  activeSemester?: SemesterDocument;
+  activeCollegePeriod?: SemesterDocument;
+  activeShsPeriod?: SemesterDocument;
   allStudents: StudentDocument[];
 }
 
-export default function RegistryDashboard({ onNavigate, categorizedStudents, activeSemester, allStudents }: RegistryDashboardProps) {
+export default function RegistryDashboard({
+  onNavigate,
+  categorizedStudents,
+  activeCollegePeriod,
+  activeShsPeriod,
+  allStudents,
+}: RegistryDashboardProps) {
   const { pending, active, inactive, reenrollment } = categorizedStudents;
 
-  // Re-enrollment logic
-  const totalExpectedToReenroll = active.length;
-  const unconfirmed = reenrollment.length;
-  const confirmed = totalExpectedToReenroll - unconfirmed;
-  const progressPercent = totalExpectedToReenroll === 0 ? 0 : Math.round((confirmed / totalExpectedToReenroll) * 100);
+  // Determine if deadlines have passed
+  const isCollegePassed = isDeadlinePassed(activeCollegePeriod?.reenrollDeadline);
+  const isShsPassed = isDeadlinePassed(activeShsPeriod?.reenrollDeadline);
+
+  // If both deadlines passed or periods don't exist, hide the card completely
+  const hasActiveReenrollmentCard =
+    (activeCollegePeriod && !isCollegePassed) || (activeShsPeriod && !isShsPassed);
+
+  // Calculate College Breakdown
+  const collegeStudents = active.filter(
+    (s) =>
+      s.academicLevel === 'COLLEGE' ||
+      (!s.academicLevel && !String(s.semester).includes('Trimester') && s.yearLevel !== 'Grade 11' && s.yearLevel !== 'Grade 12')
+  );
+  const collegeConfirmed = collegeStudents.filter(
+    (s) =>
+      activeCollegePeriod &&
+      s.schoolYear === activeCollegePeriod.academicYear &&
+      (s.term || s.semester) === activeCollegePeriod.semester
+  ).length;
+  const collegeUnconfirmed = collegeStudents.length - collegeConfirmed;
+
+  // Calculate SHS Breakdown
+  const shsStudents = active.filter(
+    (s) =>
+      s.academicLevel === 'SHS' ||
+      String(s.semester).includes('Trimester') ||
+      s.yearLevel === 'Grade 11' ||
+      s.yearLevel === 'Grade 12'
+  );
+  const shsConfirmed = shsStudents.filter(
+    (s) =>
+      activeShsPeriod &&
+      s.schoolYear === activeShsPeriod.academicYear &&
+      (s.term || s.semester) === activeShsPeriod.semester
+  ).length;
+  const shsUnconfirmed = shsStudents.length - shsConfirmed;
 
   // Top 5 pending verification
   const pendingQueue = pending.slice(0, 5).map(student => {
@@ -87,7 +127,6 @@ export default function RegistryDashboard({ onNavigate, categorizedStudents, act
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-[#001A4D]">Student Registry</h2>
-          <p className="text-sm text-gray-500">Dashboard → Student Registry</p>
         </div>
         <div className="flex items-center gap-3">
           <button className="px-6 py-2.5 bg-[#001A4D] text-white rounded-lg font-medium hover:bg-[#001A4D]/90 flex items-center gap-2">
@@ -97,32 +136,76 @@ export default function RegistryDashboard({ onNavigate, categorizedStudents, act
         </div>
       </div>
 
-      {/* Semester Rollover Status Banner */}
-      {activeSemester && (
-        <div className="bg-gradient-to-r from-[#0E4EBD] to-[#1E70E8] rounded-xl p-6 border-l-8 border-[#FFD41C]">
-          <div className="text-white">
-            <h3 className="text-xl font-bold mb-2">Re-enrollment In Progress — {activeSemester.label}</h3>
-            <div className="bg-white/20 rounded-full h-5 mb-3 overflow-hidden">
-              <div
-                className="bg-[#FFD41C] h-full transition-all"
-                style={{ width: `${progressPercent}%` }}
-              ></div>
+      {/* Semester Re-enrollment Status Banner (Hidden if all deadlines passed) */}
+      {hasActiveReenrollmentCard && (
+        <div className="bg-gradient-to-r from-[#001A4D] via-[#002B7F] to-[#0E4EBD] rounded-2xl p-6 border-l-8 border-[#FFD41C] text-white shadow-md space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="px-2.5 py-0.5 bg-[#FFD41C] text-[#001A4D] rounded-full text-xs font-bold uppercase tracking-wider">
+                  Re-enrollment In Progress
+                </span>
+              </div>
+              <h3 className="text-xl font-bold">Academic Period Enrollment Status</h3>
             </div>
-            <div className="flex items-center justify-between text-sm mb-4">
-              <span>{confirmed} of {totalExpectedToReenroll} students confirmed</span>
-              <span className="font-bold">{progressPercent}%</span>
-            </div>
-            <p className="text-white/90 text-sm mb-4">
-              Re-enrollment deadline: {formatAppDate(activeSemester.reenrollDeadline)}. Students who have not confirmed will be automatically set to Inactive.
-            </p>
-            <div className="flex items-center gap-3">
-              <button className="px-6 py-2 bg-[#FFD41C] text-[#001A4D] rounded-lg font-medium hover:bg-[#FFD41C]/90">
-                Send Reminder to Unconfirmed Students
-              </button>
-              <button onClick={() => onNavigate('reenrollment')} className="text-white hover:underline text-sm">
-                View Re-enrollment Status →
-              </button>
-            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* College Students Breakdown */}
+            {activeCollegePeriod && !isCollegePassed && (
+              <div className="bg-white/10 backdrop-blur-xs rounded-xl p-4 border border-white/20">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-bold text-base text-[#FFD41C]">College Department</span>
+                  <span className="text-xs bg-white/20 px-2.5 py-0.5 rounded-full font-medium">
+                    {activeCollegePeriod.semester} ({activeCollegePeriod.academicYear})
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-3 my-3">
+                  <div className="bg-black/20 rounded-lg p-3 text-center">
+                    <div className="text-2xl font-bold text-green-400">{collegeConfirmed}</div>
+                    <div className="text-xs text-white/80">Enrolled</div>
+                  </div>
+                  <div className="bg-black/20 rounded-lg p-3 text-center">
+                    <div className="text-2xl font-bold text-amber-300">{collegeUnconfirmed}</div>
+                    <div className="text-xs text-white/80">Not Yet Enrolled</div>
+                  </div>
+                </div>
+                <div className="text-xs text-white/90 flex items-center justify-between pt-2 border-t border-white/15">
+                  <span>Re-enrollment Deadline:</span>
+                  <span className="font-bold text-[#FFD41C]">
+                    {formatAppDate(activeCollegePeriod.reenrollDeadline)}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Senior High School Breakdown */}
+            {activeShsPeriod && !isShsPassed && (
+              <div className="bg-white/10 backdrop-blur-xs rounded-xl p-4 border border-white/20">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-bold text-base text-[#FFD41C]">Senior High School (SHS)</span>
+                  <span className="text-xs bg-white/20 px-2.5 py-0.5 rounded-full font-medium">
+                    {activeShsPeriod.semester} ({activeShsPeriod.academicYear})
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-3 my-3">
+                  <div className="bg-black/20 rounded-lg p-3 text-center">
+                    <div className="text-2xl font-bold text-green-400">{shsConfirmed}</div>
+                    <div className="text-xs text-white/80">Enrolled</div>
+                  </div>
+                  <div className="bg-black/20 rounded-lg p-3 text-center">
+                    <div className="text-2xl font-bold text-amber-300">{shsUnconfirmed}</div>
+                    <div className="text-xs text-white/80">Not Yet Enrolled</div>
+                  </div>
+                </div>
+                <div className="text-xs text-white/90 flex items-center justify-between pt-2 border-t border-white/15">
+                  <span>Re-enrollment Deadline:</span>
+                  <span className="font-bold text-[#FFD41C]">
+                    {formatAppDate(activeShsPeriod.reenrollDeadline)}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -246,7 +329,7 @@ export default function RegistryDashboard({ onNavigate, categorizedStudents, act
 
           <div className="p-6">
             <div className="space-y-3">
-              {recentActivity.map((activity, index) => (
+              {recentActivity.slice(0, 5).map((activity, index) => (
                 <div key={index} className="flex items-start gap-3">
                   <div
                     className={`w-2 h-2 rounded-full mt-1.5 ${activity.type === 'approved' ? 'bg-green-500' :
@@ -266,11 +349,6 @@ export default function RegistryDashboard({ onNavigate, categorizedStudents, act
                 <div className="text-sm text-gray-500 text-center py-4">No recent activity.</div>
               )}
             </div>
-            {recentActivity.length > 0 && (
-              <button className="mt-4 w-full text-[#0E4EBD] hover:underline text-sm text-center">
-                View Full Audit Log →
-              </button>
-            )}
           </div>
         </div>
       </div>

@@ -3,7 +3,8 @@ import {
   ArrowLeft, X, Edit, Calendar, MapPin, Users, DollarSign, Shield,
   Receipt, FileText, History, Coins, Clock, CheckCircle2, AlertCircle,
   AlertTriangle, Download, Eye, Tag, Building2, Check, RotateCcw,
-  XCircle, FileImage, Lock, Unlock, UserCheck, ChevronRight
+  XCircle, FileImage, Lock, Unlock, UserCheck, ChevronRight,
+  FolderArchive, Trash2
 } from 'lucide-react';
 import type { EventDocument } from '../types/event.types';
 import { useOfficerProfile } from '../../../auth/hooks/useOfficerProfile';
@@ -14,6 +15,9 @@ import { EventPayablesQRControl } from '../../finance/components/EventPayablesQR
 import { exportEventProposalPDF } from '../utils/event-proposal-pdf';
 import { canWithdrawProposal, canCancelEvent, isEventEditable, getEventTimingStatus } from '../utils/event-lifecycle.utils';
 import { CancelEventModal } from './CancelEventModal';
+import { ConcludeEventModal } from './ConcludeEventModal';
+import { ArchiveEventModal } from './ArchiveEventModal';
+import { DeleteArchivedEventModal } from './DeleteArchivedEventModal';
 import { withdrawProposal } from '../services/event.service';
 import { toast } from 'sonner';
 import { formatCurrency } from '../../../utils/currency';
@@ -79,6 +83,9 @@ export default function OfficerEventDetailView({
   const [exportingPdf, setExportingPdf] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
+  const [showConcludeModal, setShowConcludeModal] = useState(false);
+  const [showArchiveModal, setShowArchiveModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   const withdrawCheck = canWithdrawProposal(event, 'officer');
   const isCancelled = event.isCancelled || event.lifecycleStatus === 'cancelled' || event.status === 'cancelled' || event.proposalStatus === 'cancelled';
@@ -241,6 +248,45 @@ export default function OfficerEventDetailView({
             >
               <AlertTriangle className="w-3.5 h-3.5" />
               <span>Cancel Event</span>
+            </button>
+          )}
+
+          {/* Conclude Event Action (if approved and not yet completed) */}
+          {event.proposalStatus === 'approved' && event.status !== 'completed' && !event.isArchived && (
+            <button
+              type="button"
+              onClick={() => setShowConcludeModal(true)}
+              className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
+              title="Conclude event and lock attendance scanner"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>Conclude Event</span>
+            </button>
+          )}
+
+          {/* Archive Event Action (if completed and not archived) */}
+          {(event.status === 'completed' || event.proposalStatus === 'completed' || timing === 'completed') && !event.isArchived && (
+            <button
+              type="button"
+              onClick={() => setShowArchiveModal(true)}
+              className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
+              title="Archive completed event"
+            >
+              <FolderArchive className="w-3.5 h-3.5" />
+              <span>Archive Event</span>
+            </button>
+          )}
+
+          {/* Delete Action (if already archived) */}
+          {event.isArchived && (
+            <button
+              type="button"
+              onClick={() => setShowDeleteModal(true)}
+              className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
+              title="Delete archived event"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Delete Event</span>
             </button>
           )}
 
@@ -1071,6 +1117,51 @@ export default function OfficerEventDetailView({
           onClose={() => setShowCancelModal(false)}
           onSuccess={() => {
             setShowCancelModal(false);
+            onClose();
+          }}
+        />
+      )}
+
+      {/* CONCLUDE EVENT MODAL */}
+      {showConcludeModal && (
+        <ConcludeEventModal
+          event={event}
+          isOpen={showConcludeModal}
+          onClose={() => setShowConcludeModal(false)}
+          adminUid={profile?.uid || 'officer-user'}
+          adminName={profile?.studentName || 'Student Officer'}
+          onSuccess={() => {
+            setShowConcludeModal(false);
+            onClose();
+          }}
+        />
+      )}
+
+      {/* ARCHIVE EVENT MODAL */}
+      {showArchiveModal && (
+        <ArchiveEventModal
+          event={event}
+          isOpen={showArchiveModal}
+          onClose={() => setShowArchiveModal(false)}
+          adminUid={profile?.uid || 'officer-user'}
+          adminName={profile?.studentName || 'Student Officer'}
+          onSuccess={() => {
+            setShowArchiveModal(false);
+            onClose();
+          }}
+        />
+      )}
+
+      {/* DELETE ARCHIVED EVENT MODAL */}
+      {showDeleteModal && (
+        <DeleteArchivedEventModal
+          event={event}
+          isOpen={showDeleteModal}
+          onClose={() => setShowDeleteModal(false)}
+          adminUid={profile?.uid || 'officer-user'}
+          adminName={profile?.studentName || 'Student Officer'}
+          onSuccess={() => {
+            setShowDeleteModal(false);
             onClose();
           }}
         />

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Search, Bell, ChevronDown, User, Settings, LogOut, Zap } from 'lucide-react';
+import { Bell, ChevronDown, Settings, LogOut, Zap } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { useOfficerProfile } from '../../auth/hooks/useOfficerProfile';
 import { DevDataSeederModal } from '../../../dev/components/DevDataSeederModal';
@@ -34,7 +34,7 @@ export function OfficerTopNav({ title }: OfficerTopNavProps) {
   };
 
   return (
-    <div className="h-14 bg-white/95 backdrop-blur-md border-b border-[#E0E0E0] flex items-center justify-between px-6 sticky top-0 z-30">
+    <header className="sticky top-0 z-40 h-14 bg-white/95 backdrop-blur-md border-b border-[#E0E0E0] flex items-center justify-between px-6 shrink-0 shadow-xs">
       {/* Page Title */}
       <h1 className="text-lg font-bold text-[#001A4D]">{title}</h1>
 
@@ -51,16 +51,6 @@ export function OfficerTopNav({ title }: OfficerTopNavProps) {
             <span className="hidden sm:inline">Dev Seeder</span>
           </button>
         )}
-
-        {/* Search */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input
-            type="search"
-            placeholder="Search students, events..."
-            className="pl-9 pr-4 py-2 w-64 h-9 border border-[#E0E0E0] rounded-lg text-sm focus:border-[#7F77DD] focus:ring-2 focus:ring-[#7F77DD]/20 outline-none"
-          />
-        </div>
 
         {/* Notifications */}
         <button className="relative p-2 hover:bg-gray-100 rounded-lg transition-colors">
@@ -96,10 +86,6 @@ export function OfficerTopNav({ title }: OfficerTopNavProps) {
                   <p className="text-xs text-[#888780]">Organization Officer</p>
                 </div>
                 <div className="py-2">
-                  <button className="w-full flex items-center gap-3 px-4 py-2 hover:bg-gray-50 transition-colors text-left">
-                    <User className="w-4 h-4 text-[#888780]" />
-                    <span className="text-sm text-[#001A4D]">Profile</span>
-                  </button>
                   <button
                     onClick={handleSettings}
                     className="w-full flex items-center gap-3 px-4 py-2 hover:bg-gray-50 transition-colors text-left"
@@ -127,6 +113,6 @@ export function OfficerTopNav({ title }: OfficerTopNavProps) {
       {import.meta.env.DEV && (
         <DevDataSeederModal isOpen={showSeederModal} onClose={() => setShowSeederModal(false)} />
       )}
-    </div>
+    </header>
   );
 }

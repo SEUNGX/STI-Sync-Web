@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import {
   Calendar, Plus, Eye, Search, ChevronLeft, ChevronRight,
   Filter, ChevronDown, RotateCcw, MapPin, Download,
-  Clock, FileEdit, CheckCircle2, XCircle
+  Clock, FileEdit, CheckCircle2, XCircle, FolderArchive, Trash2
 } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -14,7 +14,15 @@ import EventProposalReview from "../components/EventProposalReview";
 import { useAllEvents, useDraftEvents } from "../../modules/events/hooks/useEventStream";
 import { useOrganizationStream } from "../../modules/organizations/hooks/useOrganizationStream";
 import { useEventCategoriesStream, useVenuesStream } from "../../modules/events/hooks/useEventConfigStream";
-import { CancelEventModal, canCancelEvent } from "../../modules/events";
+import { useSemesters } from "../../modules/academic/hooks/useAcademicStream";
+import {
+  CancelEventModal,
+  canCancelEvent,
+  ConcludeEventModal,
+  ArchiveEventModal,
+  DeleteArchivedEventModal,
+  restoreArchivedEvent,
+} from "../../modules/events";
 import { useAdviserProfile } from "../../modules/auth/hooks/useAdviserProfile";
 import type { EventDocument } from "../../modules/events/types/event.types";
 import { formatCurrency } from "../../utils/currency";
@@ -24,7 +32,7 @@ import { TablePagination } from "../../components/common/TablePagination";
 
 const ITEMS_PER_PAGE = 8;
 
-type TabValue = "all" | "pending" | "approved" | "completed" | "rejected" | "drafts" | "cancelled";
+type TabValue = "all" | "pending" | "approved" | "completed" | "archived" | "rejected" | "drafts" | "cancelled";
 type DateRangeOption = "all" | "this_week" | "this_month" | "custom";
 
 function isWithinDateRange(
@@ -147,6 +155,7 @@ export function EventApprovals() {
   const [showFilters, setShowFilters] = useState(false);
 
   // ── Filters ──────────────────────────────────────────────────────────────
+  const [filterSemester, setFilterSemester] = useState<string>("all");
   const [filterOrg, setFilterOrg] = useState<string>("all");
   const [filterDateRange, setFilterDateRange] = useState<DateRangeOption>("all");
   const [filterCategory, setFilterCategory] = useState<string>("all");
@@ -159,6 +168,7 @@ export function EventApprovals() {
   const { data: orgs } = useOrganizationStream();
   const { categories } = useEventCategoriesStream();
   const { venues } = useVenuesStream();
+  const { data: semesters = [] } = useSemesters();
 
   useEffect(() => {
     if (targetId && events.length > 0) {
@@ -169,14 +179,36 @@ export function EventApprovals() {
     }
   }, [targetId, events]);
 
+  // Modal states for lifecycle actions
+  const [concludingEvent, setConcludingEvent] = useState<EventDocument | null>(null);
+  const [archivingEvent, setArchivingEvent] = useState<EventDocument | null>(null);
+  const [deletingArchivedEvent, setDeletingArchivedEvent] = useState<EventDocument | null>(null);
+
+  useEffect(() => {
+    const tabParam = searchParams.get("tab");
+    if (tabParam && ["all", "pending", "approved", "completed", "archived", "rejected", "drafts", "cancelled"].includes(tabParam)) {
+      setActiveTab(tabParam as TabValue);
+      setCurrentPage(1);
+    }
+  }, [searchParams]);
+
   const handleTabChange = (value: TabValue) => {
     setActiveTab(value);
     setCurrentPage(1);
   };
 
+  const handleRestoreEvent = async (event: EventDocument) => {
+    try {
+      await restoreArchivedEvent(event.id, adviserProfile?.uid || 'admin', adviserProfile?.displayName || 'SAO Admin');
+      toast.success(`Event "${event.title}" has been restored to active records.`);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to restore event.');
+    }
+  };
+
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, filterOrg, filterDateRange, filterCategory, customFrom, customTo]);
+  }, [searchQuery, filterOrg, filterDateRange, filterCategory, filterSemester, customFrom, customTo]);
 
   const getOrgName = (orgId: string) => {
     if (["sas", "sas_admin", "sao", "sao_admin"].includes(orgId)) return "Student Affairs & Services";
@@ -216,19 +248,49 @@ export function EventApprovals() {
   const filteredEvents = useMemo(() => {
     return events
       .filter((event) => {
+        // 1. Soft-deleted events are sent to Archive Center Trash and hidden from standard tables
+        if (event.isDeleted) return false;
+
+        // 2. Archived tab isolation
+        if (activeTab === "archived") {
+          if (!event.isArchived) return false;
+        } else {
+          // Standard tabs only show active, unarchived events
+          if (event.isArchived) return false;
+        }
+
         // Tab filter
         const isCancelled = event.status === "cancelled" || event.proposalStatus === "cancelled";
         if (activeTab === "cancelled") {
           if (!isCancelled) return false;
-        } else if (isCancelled && activeTab !== "all") {
+        } else if (isCancelled && activeTab !== "all" && activeTab !== "archived") {
           return false;
         }
 
         if (activeTab === "pending" && event.proposalStatus !== "pending" && event.proposalStatus !== "pending_review") return false;
-        if (activeTab === "approved" && (event.proposalStatus !== "approved" || isEventPast(event))) return false;
-        if (activeTab === "completed" && (event.proposalStatus !== "approved" || !isEventPast(event))) return false;
+        if (activeTab === "approved") {
+          const isDone = event.status === "completed" || event.proposalStatus === "completed" || isEventPast(event);
+          if (event.proposalStatus !== "approved" || isDone) return false;
+        }
+        if (activeTab === "completed") {
+          const isDone = event.status === "completed" || event.proposalStatus === "completed" || (event.proposalStatus === "approved" && isEventPast(event));
+          if (!isDone) return false;
+        }
         if (activeTab === "rejected" && event.proposalStatus !== "rejected") return false;
-        if (activeTab === "drafts") return false;
+
+        // Semester filter
+        if (filterSemester !== "all") {
+          const sem = semesters.find((s) => s.id === filterSemester);
+          const matchesSem =
+            event.semesterId === filterSemester ||
+            (sem && event.schoolYear === sem.academicYear && (event.semester === sem.semester || (event as any).term === sem.semester)) ||
+            (() => {
+              if (!sem || !sem.startDate || !sem.endDate) return false;
+              const d = getFirstSessionDate(event);
+              return d ? (d >= sem.startDate && d <= sem.endDate) : false;
+            })();
+          if (!matchesSem) return false;
+        }
 
         // Organization filter
         if (filterOrg !== "all" && event.hostingOrgId !== filterOrg) return false;
@@ -253,7 +315,7 @@ export function EventApprovals() {
         return true;
       })
       .sort((a, b) => getEventTimestamp(b) - getEventTimestamp(a));
-  }, [events, searchQuery, activeTab, filterOrg, filterDateRange, filterCategory, customFrom, customTo]);
+  }, [events, searchQuery, activeTab, filterOrg, filterDateRange, filterCategory, filterSemester, customFrom, customTo, semesters]);
 
   // Filtered drafts list (Sorted LATEST FIRST)
   const filteredDrafts = useMemo(() => {
@@ -263,6 +325,20 @@ export function EventApprovals() {
         if (draft.referenceId && nonDraftRefs.has(draft.referenceId)) return false;
         if (draft.title && nonDraftRefs.has(draft.title.trim().toLowerCase())) return false;
 
+        // Semester filter
+        if (filterSemester !== "all") {
+          const sem = semesters.find((s) => s.id === filterSemester);
+          const matchesSem =
+            draft.semesterId === filterSemester ||
+            (sem && draft.schoolYear === sem.academicYear && (draft.semester === sem.semester || (draft as any).term === sem.semester)) ||
+            (() => {
+              if (!sem || !sem.startDate || !sem.endDate) return false;
+              const d = getFirstSessionDate(draft);
+              return d ? (d >= sem.startDate && d <= sem.endDate) : false;
+            })();
+          if (!matchesSem) return false;
+        }
+
         if (filterOrg !== "all" && draft.hostingOrgId !== filterOrg) return false;
         if (filterCategory !== "all" && draft.eventCategoryId !== filterCategory) return false;
         const q = searchQuery.toLowerCase().trim();
@@ -270,15 +346,16 @@ export function EventApprovals() {
         return true;
       })
       .sort((a, b) => getEventTimestamp(b) - getEventTimestamp(a));
-  }, [drafts, nonDraftRefs, filterOrg, filterCategory, searchQuery]);
+  }, [drafts, nonDraftRefs, filterOrg, filterCategory, filterSemester, searchQuery, semesters]);
 
-  // Counts
-  const allCount = events.length;
-  const pendingCount = events.filter((e) => (e.proposalStatus === "pending" || e.proposalStatus === "pending_review") && e.status !== "cancelled").length;
-  const approvedCount = events.filter((e) => e.proposalStatus === "approved" && !isEventPast(e) && e.status !== "cancelled").length;
-  const completedCount = events.filter((e) => e.proposalStatus === "approved" && isEventPast(e) && e.status !== "cancelled").length;
-  const rejectedCount = events.filter((e) => e.proposalStatus === "rejected" && e.status !== "cancelled").length;
-  const cancelledCount = events.filter((e) => e.status === "cancelled" || e.proposalStatus === "cancelled").length;
+  // Counts (excluding archived & soft-deleted from active tallies)
+  const allCount = events.filter((e) => !e.isArchived && !e.isDeleted).length;
+  const pendingCount = events.filter((e) => (e.proposalStatus === "pending" || e.proposalStatus === "pending_review") && e.status !== "cancelled" && !e.isArchived && !e.isDeleted).length;
+  const approvedCount = events.filter((e) => e.proposalStatus === "approved" && e.status !== "completed" && !isEventPast(e) && e.status !== "cancelled" && !e.isArchived && !e.isDeleted).length;
+  const completedCount = events.filter((e) => (e.status === "completed" || e.proposalStatus === "completed" || (e.proposalStatus === "approved" && isEventPast(e))) && e.status !== "cancelled" && !e.isArchived && !e.isDeleted).length;
+  const archivedCount = events.filter((e) => e.isArchived === true && !e.isDeleted).length;
+  const rejectedCount = events.filter((e) => e.proposalStatus === "rejected" && e.status !== "cancelled" && !e.isArchived && !e.isDeleted).length;
+  const cancelledCount = events.filter((e) => (e.status === "cancelled" || e.proposalStatus === "cancelled") && !e.isArchived && !e.isDeleted).length;
   const draftsCount = filteredDrafts.length;
 
   // Active list & Pagination
@@ -325,6 +402,7 @@ export function EventApprovals() {
   };
 
   const resetFilters = () => {
+    setFilterSemester("all");
     setFilterOrg("all");
     setFilterDateRange("all");
     setFilterCategory("all");
@@ -333,9 +411,32 @@ export function EventApprovals() {
     setLocalSearch("");
   };
 
-  const hasActiveFilters = filterOrg !== "all" || filterDateRange !== "all" || filterCategory !== "all" || searchQuery !== "";
+  const hasActiveFilters =
+    filterSemester !== "all" ||
+    filterOrg !== "all" ||
+    filterDateRange !== "all" ||
+    filterCategory !== "all" ||
+    searchQuery !== "";
 
   const renderStatusBadge = (status?: string, event?: EventDocument) => {
+    if (event?.isDeleted) {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-200/80">
+          <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+          Soft Deleted
+        </span>
+      );
+    }
+
+    if (event?.isArchived) {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-300">
+          <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
+          Archived
+        </span>
+      );
+    }
+
     if (activeTab === "drafts" || status === "draft") {
       return (
         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-700 border border-gray-200">
@@ -350,6 +451,15 @@ export function EventApprovals() {
         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200/80">
           <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
           Pending
+        </span>
+      );
+    }
+
+    if (status === "completed" || event?.status === "completed" || event?.proposalStatus === "completed") {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200/80">
+          <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+          Completed
         </span>
       );
     }
@@ -419,6 +529,14 @@ export function EventApprovals() {
             <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50/80 border border-emerald-200 rounded-lg text-xs font-bold text-emerald-800">
               <span className="font-extrabold text-emerald-900">{approvedCount}</span> Approved
             </div>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50/80 border border-blue-200 rounded-lg text-xs font-bold text-blue-800">
+              <span className="font-extrabold text-blue-900">{completedCount}</span> Completed
+            </div>
+            {archivedCount > 0 && (
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 border border-slate-300 rounded-lg text-xs font-bold text-slate-700">
+                <span className="font-extrabold text-slate-900">{archivedCount}</span> Archived
+              </div>
+            )}
             <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-red-50/80 border border-red-200 rounded-lg text-xs font-bold text-red-800">
               <span className="font-extrabold text-red-900">{rejectedCount}</span> Rejected
             </div>
@@ -449,9 +567,10 @@ export function EventApprovals() {
               { key: "all", label: "All", count: allCount },
               { key: "pending", label: "Pending", count: pendingCount },
               { key: "approved", label: "Approved", count: approvedCount },
+              { key: "completed", label: "Completed", count: completedCount },
+              { key: "archived", label: "Archived", count: archivedCount },
               { key: "cancelled", label: "Cancelled", count: cancelledCount },
               { key: "rejected", label: "Rejected", count: rejectedCount },
-              { key: "completed", label: "Completed", count: completedCount },
               { key: "drafts", label: "Drafts", count: draftsCount },
             ].map((tab) => {
               const isActive = activeTab === tab.key;
@@ -520,6 +639,24 @@ export function EventApprovals() {
         {/* Expandable Filter Drawer */}
         {showFilters && (
           <div className="p-4 bg-gray-50/60 border-b border-gray-200 flex flex-wrap items-center gap-3 text-xs">
+            {/* Semester / Trimester Filter */}
+            <div>
+              <span className="text-gray-500 font-semibold mr-1.5">Semester:</span>
+              <select
+                value={filterSemester}
+                onChange={(e) => setFilterSemester(e.target.value)}
+                className="px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-medium text-gray-800 outline-none focus:border-[#001A4D]"
+              >
+                <option value="all">All Semesters / Trimesters</option>
+                {semesters.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.academicLevel === "SHS" ? "SHS" : "College"} · {s.semester} (A.Y. {s.academicYear})
+                    {s.status === "ACTIVE" ? " • Current Active" : s.status === "COMPLETED" ? " • Completed" : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div>
               <span className="text-gray-500 font-semibold mr-1.5">Org:</span>
               <select
@@ -781,15 +918,63 @@ export function EventApprovals() {
                               <span>View</span>
                             </button>
 
-                            {canCancelEvent(event, 'admin').canCancel && (
-                              <button
-                                onClick={() => setCancellingEvent(event)}
-                                className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer"
-                                title="Cancel Event & Waive Liabilities"
-                              >
-                                <XCircle className="w-3.5 h-3.5" />
-                                <span>Cancel</span>
-                              </button>
+                            {/* If archived: Show Restore and Delete */}
+                            {event.isArchived ? (
+                              <>
+                                <button
+                                  onClick={() => handleRestoreEvent(event)}
+                                  className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer"
+                                  title="Restore Event to Active Records"
+                                >
+                                  <RotateCcw className="w-3.5 h-3.5" />
+                                  <span>Restore</span>
+                                </button>
+                                <button
+                                  onClick={() => setDeletingArchivedEvent(event)}
+                                  className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer"
+                                  title="Delete Archived Event (Move to Trash)"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <span>Delete</span>
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                {/* Conclude Button if Approved & not yet marked completed */}
+                                {event.proposalStatus === 'approved' && event.status !== 'completed' && (
+                                  <button
+                                    onClick={() => setConcludingEvent(event)}
+                                    className="px-2.5 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer"
+                                    title="Conclude Event & Lock Attendance"
+                                  >
+                                    <CheckCircle2 className="w-3.5 h-3.5" />
+                                    <span>Conclude</span>
+                                  </button>
+                                )}
+
+                                {/* Archive Button if Completed */}
+                                {(event.status === 'completed' || event.proposalStatus === 'completed' || isEventPast(event)) && (
+                                  <button
+                                    onClick={() => setArchivingEvent(event)}
+                                    className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer"
+                                    title="Archive Completed Event"
+                                  >
+                                    <FolderArchive className="w-3.5 h-3.5" />
+                                    <span>Archive</span>
+                                  </button>
+                                )}
+
+                                {canCancelEvent(event, 'admin').canCancel && (
+                                  <button
+                                    onClick={() => setCancellingEvent(event)}
+                                    className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer"
+                                    title="Cancel Event & Waive Liabilities"
+                                  >
+                                    <XCircle className="w-3.5 h-3.5" />
+                                    <span>Cancel</span>
+                                  </button>
+                                )}
+                              </>
                             )}
                           </div>
                         </td>
@@ -841,6 +1026,39 @@ export function EventApprovals() {
           userRole="admin"
           userId={adviserProfile?.uid || 'admin-user'}
           userName={adviserProfile?.displayName || 'SAO Admin'}
+        />
+      )}
+
+      {/* Conclude Event Modal */}
+      {concludingEvent && (
+        <ConcludeEventModal
+          isOpen={!!concludingEvent}
+          onClose={() => setConcludingEvent(null)}
+          event={concludingEvent}
+          adminUid={adviserProfile?.uid || 'admin-user'}
+          adminName={adviserProfile?.displayName || 'SAO Admin'}
+        />
+      )}
+
+      {/* Archive Event Modal */}
+      {archivingEvent && (
+        <ArchiveEventModal
+          isOpen={!!archivingEvent}
+          onClose={() => setArchivingEvent(null)}
+          event={archivingEvent}
+          adminUid={adviserProfile?.uid || 'admin-user'}
+          adminName={adviserProfile?.displayName || 'SAO Admin'}
+        />
+      )}
+
+      {/* Delete Archived Event Modal */}
+      {deletingArchivedEvent && (
+        <DeleteArchivedEventModal
+          isOpen={!!deletingArchivedEvent}
+          onClose={() => setDeletingArchivedEvent(null)}
+          event={deletingArchivedEvent}
+          adminUid={adviserProfile?.uid || 'admin-user'}
+          adminName={adviserProfile?.displayName || 'SAO Admin'}
         />
       )}
     </div>

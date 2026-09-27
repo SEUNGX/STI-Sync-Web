@@ -77,10 +77,16 @@ export interface EventDocument {
   scannerActivationCode: string;           // auto-generated 6-digit code
 
   // ─── Lifecycle ───
-  proposalStatus: 'draft' | 'pending_review' | 'pending' | 'approved' | 'rejected' | 'returned' | 'cancelled';
+  proposalStatus: 'draft' | 'pending_review' | 'pending' | 'approved' | 'rejected' | 'returned' | 'cancelled' | 'completed';
   createdBy: string;                       // SAO Adviser UID or Officer UID
   createdAt: Timestamp;
   updatedAt: Timestamp;
+
+  // ─── Completion Metadata ───
+  completedAt?: Timestamp | null;
+  completedBy?: string | null;
+  completedByName?: string | null;
+  attendanceLocked?: boolean;
 
   // ─── Soft Deletion & Archiving ───
   isDeleted?: boolean;                     // true = soft-deleted (hidden from standard lists)
@@ -91,6 +97,8 @@ export interface EventDocument {
   isArchived?: boolean;                    // true = sealed by semester / AY rollover
   archivedAt?: Timestamp | null;
   archivedBy?: string | null;
+  archivedByName?: string | null;
+  archivedReason?: string | null;
 
   // ─── Cancellation & Financial Waiver Metadata ───
   cancelledAt?: Timestamp | null;
@@ -141,7 +149,7 @@ export interface EventCancellationResult {
 
 export interface EventProposalHistoryLog {
   id: string;
-  action: 'created' | 'submitted' | 'approved' | 'returned' | 'rejected' | 'resubmitted' | 'edited' | 'draft_saved' | 'cancelled' | 'archived' | 'restored';
+  action: 'created' | 'submitted' | 'approved' | 'returned' | 'rejected' | 'resubmitted' | 'edited' | 'draft_saved' | 'cancelled' | 'archived' | 'restored' | 'completed' | 'deleted';
   performedBy: string;
   performedByName?: string;
   performedAt: Timestamp | Date | any;

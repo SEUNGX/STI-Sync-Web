@@ -9,12 +9,12 @@ import { StudentRegistry } from "./admin/pages/StudentRegistry";
 import { ReportsAnalytics } from "./admin/pages/ReportsAnalytics";
 import { Certificates } from "./admin/pages/Certificates";
 import { Announcements } from "./admin/pages/Announcements";
-import { AuditLogs } from "./admin/pages/AuditLogs";
 import { SystemSettings } from "./admin/pages/SystemSettings";
 import { AcademicSemesterSettings } from "./admin/pages/AcademicSemesterSettings";
 import { BudgetFundSettings } from "./admin/pages/BudgetFundSettings";
 import { AdminDocuments } from "./admin/pages/AdminDocuments";
 import { AdminDocumentReview } from "./admin/pages/AdminDocumentReview";
+import { AuditLogs } from "./admin/pages/AuditLogs";
 
 // Auth Pages
 import SASAdminLogin from "./auth/SASAdminLogin";
@@ -71,13 +71,13 @@ export const router = createBrowserRouter([
       { path: "reports", Component: ReportsAnalytics },
       { path: "certificates", Component: Certificates },
       { path: "announcements", Component: Announcements },
-      { path: "audit-logs", Component: AuditLogs },
       { path: "settings", Component: SystemSettings },
       { path: "archive", element: <Navigate to="/home/settings?section=archive-center" replace /> },
       { path: "academic-semester", Component: AcademicSemesterSettings },
       { path: "budget-fund", Component: BudgetFundSettings },
       { path: "documents", Component: AdminDocuments },
       { path: "documents/:docId/review", Component: AdminDocumentReview },
+      { path: "audit-logs", Component: AuditLogs },
     ],
   },
 

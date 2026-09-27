@@ -5,15 +5,14 @@ import { TopNav } from "./TopNav";
 import { Toaster } from "../../../components/ui/sonner";
 
 const pageTitles: Record<string, string> = {
-  "/home": "Dashboard Overview",
+  "/home": "Dashboard",
   "/home/organizations": "Organization Management",
-  "/home/event-approvals": "Event Approvals",
+  "/home/event-approvals": "Events",
   "/home/attendance": "Attendance Monitoring",
   "/home/liquidations": "Financial Liquidations",
   "/home/students": "Student Registry",
   "/home/reports": "Reports & Analytics",
   "/home/announcements": "Announcements",
-  "/home/audit-logs": "Audit Logs",
   "/home/settings": "System Settings",
   "/home/academic-semester": "Academic Year & Semester",
   "/home/budget-fund": "Budget & Fund Management",
@@ -35,9 +34,9 @@ export function Layout() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 flex">
       <Sidebar />
-      <div className="ml-[260px]">
+      <div className="ml-[260px] flex-1 flex flex-col min-w-0 min-h-screen">
         <TopNav
           title={title}
           globalSearch={globalSearch}
@@ -45,7 +44,7 @@ export function Layout() {
           onLogout={handleLogout}
           onNavigateSettings={handleNavigateSettings}
         />
-        <main className="p-6">
+        <main className="p-6 flex-1">
           <Outlet context={{ globalSearch, setGlobalSearch }} />
         </main>
       </div>

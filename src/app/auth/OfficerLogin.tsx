@@ -43,57 +43,47 @@ export default function OfficerLogin() {
           <div className="absolute w-[400px] h-[400px] bg-[#FFD41C] opacity-15 rounded-full blur-[120px] translate-x-20" />
         </div>
 
-        {/* Top Section: Text Repositioned at Top to Leave Building Clear */}
-        <div className="relative z-10 max-w-[460px]">
-          <div className="inline-flex items-center gap-2 bg-[#001A4D]/85 backdrop-blur-md border border-white/20 text-[#FFD41C] text-[12px] font-extrabold uppercase px-3.5 py-1 rounded-full tracking-wider mb-3 shadow-md">
-            <span className="w-2 h-2 rounded-full bg-[#FFD41C] animate-pulse" />
-            Student Organization Officer
+        {/* Top Section: Redesigned Student Affairs Services Badge & Clean Header */}
+        <div className="relative z-10 max-w-[480px]">
+          <div className="inline-flex items-center gap-2.5 bg-gradient-to-r from-[#001A4D]/90 via-[#0A2E6D]/90 to-[#001A4D]/90 backdrop-blur-xl border border-white/20 text-[#FFD41C] text-[12px] font-black uppercase px-4 py-1.5 rounded-full tracking-wider shadow-lg shadow-black/20">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#FFD41C] opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-[#FFD41C]"></span>
+            </span>
+            Student Affairs Services · Officer Portal
           </div>
-          <h1 className="text-white text-[32px] lg:text-[38px] font-black tracking-tight leading-tight mb-2">
+          <h1 className="text-white text-[32px] lg:text-[40px] font-black tracking-tight leading-tight mt-3">
             Connect, Participate, <br />
             <span className="text-[#FFD41C]">and Stay Updated.</span>
           </h1>
-          <p className="text-white/90 text-[14px] lg:text-[15px] leading-relaxed font-normal">
-            Manage organization activities, event check-ins, attendance logs, and financial liquidations.
-          </p>
         </div>
 
         {/* Middle Area Left Empty for Unobscured STI COLLEGE Building View */}
         <div className="flex-1 pointer-events-none" />
 
-        {/* Bottom Footer Line */}
-        <div className="relative z-10">
-          <p className="text-white/60 text-[13px] font-medium">
-            STI College Ormoc · Student Affairs Services
-          </p>
-        </div>
+        {/* Bottom space intentionally clean (duplicate footer removed) */}
+        <div className="relative z-10 h-6" />
       </div>
 
-      {/* Right Panel - Single Viewport Fit Login Form with STI_ORMOC_LOGO at top */}
+      {/* Right Panel - Single Viewport Fit Login Form with Redesigned Enlarged STI_ORMOC_LOGO */}
       <div className="w-1/2 h-full bg-white flex items-center justify-center p-6 lg:p-10 overflow-hidden">
         <div className="w-full max-w-[480px]">
-          {/* Logo Header Section */}
+          {/* Logo Header Section - Circle Framed Logo */}
           <div className="text-center mb-6">
             <div className="inline-block relative mb-3 group">
-              <div className="absolute -inset-1.5 bg-gradient-to-r from-[#FFD41C] to-[#0E4EBD] rounded-2xl blur-md opacity-60 group-hover:opacity-90 transition duration-500" />
-              <div className="relative bg-white p-3 rounded-2xl shadow-lg border border-gray-100">
+              <div className="absolute -inset-1.5 bg-gradient-to-r from-[#FFD41C] via-[#0E4EBD] to-[#FFD41C] rounded-full blur-md opacity-40 group-hover:opacity-70 transition duration-500" />
+              <div className="relative w-28 h-28 md:w-32 md:h-32 rounded-full overflow-hidden shadow-xl mx-auto flex items-center justify-center transition-transform duration-300 group-hover:scale-[1.03]">
                 <img
                   src={stiOrmocLogo}
                   alt="STI College Ormoc Logo"
-                  className="w-20 h-20 md:w-22 md:h-22 object-contain mx-auto"
+                  className="w-full h-full object-cover"
                 />
               </div>
             </div>
 
-            <h2 className="text-[#001A4D] text-[26px] md:text-[28px] font-black tracking-tight mb-0.5">
+            <h2 className="text-[#001A4D] text-[28px] md:text-[30px] font-black tracking-tight">
               Officer Login
             </h2>
-            <p className="text-[#6B7280] text-[13px] md:text-[14px]">
-              Student Organization Officer Portal
-            </p>
-            <p className="text-[#6B7280] text-[12px] italic mt-0.5">
-              Sign in with your STI Sync officer credentials.
-            </p>
           </div>
 
           <div className="h-px bg-[#E5E7EB] mb-5" />
@@ -179,15 +169,11 @@ export default function OfficerLogin() {
           )}
 
           {/* Officer Registration Note */}
-          <div className="mt-4 bg-[#F3E8FF]/70 border border-[#83358E]/30 rounded-xl p-3">
-            <div className="flex items-start gap-2.5 mb-1">
-              <Info className="w-4 h-4 text-[#83358E] flex-shrink-0 mt-0.5" />
-              <p className="text-[#83358E] text-[13px] font-semibold leading-relaxed">
-                Don't have an officer account?
-              </p>
-            </div>
-            <p className="text-[#4B5563] text-[12px] leading-relaxed ml-6">
-              Officer accounts are created and managed by the SAO Adviser directly.
+          <div className="mt-4 bg-gradient-to-r from-purple-50/80 to-slate-50 border border-purple-200/70 rounded-xl p-3.5 flex items-start gap-3 shadow-xs">
+            <Info className="w-4 h-4 text-[#83358E] flex-shrink-0 mt-0.5" />
+            <p className="text-[12px] leading-relaxed">
+              <span className="text-[#83358E] font-bold">Don't have an officer account? </span>
+              <span className="text-[#4B5563] font-medium">Officer accounts are created and managed by the SAO Adviser directly.</span>
             </p>
           </div>
 

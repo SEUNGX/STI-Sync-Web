@@ -19,7 +19,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { StudentDocument, StudentYearLevel } from '../../../modules/students/types/student.types';
 import { SemesterDocument, CourseDocument, SectionDocument } from '../../../modules/academic/types/academic.types';
 import { formatTimestampDate } from '../../../modules/students/utils/date.utils';
-import { formatAppDate } from '../../../utils/date';
+import { formatAppDate, isDeadlinePassed } from '../../../utils/date';
 import {
   reEnrollStudent,
   bulkReEnrollStudents,
@@ -32,6 +32,8 @@ import { TablePagination } from '../../../components/common/TablePagination';
 interface ReEnrollmentManagementProps {
   students: StudentDocument[];
   activeSemester?: SemesterDocument;
+  activeCollegePeriod?: SemesterDocument;
+  activeShsPeriod?: SemesterDocument;
 }
 
 type FilterType = 'all' | 'confirmed' | 'pending' | 'overdue';
@@ -60,13 +62,18 @@ const NUM_TO_YEAR_STR: Record<number, string> = {
   4: '4th Year',
 };
 
-export default function ReEnrollmentManagement({ students, activeSemester: fallbackSemester }: ReEnrollmentManagementProps) {
+export default function ReEnrollmentManagement({
+  students,
+  activeSemester: fallbackSemester,
+  activeCollegePeriod: propCollegePeriod,
+  activeShsPeriod: propShsPeriod,
+}: ReEnrollmentManagementProps) {
   const [filter, setFilter] = useState<FilterType>('all');
   const [trackFilter, setTrackFilter] = useState<TrackFilter>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   
   // Cascade Academic Filter States
-  const [selectedCourseCode, setSelectedCourseCode] = useState<string>('All Courses');
+  const [selectedCourseCode, setSelectedCourseCode] = useState<string>('All Programs');
   const [selectedYearLevel, setSelectedYearLevel] = useState<string>('All Year Levels');
   const [selectedSectionName, setSelectedSectionName] = useState<string>('All Sections');
 
@@ -85,9 +92,14 @@ export default function ReEnrollmentManagement({ students, activeSemester: fallb
   const { data: courses = [] } = useCourses();
   const { data: sections = [] } = useSections();
   const { data: departments = [] } = useDepartments();
-  const { activeCollegePeriod, activeShsPeriod, getActivePeriodFor } = useActiveAcademicPeriods();
+  const {
+    activeCollegePeriod: streamCollegePeriod,
+    activeShsPeriod: streamShsPeriod,
+    getActivePeriodFor,
+  } = useActiveAcademicPeriods();
 
-  const now = Date.now();
+  const activeCollegePeriod = propCollegePeriod || streamCollegePeriod;
+  const activeShsPeriod = propShsPeriod || streamShsPeriod;
 
   // Active (non-archived) courses & sections
   const activeCourses = useMemo(() => courses.filter((c) => !c.archived), [courses]);
@@ -95,44 +107,52 @@ export default function ReEnrollmentManagement({ students, activeSemester: fallb
 
   // Map student enrollment status relative to their track's active academic period
   const mappedStudents = useMemo(() => {
-    return students.map((student) => {
-      const isShs =
-        student.academicLevel === 'SHS' ||
-        (student.semester && String(student.semester).includes('Trimester'));
-      const activePeriod = getActivePeriodFor(isShs ? 'SHS' : 'COLLEGE') || fallbackSemester;
+    return students
+      .map((student) => {
+        const isShs =
+          student.academicLevel === 'SHS' ||
+          (student.semester && String(student.semester).includes('Trimester')) ||
+          student.yearLevel === 'Grade 11' ||
+          student.yearLevel === 'Grade 12';
+        const activePeriod =
+          getActivePeriodFor(isShs ? 'SHS' : 'COLLEGE') ||
+          (isShs ? activeShsPeriod : activeCollegePeriod) ||
+          fallbackSemester;
 
-      const isConfirmed =
-        activePeriod &&
-        student.schoolYear === activePeriod.academicYear &&
-        (student.term || student.semester) === activePeriod.semester;
+        const isConfirmed =
+          activePeriod &&
+          student.schoolYear === activePeriod.academicYear &&
+          (student.term || student.semester) === activePeriod.semester;
 
-      const deadlineMillis = activePeriod ? new Date(activePeriod.reenrollDeadline).getTime() : now;
-      const isOverdue = now > deadlineMillis;
+        const deadlinePassed = isDeadlinePassed(activePeriod?.reenrollDeadline);
 
-      let status: 'confirmed' | 'pending' | 'overdue' = 'pending';
-      if (isConfirmed) status = 'confirmed';
-      else if (isOverdue) status = 'overdue';
+        let status: 'confirmed' | 'pending' | 'overdue' = 'pending';
+        if (isConfirmed) status = 'confirmed';
+        else if (deadlinePassed) status = 'overdue';
 
-      const rawYl = String(student.yearLevel || '');
-      const yearNum = YEAR_NUM_MAP[rawYl] || (rawYl.includes('11') ? 11 : rawYl.includes('12') ? 12 : 1);
-      const yearLabel = NUM_TO_YEAR_STR[yearNum] || rawYl || '1st Year';
+        const rawYl = String(student.yearLevel || '');
+        const yearNum = YEAR_NUM_MAP[rawYl] || (rawYl.includes('11') ? 11 : rawYl.includes('12') ? 12 : 1);
+        const yearLabel = NUM_TO_YEAR_STR[yearNum] || rawYl || '1st Year';
 
-      return {
-        ...student,
-        academicLevel: isShs ? ('SHS' as const) : ('COLLEGE' as const),
-        yearLevelNumber: yearNum,
-        yearLevelLabel: yearLabel,
-        reEnrollStatus: status,
-        activePeriod,
-      };
-    });
-  }, [students, getActivePeriodFor, fallbackSemester, now]);
+        return {
+          ...student,
+          academicLevel: isShs ? ('SHS' as const) : ('COLLEGE' as const),
+          yearLevelNumber: yearNum,
+          yearLevelLabel: yearLabel,
+          reEnrollStatus: status,
+          activePeriod,
+        };
+      })
+      // If student is still not re-enrolled while re-enrollment deadline has passed,
+      // they should not show up in the re-enrollment tab anymore (they only appear in inactive)
+      .filter((s) => s.reEnrollStatus !== 'overdue');
+  }, [students, getActivePeriodFor, fallbackSemester, activeCollegePeriod, activeShsPeriod]);
 
   // Available Sections for Cascade Filter Dropdown based on selected Course & Year Level
   const availableFilterSections = useMemo(() => {
     let list = [...activeSections];
 
-    if (selectedCourseCode !== 'All Courses') {
+    if (selectedCourseCode !== 'All Programs') {
       const matchedCourse = activeCourses.find((c) => c.code === selectedCourseCode);
       if (matchedCourse) {
         list = list.filter((s) => s.courseId === matchedCourse.id);
@@ -151,7 +171,7 @@ export default function ReEnrollmentManagement({ students, activeSemester: fallb
 
     // Also include any sections present in student data matching this course & year
     mappedStudents.forEach((s) => {
-      const matchCourse = selectedCourseCode === 'All Courses' || s.courseCode === selectedCourseCode;
+      const matchCourse = selectedCourseCode === 'All Programs' || s.courseCode === selectedCourseCode;
       const matchYear = selectedYearLevel === 'All Year Levels' || s.yearLevelLabel === selectedYearLevel;
       if (matchCourse && matchYear && s.section) {
         sectionNames.add(s.section);
@@ -170,8 +190,8 @@ export default function ReEnrollmentManagement({ students, activeSemester: fallb
       // 1. Status Tab Filter
       if (filter !== 'all' && s.reEnrollStatus !== filter) return false;
 
-      // 2. Cascade Course Filter
-      if (selectedCourseCode !== 'All Courses' && s.courseCode !== selectedCourseCode) {
+      // 2. Cascade Course / Program Filter
+      if (selectedCourseCode !== 'All Programs' && s.courseCode !== selectedCourseCode) {
         return false;
       }
 
@@ -185,14 +205,15 @@ export default function ReEnrollmentManagement({ students, activeSemester: fallb
         return false;
       }
 
-      // 5. Search Text
+      // 5. Search Text (Name, Student ID, Email, Section, Program)
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         const fullName = `${s.firstName} ${s.middleName || ''} ${s.lastName}`.toLowerCase();
         const sid = (s.studentId || '').toLowerCase();
+        const email = (s.email || '').toLowerCase();
         const sec = (s.section || '').toLowerCase();
         const course = (s.courseCode || '').toLowerCase();
-        if (!fullName.includes(q) && !sid.includes(q) && !sec.includes(q) && !course.includes(q)) {
+        if (!fullName.includes(q) && !sid.includes(q) && !email.includes(q) && !sec.includes(q) && !course.includes(q)) {
           return false;
         }
       }
@@ -220,11 +241,29 @@ export default function ReEnrollmentManagement({ students, activeSemester: fallb
     return filteredStudents.filter((s) => s.reEnrollStatus !== 'confirmed');
   }, [filteredStudents]);
 
-  // Overall metric counts (independent of course/year filters)
-  const confirmedCount = mappedStudents.filter((s) => s.reEnrollStatus === 'confirmed').length;
-  const pendingCount = mappedStudents.filter((s) => s.reEnrollStatus === 'pending').length;
-  const overdueCount = mappedStudents.filter((s) => s.reEnrollStatus === 'overdue').length;
-  const progressPercent = students.length === 0 ? 0 : Math.round((confirmedCount / students.length) * 100);
+  // Track-filtered metric counts for the summary cards
+  const trackFilteredForCards = useMemo(() => {
+    if (trackFilter === 'ALL') return mappedStudents;
+    return mappedStudents.filter((s) => s.academicLevel === trackFilter);
+  }, [mappedStudents, trackFilter]);
+
+  const confirmedCount = trackFilteredForCards.filter((s) => s.reEnrollStatus === 'confirmed').length;
+  const pendingCount = trackFilteredForCards.filter((s) => s.reEnrollStatus === 'pending').length;
+  const overdueCount = trackFilteredForCards.filter((s) => s.reEnrollStatus === 'overdue').length;
+  const totalTrackStudents = trackFilteredForCards.length;
+  const progressPercent = totalTrackStudents === 0 ? 0 : Math.round((confirmedCount / totalTrackStudents) * 100);
+
+  const isDeadlinePassedForCurrentTrack = useMemo(() => {
+    if (trackFilter === 'COLLEGE') {
+      return isDeadlinePassed(activeCollegePeriod?.reenrollDeadline);
+    }
+    if (trackFilter === 'SHS') {
+      return isDeadlinePassed(activeShsPeriod?.reenrollDeadline);
+    }
+    const colPassed = !activeCollegePeriod || isDeadlinePassed(activeCollegePeriod?.reenrollDeadline);
+    const shsPassed = !activeShsPeriod || isDeadlinePassed(activeShsPeriod?.reenrollDeadline);
+    return colPassed && shsPassed;
+  }, [trackFilter, activeCollegePeriod, activeShsPeriod]);
 
   // Selected students cohort analysis & conflict detection
   const selectedStudents = useMemo(() => {
@@ -357,7 +396,7 @@ export default function ReEnrollmentManagement({ students, activeSemester: fallb
   };
 
   const handleResetCascadeFilters = () => {
-    setSelectedCourseCode('All Courses');
+    setSelectedCourseCode('All Programs');
     setSelectedYearLevel('All Year Levels');
     setSelectedSectionName('All Sections');
     setSearchQuery('');
@@ -384,18 +423,12 @@ export default function ReEnrollmentManagement({ students, activeSemester: fallb
     );
   }
 
-  const activeDeadlineMillis = currentActivePeriod?.reenrollDeadline
-    ? new Date(currentActivePeriod.reenrollDeadline).getTime()
-    : now;
-  const daysRemaining = Math.ceil((activeDeadlineMillis - now) / (1000 * 60 * 60 * 24));
-
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-[#001A4D]">Re-enrollment Management</h2>
-          <p className="text-sm text-gray-500">Dashboard → Student Registry → Re-enrollment Management</p>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -446,19 +479,22 @@ export default function ReEnrollmentManagement({ students, activeSemester: fallb
         </div>
 
         <div className="p-6">
-          <div className="bg-gray-200 rounded-full h-5 mb-4 overflow-hidden shadow-inner">
-            <div
-              className="bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] h-full transition-all flex items-center justify-between px-3"
-              style={{ width: `${Math.max(5, progressPercent)}%` }}
-            >
-              {progressPercent > 10 && (
-                <span className="text-white text-xs font-bold">
-                  {confirmedCount} / {students.length} confirmed
-                </span>
-              )}
-              <span className="text-white text-xs font-bold ml-auto">{progressPercent}%</span>
+          {/* Progress Bar (Removed if re-enrollment deadline has passed) */}
+          {!isDeadlinePassedForCurrentTrack && (
+            <div className="bg-gray-200 rounded-full h-5 mb-4 overflow-hidden shadow-inner">
+              <div
+                className="bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] h-full transition-all flex items-center justify-between px-3"
+                style={{ width: `${Math.max(5, progressPercent)}%` }}
+              >
+                {progressPercent > 10 && (
+                  <span className="text-white text-xs font-bold">
+                    {confirmedCount} / {totalTrackStudents} confirmed
+                  </span>
+                )}
+                <span className="text-white text-xs font-bold ml-auto">{progressPercent}%</span>
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
             <div className="bg-gradient-to-br from-[#22C55E] to-[#16A34A] rounded-xl p-4 text-white text-center shadow-sm">
@@ -474,8 +510,10 @@ export default function ReEnrollmentManagement({ students, activeSemester: fallb
               <div className="text-xs font-medium opacity-90 mt-0.5">Overdue Unconfirmed</div>
             </div>
             <div className="bg-gradient-to-br from-[#001A4D] to-[#0C3C8A] rounded-xl p-4 text-white text-center shadow-sm">
-              <div className="text-3xl font-bold">{students.length}</div>
-              <div className="text-xs font-medium opacity-90 mt-0.5">Total Registry Students</div>
+              <div className="text-3xl font-bold">{totalTrackStudents}</div>
+              <div className="text-xs font-medium opacity-90 mt-0.5">
+                {trackFilter === 'ALL' ? 'Total Registry Students' : `${trackFilter === 'COLLEGE' ? 'College' : 'SHS'} Students`}
+              </div>
             </div>
           </div>
 
@@ -490,7 +528,7 @@ export default function ReEnrollmentManagement({ students, activeSemester: fallb
         </div>
       </div>
 
-      {/* CASCADE ACADEMIC FILTER BAR (Course ➔ Year Level ➔ Section) */}
+      {/* CASCADE ACADEMIC FILTER BAR (Course / Program ➔ Year Level ➔ Section) */}
       <div className="bg-white border border-[#E0E0E0] rounded-2xl p-5 shadow-sm space-y-4">
         <div className="flex flex-wrap items-center justify-between border-b border-gray-100 pb-3 gap-2">
           <div className="flex items-center gap-3">
@@ -515,7 +553,7 @@ export default function ReEnrollmentManagement({ students, activeSemester: fallb
               ))}
             </div>
           </div>
-          {(selectedCourseCode !== 'All Courses' || selectedYearLevel !== 'All Year Levels' || selectedSectionName !== 'All Sections' || searchQuery || trackFilter !== 'ALL') && (
+          {(selectedCourseCode !== 'All Programs' || selectedYearLevel !== 'All Year Levels' || selectedSectionName !== 'All Sections' || searchQuery || trackFilter !== 'ALL') && (
             <button
               onClick={() => {
                 setTrackFilter('ALL');
@@ -529,10 +567,10 @@ export default function ReEnrollmentManagement({ students, activeSemester: fallb
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-          {/* 1. Course Filter */}
+          {/* 1. Program Filter */}
           <div>
             <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">
-              1. Course / Program
+              1. Program
             </label>
             <select
               value={selectedCourseCode}
@@ -542,7 +580,7 @@ export default function ReEnrollmentManagement({ students, activeSemester: fallb
               }}
               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] outline-none bg-white text-gray-800 font-medium"
             >
-              <option value="All Courses">All Courses</option>
+              <option value="All Programs">All Programs</option>
               {activeCourses.map((c) => (
                 <option key={c.id} value={c.code}>
                   {c.code} — {c.name}
@@ -600,7 +638,7 @@ export default function ReEnrollmentManagement({ students, activeSemester: fallb
               <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                placeholder="Search name, ID, email..."
+                placeholder="Search by name, student ID, or email..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] outline-none"

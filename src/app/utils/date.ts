@@ -74,6 +74,27 @@ export function formatAppDate(date: any, fallback = '—'): string {
 }
 
 /**
+ * Checks if a deadline has passed relative to now.
+ * For date-only strings (e.g. YYYY-MM-DD), checks whether now is past 23:59:59.999 of that date.
+ */
+export function isDeadlinePassed(deadline: any): boolean {
+  if (!deadline) return false;
+  if (typeof deadline === 'string') {
+    const trimmed = deadline.trim();
+    if (!trimmed) return false;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      const endOfDay = new Date(`${trimmed}T23:59:59.999`);
+      if (isValid(endOfDay) && !isNaN(endOfDay.getTime())) {
+        return Date.now() > endOfDay.getTime();
+      }
+    }
+  }
+  const parsed = parseDateSafe(deadline);
+  if (!parsed) return false;
+  return Date.now() > parsed.getTime();
+}
+
+/**
  * Formats a time into standard 12-hour format: `12:49 PM` (no 24h / military time)
  * Example outputs:
  * - 12:49 PM

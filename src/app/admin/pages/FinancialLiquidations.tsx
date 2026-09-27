@@ -101,6 +101,14 @@ export function FinancialLiquidations() {
     }
   }, [targetId, liquidations]);
 
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam && ['all', 'pending', 'approved', 'returned'].includes(tabParam)) {
+      setActiveTab(tabParam as TabValue);
+      setCurrentPage(1);
+    }
+  }, [searchParams]);
+
   // Unique orgs list for filtering
   const orgList = useMemo(() => {
     const set = new Set<string>();

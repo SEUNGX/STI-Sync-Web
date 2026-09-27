@@ -10,6 +10,7 @@ import ArchivedGraduates from '../components/student-registry/ArchivedGraduates'
 import { useStudents } from '../../modules/students/hooks/useStudentStream';
 import { useActiveAcademicPeriods } from '../../modules/academic/hooks/useAcademicStream';
 import { StudentDocument } from '../../modules/students/types/student.types';
+import { isDeadlinePassed } from '../../utils/date';
 
 type RegistryView = 'dashboard' | 'pending' | 'reenrollment' | 'active' | 'inactive' | 'archived';
 
@@ -22,7 +23,7 @@ export function StudentRegistry() {
   useEffect(() => {
     const tab = searchParams.get('tab');
     const id = searchParams.get('id') || searchParams.get('studentId');
-    if (tab === 'pending' || id) {
+    if (tab === 'pending' || tab === 'pending-verification' || id) {
       setActiveView('pending');
     } else if (tab && ['dashboard', 'pending', 'reenrollment', 'active', 'inactive', 'archived'].includes(tab)) {
       setActiveView(tab as RegistryView);
@@ -59,17 +60,33 @@ export function StudentRegistry() {
     const archived: StudentDocument[] = [];
     const reenrollment: StudentDocument[] = [];
 
-    students.forEach(student => {
+    students.forEach((student) => {
       switch (student.status) {
         case 'PENDING':
           pending.push(student);
           break;
-        case 'ACTIVE':
-          active.push(student);
-          if (isStudentPendingReEnrollment(student)) {
-            reenrollment.push(student);
+        case 'ACTIVE': {
+          const isShs =
+            student.academicLevel === 'SHS' ||
+            (student.semester && String(student.semester).includes('Trimester')) ||
+            student.yearLevel === 'Grade 11' ||
+            student.yearLevel === 'Grade 12';
+          const activePeriod = isShs ? activeShsPeriod : activeCollegePeriod;
+          const deadlinePassed = isDeadlinePassed(activePeriod?.reenrollDeadline);
+          const needsReenroll = isStudentPendingReEnrollment(student);
+
+          // If the student is still not re-enrolled while deadline has passed,
+          // they should not show up in re-enrollment tab anymore, and only appear in inactive tab.
+          if (needsReenroll && deadlinePassed) {
+            inactive.push(student);
+          } else {
+            active.push(student);
+            if (needsReenroll) {
+              reenrollment.push(student);
+            }
           }
           break;
+        }
         case 'INACTIVE':
           inactive.push(student);
           break;
@@ -85,7 +102,7 @@ export function StudentRegistry() {
     });
 
     return { pending, active, inactive, archived, reenrollment };
-  }, [students, isStudentPendingReEnrollment]);
+  }, [students, isStudentPendingReEnrollment, activeCollegePeriod, activeShsPeriod]);
 
   if (loading) {
     return (
@@ -110,16 +127,27 @@ export function StudentRegistry() {
   const renderView = () => {
     switch (activeView) {
       case 'dashboard':
-        return <RegistryDashboard 
-          onNavigate={handleNavigate} 
-          categorizedStudents={{ ...categorizedStudents, suspended: [] }} 
-          activeSemester={activeSemester} 
-          allStudents={students}
-        />;
+        return (
+          <RegistryDashboard 
+            onNavigate={handleNavigate} 
+            categorizedStudents={{ ...categorizedStudents, suspended: [] }} 
+            activeSemester={activeSemester} 
+            activeCollegePeriod={activeCollegePeriod}
+            activeShsPeriod={activeShsPeriod}
+            allStudents={students}
+          />
+        );
       case 'pending':
         return <PendingVerification students={pending} initialStudentId={targetStudentId} />;
       case 'reenrollment':
-        return <ReEnrollmentManagement students={active} activeSemester={activeSemester} />;
+        return (
+          <ReEnrollmentManagement 
+            students={active} 
+            activeSemester={activeSemester} 
+            activeCollegePeriod={activeCollegePeriod}
+            activeShsPeriod={activeShsPeriod}
+          />
+        );
       case 'active':
         return <ActiveStudents students={active} />;
       case 'inactive':
@@ -127,12 +155,16 @@ export function StudentRegistry() {
       case 'archived':
         return <ArchivedGraduates students={archived} />;
       default:
-        return <RegistryDashboard 
-          onNavigate={handleNavigate} 
-          categorizedStudents={{ ...categorizedStudents, suspended: [] }} 
-          activeSemester={activeSemester} 
-          allStudents={students}
-        />;
+        return (
+          <RegistryDashboard 
+            onNavigate={handleNavigate} 
+            categorizedStudents={{ ...categorizedStudents, suspended: [] }} 
+            activeSemester={activeSemester} 
+            activeCollegePeriod={activeCollegePeriod}
+            activeShsPeriod={activeShsPeriod}
+            allStudents={students}
+          />
+        );
     }
   };
 

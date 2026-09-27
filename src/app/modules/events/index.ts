@@ -1,6 +1,7 @@
 export * from './types/event-config.types';
 export * from './types/event.types';
 export * from './services/event.service';
+export * from './services/event-lifecycle.service';
 export * from './hooks/useEventConfigStream';
 export * from './hooks/useEventConfigMutations';
 export * from './hooks/useEventCreation';
@@ -10,4 +11,10 @@ export * from './utils/event-lifecycle.utils';
 export { default as OfficerEventDetailView } from './components/OfficerEventDetailView';
 export { default as CancelEventModal } from './components/CancelEventModal';
 export * from './components/CancelEventModal';
+export { default as ConcludeEventModal } from './components/ConcludeEventModal';
+export * from './components/ConcludeEventModal';
+export { default as ArchiveEventModal } from './components/ArchiveEventModal';
+export * from './components/ArchiveEventModal';
+export { default as DeleteArchivedEventModal } from './components/DeleteArchivedEventModal';
+export * from './components/DeleteArchivedEventModal';
 

@@ -99,11 +99,11 @@ export function OfficerLayout() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F8F8F8]">
+    <div className="min-h-screen bg-[#F8F8F8] flex">
       <OfficerSidebar />
-      <div className="ml-[240px]">
+      <div className="ml-[240px] flex-1 flex flex-col min-w-0 min-h-screen">
         <OfficerTopNav title={title} />
-        <main className="p-6">
+        <main className="p-6 flex-1">
           {/* Subtle Security Reminder Banner if temporary password is in use */}
           {profile.requiresPasswordChange && location.pathname !== '/officer/settings' && (
             <div className="mb-6 px-4 py-3 bg-white border-l-4 border-[#FFC107] border-y border-r border-gray-200/80 rounded-r-2xl shadow-xs flex items-center justify-between gap-4 animate-in fade-in">

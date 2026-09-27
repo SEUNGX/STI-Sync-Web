@@ -6,6 +6,7 @@ import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { AuditActionType } from "../../modules/audit/types/audit.types";
+import { useAuditLogs } from "../../modules/audit/hooks/useAuditStream";
 import { TablePagination } from "../../components/common/TablePagination";
 
 export function AuditLogs() {

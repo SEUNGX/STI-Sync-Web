@@ -21,11 +21,17 @@ export interface EnrichedClubMembership {
   dateJoined: any;
 }
 
+export interface EnrichedStudentAttendance extends AttendanceRecord {
+  hostOrgName: string;
+  completedChecks: number;
+  totalExpectedChecks: number;
+}
+
 export interface StudentDetailState {
   student: StudentDocument | null;
   memberships: EnrichedClubMembership[];
   payables: PayableDocument[];
-  attendances: AttendanceRecord[];
+  attendances: EnrichedStudentAttendance[];
   stats: {
     totalBilled: number;
     totalPaid: number;
@@ -45,6 +51,7 @@ export function useStudentDetail(studentDocOrId: StudentDocument | string | null
   );
   const [allRawMemberships, setAllRawMemberships] = useState<OrganizationMemberDocument[]>([]);
   const [allOrgs, setAllOrgs] = useState<OrganizationDocument[]>([]);
+  const [allEvents, setAllEvents] = useState<Map<string, any>>(new Map());
   const [payables, setPayables] = useState<PayableDocument[]>([]);
   const [attendances, setAttendances] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -97,6 +104,20 @@ export function useStudentDetail(studentDocOrId: StudentDocument | string | null
       (err) => console.warn('Error streaming organizations:', err)
     );
     unsubs.push(unsubOrgs);
+
+    // 2.1 Subscribe to Events collection to resolve host organization and session count
+    const unsubEvents = onSnapshot(
+      collection(db, 'events'),
+      (snap) => {
+        const evMap = new Map<string, any>();
+        snap.docs.forEach((doc) => {
+          evMap.set(doc.id, { id: doc.id, ...doc.data() });
+        });
+        setAllEvents(evMap);
+      },
+      (err) => console.warn('Error streaming events in useStudentDetail:', err)
+    );
+    unsubs.push(unsubEvents);
 
     // 3. Subscribe to Organization Memberships (get all memberships and filter in memory by id, schoolId, or email)
     const unsubMembers = onSnapshot(
@@ -233,17 +254,53 @@ export function useStudentDetail(studentDocOrId: StudentDocument | string | null
     paymentStatus = 'Paid';
   }
 
-  const eventsAttended = attendances.filter(
-    (a) => a.status === 'Complete' || a.status === 'Checked In' || a.status === 'Late'
+  // Enrich attendance with actual host organization and attendance check count vs expected
+  const enrichedAttendances: EnrichedStudentAttendance[] = attendances.map((a) => {
+    const eventDoc = a.eventId ? allEvents.get(a.eventId) : null;
+    const hostOrg = eventDoc?.hostingOrgId ? orgMap.get(eventDoc.hostingOrgId) : null;
+    const hostOrgName =
+      hostOrg?.name ||
+      hostOrg?.acronym ||
+      eventDoc?.hostingOrgName ||
+      (a.org && a.org !== 'N/A' && !a.org.startsWith('SAO') ? a.org : 'Supreme Student Council');
+
+    // Expected check-in/out checks for this event:
+    let totalExpectedChecks = 2; // Default Time-In & Time-Out
+    if (eventDoc?.sessions && Array.isArray(eventDoc.sessions) && eventDoc.sessions.length > 0) {
+      totalExpectedChecks = eventDoc.sessions.reduce(
+        (sum: number, s: any) => sum + (s.hasTimeOut ? 2 : 1),
+        0
+      );
+    } else if (eventDoc && typeof eventDoc.hasTimeOut === 'boolean') {
+      totalExpectedChecks = eventDoc.hasTimeOut ? 2 : 1;
+    }
+
+    let completedChecks = 0;
+    if (a.checkIn && a.checkIn !== '—' && a.checkIn !== '') completedChecks += 1;
+    if (a.checkOut && a.checkOut !== '—' && a.checkOut !== '') completedChecks += 1;
+    if (a.status === 'Complete' && completedChecks < totalExpectedChecks) {
+      completedChecks = totalExpectedChecks;
+    }
+
+    return {
+      ...a,
+      hostOrgName,
+      completedChecks,
+      totalExpectedChecks,
+    };
+  });
+
+  const eventsAttended = enrichedAttendances.filter(
+    (a) => a.completedChecks >= a.totalExpectedChecks || a.status === 'Complete' || a.status === 'Checked In' || a.status === 'Late'
   ).length;
-  const totalEvents = attendances.length;
+  const totalEvents = enrichedAttendances.length;
   const attendanceRate = totalEvents > 0 ? Math.round((eventsAttended / totalEvents) * 100) : 100;
 
   return {
     student,
     memberships,
     payables,
-    attendances,
+    attendances: enrichedAttendances,
     stats: {
       totalBilled,
       totalPaid,

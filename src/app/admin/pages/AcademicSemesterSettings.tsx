@@ -7,8 +7,6 @@ import {
   AlertCircle,
   Eye,
   Edit,
-  Archive,
-  Trash2,
   X,
   CheckCircle,
   Calendar,
@@ -23,13 +21,15 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  ShieldAlert,
+  Info,
 } from "lucide-react";
+import { collection, query, onSnapshot } from "firebase/firestore";
+import { db } from "../../../services/firebase";
 import { useSemesters } from "../../modules/academic/hooks/useAcademicStream";
 import {
   createSemester,
   updateSemester,
-  archiveSemester,
-  deleteSemester,
   generateSemesterLabel,
   getAcademicYearSuggestions,
   getSemesterTermAvailability,
@@ -37,8 +37,8 @@ import {
   sortSemestersChronologically,
 } from "../../modules/academic/services/academic.service";
 import { useAdviserProfile } from "../../modules/auth/hooks/useAdviserProfile";
-import type { SemesterDocument, SemesterStatus, SemesterTerm } from "../../modules/academic/types/academic.types";
-import { formatAppDate } from "../../utils/date";
+import type { SemesterDocument, SemesterStatus, SemesterTerm, AcademicLevel } from "../../modules/academic/types/academic.types";
+import { formatAppDate, isDeadlinePassed } from "../../utils/date";
 
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -77,10 +77,12 @@ function deriveBannerState(semesters: SemesterDocument[]): BannerState {
 function ActiveSemesterBanner({
   state,
   activeSemester,
+  canRollover,
   onRollover,
 }: {
   state: BannerState;
   activeSemester: SemesterDocument | undefined;
+  canRollover: boolean;
   onRollover: () => void;
 }) {
   if (!activeSemester && state === "active") {
@@ -122,11 +124,17 @@ function ActiveSemesterBanner({
         <div className="flex items-center gap-2">
           <div className="flex gap-2">
             {[
-              { label: "Active Students", value: String(activeSemester.students) },
-              { label: "Events This Semester", value: String(activeSemester.events) },
+              {
+                label: "Track",
+                value: activeSemester.academicLevel === "SHS" ? "Senior High School" : "College",
+              },
+              {
+                label: "Re-enrollment Deadline",
+                value: activeSemester.reenrollDeadline ? formatDate(activeSemester.reenrollDeadline) : "Not Set",
+              },
             ].map((chip) => (
-              <div key={chip.label} className="px-3 py-2 bg-white/15 rounded-xl text-center">
-                <p className="text-white font-bold text-sm">{chip.value}</p>
+              <div key={chip.label} className="px-3 py-2 bg-white/15 rounded-xl text-center min-w-[120px]">
+                <p className="text-white font-bold text-sm truncate">{chip.value}</p>
                 <p className="text-white/80 text-xs">{chip.label}</p>
               </div>
             ))}
@@ -151,7 +159,13 @@ function ActiveSemesterBanner({
         </div>
         <button
           onClick={onRollover}
-          className="px-5 py-2.5 bg-[#001A4D] text-white rounded-lg font-medium text-sm flex items-center gap-2 hover:bg-[#001A4D]/90 transition-colors"
+          disabled={!canRollover}
+          title={!canRollover ? "Rollover locked until semester end date or re-enrollment deadline is reached." : "Run Semester Rollover"}
+          className={`px-5 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors ${
+            canRollover
+              ? "bg-[#001A4D] text-white hover:bg-[#001A4D]/90 cursor-pointer"
+              : "bg-black/20 text-white/50 cursor-not-allowed border border-white/20"
+          }`}
         >
           <RefreshCw className="w-4 h-4" />
           Run Semester Rollover
@@ -174,7 +188,13 @@ function ActiveSemesterBanner({
         </div>
         <button
           onClick={onRollover}
-          className="px-5 py-2.5 bg-[#FFD41C] text-[#001A4D] rounded-lg font-bold text-sm flex items-center gap-2 hover:bg-[#FFD41C]/90 transition-colors"
+          disabled={!canRollover}
+          title={!canRollover ? "Rollover locked until semester end date or re-enrollment deadline is reached." : "Run Semester Rollover Now"}
+          className={`px-5 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors ${
+            canRollover
+              ? "bg-[#FFD41C] text-[#001A4D] hover:bg-[#FFD41C]/90 cursor-pointer"
+              : "bg-white/20 text-white/50 cursor-not-allowed border border-white/20"
+          }`}
         >
           <RefreshCw className="w-4 h-4" />
           Run Semester Rollover Now
@@ -858,7 +878,6 @@ function AddSemesterModal({ existingSemesters, defaultAcademicLevel = "COLLEGE",
   );
 }
 
-
 // ─── Rollover Modal ────────────────────────────────────────────────────────────
 interface RolloverModalProps {
   existingSemesters: SemesterDocument[];
@@ -875,13 +894,10 @@ function RolloverModal({ existingSemesters, defaultAcademicLevel = "COLLEGE", on
   const [done, setDone] = useState(false);
   const [authorized, setAuthorized] = useState(false);
   const [execStep, setExecStep] = useState(0);
-  const [carryBudget, setCarryBudget] = useState(true);
-  const [autoInactivate, setAutoInactivate] = useState(true);
-  const [flagOfficers, setFlagOfficers] = useState(true);
-  const [resetCompliance, setResetCompliance] = useState(true);
   const [execError, setExecError] = useState<string | null>(null);
   const [rolloverResult, setRolloverResult] = useState<{ eventsArchivedCount?: number } | null>(null);
 
+  // Active term for currently selected track
   const activeSemester = useMemo(
     () =>
       existingSemesters.find(
@@ -896,21 +912,24 @@ function RolloverModal({ existingSemesters, defaultAcademicLevel = "COLLEGE", on
     [existingSemesters, rolloverTrack]
   );
 
-  const upcomingSemesters = useMemo(
-    () => {
-      const filtered = existingSemesters.filter(
-        (s) =>
-          s.status === "UPCOMING" &&
-          !s.archived &&
-          (s.academicLevel === rolloverTrack ||
-            (rolloverTrack === "SHS"
-              ? String(s.semester).includes("Trimester")
-              : !s.academicLevel && !String(s.semester).includes("Trimester")))
-      );
-      return sortSemestersChronologically(filtered, "asc");
-    },
-    [existingSemesters, rolloverTrack]
-  );
+  // Validation: Check if active term's deadline or end date has been reached
+  const isEndDatePassed = activeSemester?.endDate ? isDeadlinePassed(activeSemester.endDate) : false;
+  const isDeadlinePassedVal = activeSemester?.reenrollDeadline ? isDeadlinePassed(activeSemester.reenrollDeadline) : false;
+  const isRolloverAllowedForTrack = Boolean(activeSemester && (isEndDatePassed || isDeadlinePassedVal));
+
+  // Upcoming terms for selected track
+  const upcomingSemesters = useMemo(() => {
+    const filtered = existingSemesters.filter(
+      (s) =>
+        s.status === "UPCOMING" &&
+        !s.archived &&
+        (s.academicLevel === rolloverTrack ||
+          (rolloverTrack === "SHS"
+            ? String(s.semester).includes("Trimester")
+            : !s.academicLevel && !String(s.semester).includes("Trimester")))
+    );
+    return sortSemestersChronologically(filtered, "asc");
+  }, [existingSemesters, rolloverTrack]);
 
   const [selectedTargetId, setSelectedTargetId] = useState<string>(
     upcomingSemesters[0]?.id || ""
@@ -927,44 +946,44 @@ function RolloverModal({ existingSemesters, defaultAcademicLevel = "COLLEGE", on
     [upcomingSemesters, selectedTargetId]
   );
 
-  const steps = ["Select New Semester", "Review Impact", "Configure Rollover", "Confirm & Execute"];
+  const steps = ["Select Track & Term", "Review Impact & Confirm"];
 
   const execSteps = [
-    "Validating semester records and permissions...",
-    `Closing active ${rolloverTrack === 'SHS' ? 'trimester' : 'semester'} (${activeSemester?.label || 'Current'})...`,
-    `Archiving completed events for ${activeSemester?.label || 'closing semester'}...`,
-    `Activating target ${rolloverTrack === 'SHS' ? 'trimester' : 'semester'} (${targetSemester?.label || 'Next'})...`,
-    `Flagging active ${rolloverTrack === 'SHS' ? 'SHS' : 'College'} students for re-enrollment in active registry...`,
+    `Validating ${rolloverTrack === "SHS" ? "Senior High School" : "College"} records...`,
+    `Closing active ${rolloverTrack === "SHS" ? "trimester" : "semester"} (${activeSemester?.label || "Current"})...`,
+    `Archiving completed events for ${activeSemester?.label || "closing term"}...`,
+    `Activating target ${rolloverTrack === "SHS" ? "trimester" : "semester"} (${targetSemester?.label || "Next"})...`,
+    `Updating active ${rolloverTrack === "SHS" ? "SHS" : "College"} students to require re-enrollment...`,
     "Writing immutable audit trail log...",
   ];
 
   const handleExecute = async () => {
-    if (!activeSemester || !targetSemester) return;
+    if (!activeSemester || !targetSemester || !isRolloverAllowedForTrack) return;
     setExecuting(true);
     setExecError(null);
     setExecStep(0);
 
     try {
       setExecStep(1);
-      await new Promise((r) => setTimeout(r, 600));
+      await new Promise((r) => setTimeout(r, 450));
 
       setExecStep(2);
-      await new Promise((r) => setTimeout(r, 600));
+      await new Promise((r) => setTimeout(r, 450));
 
       setExecStep(3);
-      await new Promise((r) => setTimeout(r, 600));
+      await new Promise((r) => setTimeout(r, 450));
 
       setExecStep(4);
       const res = await executeSemesterRollover(
         activeSemester,
         targetSemester,
-        { academicLevel: rolloverTrack, carryBudget, autoInactivate, flagOfficers, resetCompliance },
+        { academicLevel: rolloverTrack },
         profile?.uid
       );
       setRolloverResult(res);
 
       setExecStep(5);
-      await new Promise((r) => setTimeout(r, 600));
+      await new Promise((r) => setTimeout(r, 450));
 
       setDone(true);
       if (onSuccess) onSuccess();
@@ -977,7 +996,7 @@ function RolloverModal({ existingSemesters, defaultAcademicLevel = "COLLEGE", on
 
   if (executing) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4">
         <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[480px] p-8">
           <div className="bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] -mx-8 -mt-8 px-8 py-5 rounded-t-2xl mb-6 flex items-center gap-3">
             <RefreshCw className="w-8 h-8 text-[#FFD41C] animate-spin" style={{ animationDuration: "2s" }} />
@@ -989,24 +1008,32 @@ function RolloverModal({ existingSemesters, defaultAcademicLevel = "COLLEGE", on
               <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <CheckCircle className="w-8 h-8 text-emerald-600" />
               </div>
-              <p className="text-[#001A4D] font-bold text-xl mb-1">Semester Rollover Complete!</p>
-              <p className="text-gray-500 text-sm mb-1">
-                <strong>{targetSemester?.label}</strong> is now the active semester.
+              <p className="text-[#001A4D] font-bold text-xl mb-1">
+                {rolloverTrack === "SHS" ? "Senior High School" : "College"} Rollover Complete!
               </p>
-              <p className="text-xs text-gray-400 mb-3">
-                All active students are now listed under <strong>Re-enrollment Management</strong>.
+              <p className="text-gray-600 text-sm mb-2">
+                <strong>{targetSemester?.label}</strong> is now the active {rolloverTrack === "SHS" ? "trimester" : "semester"}.
               </p>
-              {typeof rolloverResult?.eventsArchivedCount === 'number' && (
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-[#001A4D] text-left mb-4 space-y-1">
+                <p className="font-semibold text-[#0E4EBD]">Student Impact Notice:</p>
+                <p>
+                  All active <strong>{rolloverTrack === "SHS" ? "Senior High School" : "College"}</strong> students must now confirm re-enrollment in the mobile app.
+                </p>
+                <p className="text-gray-500">
+                  {rolloverTrack === "SHS" ? "College" : "Senior High School"} students remain completely unaffected.
+                </p>
+              </div>
+              {typeof rolloverResult?.eventsArchivedCount === "number" && rolloverResult.eventsArchivedCount > 0 && (
                 <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 font-semibold mb-5 flex items-center justify-center gap-2">
                   <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                  <span>{rolloverResult.eventsArchivedCount} completed event(s) from {activeSemester?.label} automatically archived.</span>
+                  <span>{rolloverResult.eventsArchivedCount} completed event(s) from {activeSemester?.label} archived.</span>
                 </div>
               )}
               <button
                 onClick={onClose}
                 className="w-full py-3 bg-[#001A4D] text-[#FFD41C] font-bold rounded-xl text-sm hover:bg-[#001A4D]/90 transition-colors cursor-pointer"
               >
-                View Updated Dashboard
+                Done &amp; View Dashboard
               </button>
             </div>
           ) : (
@@ -1050,47 +1077,52 @@ function RolloverModal({ existingSemesters, defaultAcademicLevel = "COLLEGE", on
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/70" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-[680px] flex flex-col max-h-[90vh]">
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-[640px] flex flex-col max-h-[90vh]">
         {/* Header */}
-        <div className="bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] px-8 py-5 rounded-t-2xl flex items-center gap-4">
-          <div className="w-[52px] h-[52px] bg-[#FFD41C] rounded-full flex items-center justify-center">
-            <RefreshCw className="w-7 h-7 text-[#001A4D]" />
+        <div className="bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] px-8 py-5 rounded-t-2xl flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="w-11 h-11 bg-[#FFD41C] rounded-xl flex items-center justify-center shadow-xs">
+              <RefreshCw className="w-6 h-6 text-[#001A4D]" />
+            </div>
+            <div>
+              <p className="text-white font-bold text-xl">Academic Rollover</p>
+              <p className="text-[#FFD41C] text-xs font-medium">Switch to the next academic period &amp; prompt student re-enrollment</p>
+            </div>
           </div>
-          <div>
-            <p className="text-white font-bold text-[22px]">Semester Rollover</p>
-            <p className="text-[#FFD41C] text-sm">Switch to the next academic semester</p>
-          </div>
+          <button onClick={onClose} className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors">
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
-        {/* Step Indicator */}
-        <div className="flex items-center px-8 py-4 border-b border-gray-200 bg-white gap-2">
+        {/* Step Indicator (2 Steps) */}
+        <div className="flex items-center px-8 py-3.5 border-b border-gray-200 bg-gray-50/70 gap-2">
           {steps.map((s, i) => {
             const num = i + 1;
             const isActive = num === step;
             const isDone = num < step;
             return (
-              <div key={i} className="flex items-center gap-1 flex-1">
+              <div key={i} className="flex items-center gap-2 flex-1">
                 <div
-                  className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
-                    isDone ? "bg-emerald-500 text-white" : isActive ? "bg-[#0E4EBD] text-white" : "bg-gray-100 text-gray-400"
+                  className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                    isDone ? "bg-emerald-500 text-white" : isActive ? "bg-[#0E4EBD] text-white" : "bg-gray-200 text-gray-500"
                   }`}
                 >
                   {isDone ? <Check className="w-3.5 h-3.5" /> : num}
                 </div>
                 <span
                   className={`text-xs font-medium whitespace-nowrap ${
-                    isActive ? "text-[#0E4EBD] font-bold" : isDone ? "text-emerald-600 font-medium" : "text-gray-400"
+                    isActive ? "text-[#0E4EBD] font-bold" : isDone ? "text-emerald-700 font-medium" : "text-gray-400"
                   }`}
                 >
                   {s}
                 </span>
-                {i < steps.length - 1 && <div className="flex-1 h-px bg-gray-200 mx-1" />}
+                {i < steps.length - 1 && <div className="flex-1 h-px bg-gray-200 mx-2" />}
               </div>
             );
           })}
         </div>
 
-        {/* Error notice if any */}
+        {/* Error Notice */}
         {execError && (
           <div className="mx-6 mt-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2 text-xs text-red-700">
             <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
@@ -1098,268 +1130,248 @@ function RolloverModal({ existingSemesters, defaultAcademicLevel = "COLLEGE", on
           </div>
         )}
 
-        {/* Step Content */}
-        <div className="flex-1 overflow-y-auto p-6">
+        {/* Modal Body */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-5">
+          {/* STEP 1: Select Track & Upcoming Term */}
           {step === 1 && (
             <div className="space-y-4">
               <div>
-                <p className="text-[#001A4D] font-bold text-lg mb-1">Which track are you rolling over?</p>
-                <p className="text-gray-500 text-xs">
-                  Choose the academic track and select the upcoming term to activate.
+                <label className="block text-[#001A4D] font-bold text-sm mb-1">
+                  1. Which Academic Track are you rolling over?
+                </label>
+                <p className="text-gray-500 text-xs mb-3">
+                  Each track operates independently. Rolling over College only affects College students, and rolling over Senior High only affects Senior High students.
                 </p>
-              </div>
-
-              {/* Track Selector */}
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => setRolloverTrack('COLLEGE')}
-                  className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-bold border transition-all ${
-                    rolloverTrack === 'COLLEGE'
-                      ? 'bg-[#001A4D] text-[#FFD41C] border-[#001A4D] shadow-sm'
-                      : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
-                  }`}
-                >
-                  College (Semestral)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setRolloverTrack('SHS')}
-                  className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-bold border transition-all ${
-                    rolloverTrack === 'SHS'
-                      ? 'bg-amber-600 text-white border-amber-600 shadow-sm'
-                      : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
-                  }`}
-                >
-                  Senior High School (Trimestral)
-                </button>
-              </div>
-
-              {upcomingSemesters.length === 0 ? (
-                <div className="p-5 bg-amber-50 border border-amber-200 rounded-xl space-y-2">
-                  <div className="flex items-center gap-2 text-amber-800 font-bold">
-                    <AlertTriangle className="w-5 h-5 text-amber-600" />
-                    No Upcoming {rolloverTrack === 'SHS' ? 'Trimesters' : 'Semesters'} Found
-                  </div>
-                  <p className="text-amber-700 text-xs leading-relaxed">
-                    You do not have any registered <strong>UPCOMING</strong> {rolloverTrack === 'SHS' ? 'trimesters' : 'semesters'} under {rolloverTrack === 'SHS' ? 'Senior High School' : 'College'}. Please create the next term before running a rollover.
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {upcomingSemesters.map((sem) => {
-                    const isSelected = (targetSemester?.id === sem.id);
-                    return (
-                      <label
-                        key={sem.id}
-                        onClick={() => setSelectedTargetId(sem.id)}
-                        className={`block p-4 border rounded-xl cursor-pointer transition-all ${
-                          isSelected
-                            ? "border-[#0E4EBD] bg-blue-50/40 ring-2 ring-[#0E4EBD]/30"
-                            : "border-gray-200 hover:border-gray-300"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <input
-                              type="radio"
-                              name="targetSemester"
-                              checked={isSelected}
-                              onChange={() => setSelectedTargetId(sem.id)}
-                              className="accent-[#0E4EBD]"
-                            />
-                            <div>
-                              <p className="font-bold text-[#001A4D] text-base">
-                                {sem.semester} · A.Y. {sem.academicYear}
-                              </p>
-                              <p className="text-xs text-gray-500 mt-0.5">
-                                {formatDate(sem.startDate)} – {formatDate(sem.endDate)}
-                              </p>
-                            </div>
-                          </div>
-                          <span className="px-3 py-1 bg-blue-50 text-[#0E4EBD] text-xs font-bold rounded-full border border-blue-100">
-                            {sem.label}
-                          </span>
-                        </div>
-                        {sem.reenrollDeadline && (
-                          <div className="mt-2 text-xs text-gray-500 pl-7">
-                            Re-enrollment Deadline: <strong className="text-gray-700">{formatDate(sem.reenrollDeadline)}</strong>
-                          </div>
-                        )}
-                      </label>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-
-          {step === 2 && (
-            <div>
-              <p className="text-[#001A4D] font-bold text-lg mb-4">What will happen during this rollover?</p>
-              
-              {/* Transition Banner */}
-              <div className="p-4 bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] rounded-xl text-white mb-5 flex items-center justify-between">
-                <div>
-                  <p className="text-white/70 text-xs uppercase font-bold tracking-wider">Closing Active Semester</p>
-                  <p className="text-base font-bold">{activeSemester?.label || "None"}</p>
-                </div>
-                <div className="text-2xl font-bold text-[#FFD41C]">➔</div>
-                <div>
-                  <p className="text-[#FFD41C] text-xs uppercase font-bold tracking-wider">Activating New Semester</p>
-                  <p className="text-base font-bold">{targetSemester?.label}</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 mb-4">
-                <div className="border border-gray-200 rounded-xl overflow-hidden">
-                  <div className="border-l-4 border-amber-500 pl-3 py-3 pr-3 bg-gray-50">
-                    <p className="text-[#001A4D] font-bold text-sm">State Changes (New Term):</p>
-                  </div>
-                  {[
-                    "Active Semester status → COMPLETED",
-                    "Target Semester status → ACTIVE",
-                    "All Active Students → Pending Re-enrollment",
-                    "Compliance checklists → Fresh semester cycle",
-                    "New event proposals anchor to new term",
-                  ].map((item, i) => (
-                    <div key={i} className="flex items-start gap-2 px-3 py-2.5 border-b border-gray-100 last:border-0">
-                      <RefreshCw className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
-                      <span className="text-[#001A4D] text-xs">{item}</span>
-                    </div>
-                  ))}
-                </div>
-                <div className="border border-gray-200 rounded-xl overflow-hidden">
-                  <div className="border-l-4 border-green-500 pl-3 py-3 pr-3 bg-gray-50">
-                    <p className="text-[#001A4D] font-bold text-sm">What Carries Over (Preserved):</p>
-                  </div>
-                  {[
-                    "All past event records and outcomes",
-                    "All attendance logs — Preserved in full",
-                    "All unpaid balances and fines carry over",
-                    "All liquidation and audit trail records",
-                    "All student verification data",
-                    "All issued certificates",
-                  ].map((item, i) => (
-                    <div key={i} className="flex items-start gap-2 px-3 py-2.5 border-b border-gray-100 last:border-0">
-                      <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
-                      <span className="text-[#001A4D] text-xs">{item}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {step === 3 && (
-            <div className="space-y-4">
-              <p className="text-[#001A4D] font-bold text-lg mb-1">Configure the new semester settings.</p>
-
-              {/* Re-enrollment */}
-              <div className="p-4 border border-gray-200 rounded-xl">
-                <div className="border-l-4 border-[#0E4EBD] pl-3 mb-4">
-                  <p className="text-[#001A4D] font-bold text-sm">Student Re-enrollment</p>
-                </div>
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Re-enrollment Deadline</label>
-                    <p className="text-xs font-bold text-[#001A4D]">
-                      {targetSemester?.reenrollDeadline ? formatDate(targetSemester.reenrollDeadline) : "Configured on semester creation"}
-                    </p>
-                    <p className="text-xs text-gray-500 mt-0.5">Students must confirm enrollment by this date.</p>
-                  </div>
-                  <div className="flex items-start gap-3 p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-gray-900">Auto-Inactivate Students Who Don't Confirm</p>
-                      <p className="text-xs text-gray-500">Allows one-click batch inactivation of unconfirmed students in Student Registry</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setAutoInactivate(!autoInactivate)}
-                      className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${autoInactivate ? "bg-[#0E4EBD]" : "bg-gray-300"}`}
-                    >
-                      <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform shadow ${autoInactivate ? "translate-x-6" : ""}`} />
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Budget */}
-              <div className="p-4 border border-gray-200 rounded-xl">
-                <div className="border-l-4 border-[#0E4EBD] pl-3 mb-4">
-                  <p className="text-[#001A4D] font-bold text-sm">Budget Setup for New Semester</p>
-                </div>
-                <div className="flex items-start gap-3 p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-900">Carry Over Unspent Org Budgets</p>
-                    <p className="text-xs text-gray-500">Preserve remaining club cash balances into next semester's allocation.</p>
-                  </div>
+                <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
-                    onClick={() => setCarryBudget(!carryBudget)}
-                    className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${carryBudget ? "bg-[#0E4EBD]" : "bg-gray-300"}`}
+                    onClick={() => setRolloverTrack("COLLEGE")}
+                    className={`py-3 px-4 rounded-xl text-xs font-bold border transition-all flex flex-col items-center justify-center gap-1 ${
+                      rolloverTrack === "COLLEGE"
+                        ? "bg-[#001A4D] text-[#FFD41C] border-[#001A4D] shadow-sm ring-2 ring-[#001A4D]/20"
+                        : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100"
+                    }`}
                   >
-                    <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform shadow ${carryBudget ? "translate-x-6" : ""}`} />
+                    <span className="text-sm">College</span>
+                    <span className="text-[10px] font-normal opacity-80">Semestral Track</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRolloverTrack("SHS")}
+                    className={`py-3 px-4 rounded-xl text-xs font-bold border transition-all flex flex-col items-center justify-center gap-1 ${
+                      rolloverTrack === "SHS"
+                        ? "bg-amber-600 text-white border-amber-600 shadow-sm ring-2 ring-amber-600/20"
+                        : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100"
+                    }`}
+                  >
+                    <span className="text-sm">Senior High School</span>
+                    <span className="text-[10px] font-normal opacity-90">Trimestral Track</span>
                   </button>
                 </div>
               </div>
 
-              {/* Organization */}
-              <div className="p-4 border border-gray-200 rounded-xl">
-                <div className="border-l-4 border-[#0E4EBD] pl-3 mb-4">
-                  <p className="text-[#001A4D] font-bold text-sm">Organization Settings</p>
+              {/* Current Active Term Status for selected track */}
+              <div className="p-4 rounded-xl border border-gray-200 bg-gray-50/70 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Current Active Term:</span>
+                  <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                    activeSemester ? "bg-green-100 text-green-800" : "bg-gray-200 text-gray-600"
+                  }`}>
+                    {activeSemester ? "ACTIVE" : "NONE"}
+                  </span>
                 </div>
-                <div className="space-y-3">
-                  {[
-                    { label: "Flag Officer Roles for Re-assignment Review", desc: "Notify SAS that officer positions should be confirmed.", state: flagOfficers, toggle: () => setFlagOfficers(!flagOfficers) },
-                    { label: "Reset Organization Compliance Scores", desc: "Resets organization compliance checklist for the fresh semester cycle.", state: resetCompliance, toggle: () => setResetCompliance(!resetCompliance) },
-                  ].map((item) => (
-                    <div key={item.label} className="flex items-start gap-3 p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-gray-900">{item.label}</p>
-                        <p className="text-xs text-gray-500">{item.desc}</p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={item.toggle}
-                        className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${item.state ? "bg-[#0E4EBD]" : "bg-gray-300"}`}
-                      >
-                        <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform shadow ${item.state ? "translate-x-6" : ""}`} />
-                      </button>
+
+                {activeSemester ? (
+                  <div>
+                    <p className="font-bold text-[#001A4D] text-base">
+                      {activeSemester.semester} · A.Y. {activeSemester.academicYear}
+                    </p>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500 mt-1">
+                      <span>End Date: <strong className="text-gray-700">{formatDate(activeSemester.endDate)}</strong></span>
+                      <span>•</span>
+                      <span>Re-enrollment Deadline: <strong className="text-gray-700">{formatDate(activeSemester.reenrollDeadline)}</strong></span>
                     </div>
-                  ))}
-                </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-500 italic">
+                    No active {rolloverTrack === "SHS" ? "trimester" : "semester"} found for this track.
+                  </p>
+                )}
+
+                {/* Validation Notice if deadline or end date not yet reached */}
+                {activeSemester && !isRolloverAllowedForTrack && (
+                  <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2.5">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-bold text-amber-900">
+                        Rollover Locked for {rolloverTrack === "SHS" ? "Senior High School" : "College"}
+                      </p>
+                      <p className="text-xs text-amber-800 mt-0.5 leading-relaxed">
+                        The current active term has not yet reached its end date (<strong>{formatDate(activeSemester.endDate)}</strong>) or re-enrollment deadline (<strong>{formatDate(activeSemester.reenrollDeadline)}</strong>).
+                        Rollover is disabled until either date arrives so ongoing student records are not prematurely completed.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {activeSemester && isRolloverAllowedForTrack && (
+                  <div className="mt-2 flex items-center gap-1.5 text-xs text-emerald-700 font-medium">
+                    <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Eligible for rollover (deadline or end date reached).</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Upcoming Target Selection */}
+              <div>
+                <label className="block text-[#001A4D] font-bold text-sm mb-1">
+                  2. Select Target Upcoming Term to Activate:
+                </label>
+                <p className="text-gray-500 text-xs mb-3">
+                  This term will become the new current active period for {rolloverTrack === "SHS" ? "Senior High School" : "College"}.
+                </p>
+
+                {upcomingSemesters.length === 0 ? (
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-1.5 text-center">
+                    <AlertCircle className="w-5 h-5 text-amber-600 mx-auto" />
+                    <p className="text-xs font-bold text-amber-900">
+                      No Upcoming {rolloverTrack === "SHS" ? "Trimesters" : "Semesters"} Found
+                    </p>
+                    <p className="text-xs text-amber-800">
+                      Please register the next academic term in the main table before executing rollover.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    {upcomingSemesters.map((sem) => {
+                      const isSelected = targetSemester?.id === sem.id;
+                      return (
+                        <label
+                          key={sem.id}
+                          onClick={() => setSelectedTargetId(sem.id)}
+                          className={`block p-3.5 border rounded-xl cursor-pointer transition-all ${
+                            isSelected
+                              ? "border-[#0E4EBD] bg-blue-50/50 ring-2 ring-[#0E4EBD]/25"
+                              : "border-gray-200 hover:border-gray-300 bg-white"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <input
+                                type="radio"
+                                name="targetSemester"
+                                checked={isSelected}
+                                onChange={() => setSelectedTargetId(sem.id)}
+                                className="accent-[#0E4EBD]"
+                              />
+                              <div>
+                                <p className="font-bold text-[#001A4D] text-sm">
+                                  {sem.semester} · A.Y. {sem.academicYear}
+                                </p>
+                                <p className="text-xs text-gray-500 mt-0.5">
+                                  {formatDate(sem.startDate)} – {formatDate(sem.endDate)}
+                                </p>
+                              </div>
+                            </div>
+                            <span className="px-2.5 py-1 bg-blue-50 text-[#0E4EBD] text-xs font-mono font-bold rounded-lg border border-blue-100">
+                              {sem.label}
+                            </span>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           )}
 
-          {step === 4 && (
-            <div>
-              <p className="text-[#001A4D] font-bold text-lg mb-4">Final confirmation before executing rollover.</p>
-              <div className="p-5 bg-[#001A4D] rounded-2xl mb-4 text-white">
-                <p className="text-[#FFD41C] font-bold text-xs uppercase tracking-wider mb-3">Rollover Execution Summary</p>
-                {[
-                  { label: "Current Active Semester", value: activeSemester ? `${activeSemester.semester} · A.Y. ${activeSemester.academicYear}` : "None" },
-                  { label: "Target Active Semester", value: targetSemester ? `${targetSemester.semester} · A.Y. ${targetSemester.academicYear}` : "—" },
-                  { label: "Budget carry-over", value: carryBudget ? "Yes — unspent balances roll over" : "No — fresh start" },
-                  { label: "Auto-inactivate overdue", value: autoInactivate ? "Enabled" : "Disabled" },
-                ].map((row) => (
-                  <div key={row.label} className="flex justify-between items-center py-2 border-b border-white/10 last:border-0 text-sm">
-                    <span className="text-white/70">{row.label}</span>
-                    <span className="text-white font-medium">{row.value}</span>
-                  </div>
-                ))}
+          {/* STEP 2: Review Impact & Confirm */}
+          {step === 2 && (
+            <div className="space-y-4">
+              <div>
+                <p className="text-[#001A4D] font-bold text-base">Review Rollover Impact</p>
+                <p className="text-gray-500 text-xs">
+                  Verify what changes will take effect once you execute this rollover for <strong>{rolloverTrack === "SHS" ? "Senior High School" : "College"}</strong>.
+                </p>
               </div>
-              <div className="p-4 border border-gray-200 rounded-xl">
+
+              {/* Term Transition Banner */}
+              <div className="p-4 bg-gradient-to-r from-[#001A4D] via-[#002B7F] to-[#0E4EBD] rounded-xl text-white flex items-center justify-between">
+                <div>
+                  <p className="text-white/70 text-[10px] uppercase font-bold tracking-wider">Closing Active Term</p>
+                  <p className="text-sm font-bold">{activeSemester?.label || "None"}</p>
+                  <span className="text-[10px] text-amber-300">Status &rarr; COMPLETED</span>
+                </div>
+                <div className="text-xl font-bold text-[#FFD41C]">➔</div>
+                <div>
+                  <p className="text-[#FFD41C] text-[10px] uppercase font-bold tracking-wider">Activating Next Term</p>
+                  <p className="text-sm font-bold">{targetSemester?.label}</p>
+                  <span className="text-[10px] text-green-300">Status &rarr; ACTIVE</span>
+                </div>
+              </div>
+
+              {/* Direct Simple Explanation Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div className="border border-blue-200 bg-blue-50/50 rounded-xl p-3.5 space-y-2">
+                  <div className="flex items-center gap-1.5 font-bold text-[#001A4D]">
+                    <RefreshCw className="w-4 h-4 text-[#0E4EBD]" />
+                    <span>Student Re-enrollment Effect</span>
+                  </div>
+                  <ul className="space-y-1.5 text-gray-700">
+                    <li className="flex items-start gap-1.5">
+                      <span className="text-[#0E4EBD] font-bold">•</span>
+                      <span>
+                        <strong>All active {rolloverTrack === "SHS" ? "SHS" : "College"} students</strong> will now be flagged as <em>Pending Re-enrollment</em> for {targetSemester?.label}.
+                      </span>
+                    </li>
+                    <li className="flex items-start gap-1.5">
+                      <span className="text-[#0E4EBD] font-bold">•</span>
+                      <span>Students will be prompted to confirm their enrollment via the mobile app.</span>
+                    </li>
+                    <li className="flex items-start gap-1.5">
+                      <span className="text-green-600 font-bold">✓</span>
+                      <span>
+                        Students from the <strong>{rolloverTrack === "SHS" ? "College" : "Senior High School"}</strong> track are <strong>NOT</strong> affected.
+                      </span>
+                    </li>
+                  </ul>
+                </div>
+
+                <div className="border border-green-200 bg-green-50/50 rounded-xl p-3.5 space-y-2">
+                  <div className="flex items-center gap-1.5 font-bold text-green-900">
+                    <CheckCircle className="w-4 h-4 text-green-600" />
+                    <span>Preserved Records</span>
+                  </div>
+                  <ul className="space-y-1.5 text-gray-700">
+                    <li className="flex items-start gap-1.5">
+                      <span className="text-green-600 font-bold">✓</span>
+                      <span>Past events and completed proposals remain archived and viewable.</span>
+                    </li>
+                    <li className="flex items-start gap-1.5">
+                      <span className="text-green-600 font-bold">✓</span>
+                      <span>All historical attendance logs, fines, and student balances are preserved.</span>
+                    </li>
+                    <li className="flex items-start gap-1.5">
+                      <span className="text-green-600 font-bold">✓</span>
+                      <span>Audit trail entry will be written automatically.</span>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+
+              {/* Confirmation Checkbox */}
+              <div className="p-3.5 border border-gray-200 rounded-xl bg-gray-50">
                 <label className="flex items-start gap-3 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={authorized}
                     onChange={() => setAuthorized(!authorized)}
-                    className="w-5 h-5 accent-[#0E4EBD] flex-shrink-0 mt-0.5"
+                    className="w-4 h-4 accent-[#0E4EBD] flex-shrink-0 mt-0.5"
                   />
-                  <span className="text-sm text-gray-700 leading-relaxed">
-                    I authorize this semester rollover. I understand this will activate <strong>{targetSemester?.label}</strong>, complete the previous active semester, and flag active students for re-enrollment.
+                  <span className="text-xs text-gray-700 leading-relaxed font-medium">
+                    I authorize this rollover for <strong>{rolloverTrack === "SHS" ? "Senior High School" : "College"}</strong>.
+                    I understand that students in this track will be required to re-enroll for <strong>{targetSemester?.label}</strong>.
                   </span>
                 </label>
               </div>
@@ -1367,35 +1379,36 @@ function RolloverModal({ existingSemesters, defaultAcademicLevel = "COLLEGE", on
           )}
         </div>
 
-        {/* Footer */}
-        <div className="sticky bottom-0 border-t border-gray-200 bg-white px-6 py-4 flex items-center justify-between rounded-b-2xl">
+        {/* Modal Footer */}
+        <div className="border-t border-gray-200 bg-white px-6 py-4 flex items-center justify-between rounded-b-2xl">
           <button
             onClick={() => (step > 1 ? setStep(step - 1) : onClose())}
-            className="px-5 py-2.5 border border-gray-300 text-gray-600 rounded-lg text-sm hover:bg-gray-50 transition-colors"
+            className="px-4 py-2 border border-gray-300 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-50 transition-colors"
           >
-            {step > 1 ? "← Previous" : "Cancel"}
+            {step > 1 ? "← Back" : "Cancel"}
           </button>
-          {step < 4 ? (
+
+          {step === 1 ? (
             <button
-              onClick={() => setStep(step + 1)}
-              disabled={step === 1 && !targetSemester}
-              className="px-5 py-2.5 bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] text-white rounded-lg text-sm font-bold hover:opacity-90 transition-opacity disabled:opacity-50 cursor-pointer shadow-sm"
+              onClick={() => setStep(2)}
+              disabled={!targetSemester || !isRolloverAllowedForTrack}
+              className="px-5 py-2.5 bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] text-white rounded-lg text-xs font-bold hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed shadow-xs cursor-pointer"
             >
-              Next: {steps[step]} →
+              Next: Review Impact →
             </button>
           ) : (
-            <div className="flex items-center gap-3">
-              <button
-                onClick={handleExecute}
-                disabled={!authorized || !targetSemester}
-                className={`px-5 py-3 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors ${
-                  authorized && targetSemester ? "bg-[#001A4D] text-[#FFD41C] hover:bg-[#001A4D]/90" : "bg-gray-100 text-gray-400 cursor-not-allowed"
-                }`}
-              >
-                <RefreshCw className="w-4 h-4" />
-                Execute Semester Rollover
-              </button>
-            </div>
+            <button
+              onClick={handleExecute}
+              disabled={!authorized || !targetSemester || !isRolloverAllowedForTrack}
+              className={`px-6 py-2.5 rounded-lg text-xs font-bold flex items-center gap-2 transition-all ${
+                authorized && targetSemester && isRolloverAllowedForTrack
+                  ? "bg-[#001A4D] text-[#FFD41C] hover:bg-[#001A4D]/90 shadow-sm cursor-pointer"
+                  : "bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200"
+              }`}
+            >
+              <RefreshCw className="w-4 h-4" />
+              Execute Rollover Now
+            </button>
           )}
         </div>
       </div>
@@ -1412,200 +1425,331 @@ function SemesterHistoryModal({
   semester: SemesterDocument;
   onClose: () => void;
 }) {
-  const [tab, setTab] = useState("events");
-  const historyTabs = ["events", "attendance", "financial", "students"];
+  const [tab, setTab] = useState<"overview" | "events" | "students">("overview");
+  const [events, setEvents] = useState<any[]>([]);
+  const [students, setStudents] = useState<any[]>([]);
+  const [loadingData, setLoadingData] = useState(true);
+
+  const academicTrack = semester.academicLevel || (String(semester.semester).includes("Trimester") ? "SHS" : "COLLEGE");
+
+  // Query events and students tied to this semester
+  useEffect(() => {
+    let unsubEvents: () => void = () => {};
+    let unsubStudents: () => void = () => {};
+
+    try {
+      const eventsQ = query(collection(db, "events"));
+      unsubEvents = onSnapshot(eventsQ, (snap) => {
+        const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const matchedEvents = docs.filter((e: any) =>
+          e.semesterId === semester.id ||
+          (e.schoolYear === semester.academicYear && (e.semester === semester.semester || e.term === semester.semester))
+        );
+        setEvents(matchedEvents);
+      });
+
+      const studentsQ = query(collection(db, "students"));
+      unsubStudents = onSnapshot(studentsQ, (snap) => {
+        const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const matchedStudents = docs.filter((s: any) => {
+          const sLevel = s.academicLevel || (s.yearLevel === "Grade 11" || s.yearLevel === "Grade 12" ? "SHS" : "COLLEGE");
+          return (
+            sLevel === academicTrack &&
+            s.schoolYear === semester.academicYear &&
+            (s.semester === semester.semester || s.term === semester.semester)
+          );
+        });
+        setStudents(matchedStudents);
+        setLoadingData(false);
+      });
+    } catch (err) {
+      console.warn("Error subscribing to semester history:", err);
+      setLoadingData(false);
+    }
+
+    return () => {
+      unsubEvents();
+      unsubStudents();
+    };
+  }, [semester.id, semester.academicYear, semester.semester, academicTrack]);
+
+  // Export events CSV
+  const handleExportEventsCSV = () => {
+    if (events.length === 0) return alert("No events to export.");
+    const headers = ["Event Title", "Organizer", "Date", "Location", "Status"];
+    const rows = events.map((e) => [
+      `"${(e.title || e.eventName || "").replace(/"/g, '""')}"`,
+      `"${(e.organizationName || e.org || "").replace(/"/g, '""')}"`,
+      `"${e.date || e.startDate || ""}"`,
+      `"${(e.location || e.venue || "").replace(/"/g, '""')}"`,
+      `"${e.status || e.proposalStatus || ""}"`,
+    ]);
+    const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `Events_${semester.label}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Export students CSV
+  const handleExportStudentsCSV = () => {
+    if (students.length === 0) return alert("No students to export.");
+    const headers = ["Student ID", "Full Name", "Program", "Year Level", "Section", "Status"];
+    const rows = students.map((s) => [
+      `"${s.studentId || ""}"`,
+      `"${(s.firstName || "")} ${(s.lastName || "")}".trim()`,
+      `"${s.courseCode || s.courseName || ""}"`,
+      `"${s.yearLevel || ""}"`,
+      `"${s.section || ""}"`,
+      `"${s.status || ""}"`,
+    ]);
+    const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `Students_${semester.label}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/55" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-4xl h-[90vh] flex flex-col overflow-hidden">
-        {/* Amber read-only banner */}
-        <div className="flex items-center justify-between px-6 py-3 bg-amber-50 border-b border-amber-200">
-          <div className="flex items-center gap-2">
-            <Archive className="w-4 h-4 text-amber-600" />
-            <span className="text-amber-700 font-bold text-sm">
-              Viewing Historical Data: {semester.semester} · A.Y. {semester.academicYear}. All data in this view is read-only.
-            </span>
-          </div>
-          <button onClick={onClose} className="text-[#001A4D] text-xs font-medium hover:underline">
-            Return to Current Semester
-          </button>
-        </div>
-
-        {/* Header Card */}
-        <div className="bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] px-6 py-5 flex items-center justify-between">
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-3xl h-[85vh] flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-[#001A4D] to-[#0E4EBD] px-6 py-5 flex items-center justify-between text-white">
           <div>
-            <p className="text-white font-bold text-2xl">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="px-2.5 py-0.5 bg-white/20 text-[#FFD41C] text-xs font-bold rounded-full">
+                {academicTrack === "SHS" ? "Senior High School" : "College"}
+              </span>
+              <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                semester.status === "ACTIVE"
+                  ? "bg-green-500 text-white"
+                  : semester.status === "UPCOMING"
+                  ? "bg-blue-400 text-white"
+                  : "bg-gray-400 text-white"
+              }`}>
+                {semester.status}
+              </span>
+            </div>
+            <h3 className="text-xl font-bold">
               {semester.semester} · A.Y. {semester.academicYear}
-            </p>
-            <p className="text-white/80 text-sm">
-              {formatDate(semester.startDate)} — {formatDate(semester.endDate)}
+            </h3>
+            <p className="text-white/80 text-xs mt-0.5 font-mono">
+              Label: {semester.label}
             </p>
           </div>
-          <div className="flex gap-3">
-            {[
-              { label: "Events Held", value: semester.events },
-              { label: "Students Active", value: semester.students },
-              { label: "Liquidations Filed", value: "—" },
-              { label: "Certificates Issued", value: "—" },
-            ].map((chip) => (
-              <div key={chip.label} className="px-3 py-2 bg-white/15 rounded-xl text-center">
-                <p className="text-white font-bold text-base">{chip.value}</p>
-                <p className="text-white/80 text-xs">{chip.label}</p>
-              </div>
-            ))}
-          </div>
+          <button onClick={onClose} className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors">
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-gray-200 px-6 bg-white">
-          {historyTabs.map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`px-5 py-3 text-sm font-medium capitalize border-b-2 transition-colors ${
-                tab === t ? "border-[#0E4EBD] text-[#0E4EBD] font-bold" : "border-transparent text-gray-500 hover:text-gray-700"
-              }`}
-            >
-              {t === "events" ? "Events" : t === "attendance" ? "Attendance" : t === "financial" ? "Financial" : "Students"}
-            </button>
-          ))}
+        <div className="flex border-b border-gray-200 px-6 bg-white gap-2">
+          <button
+            onClick={() => setTab("overview")}
+            className={`px-4 py-3 text-xs font-bold border-b-2 transition-colors ${
+              tab === "overview" ? "border-[#0E4EBD] text-[#0E4EBD]" : "border-transparent text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            Overview
+          </button>
+          <button
+            onClick={() => setTab("events")}
+            className={`px-4 py-3 text-xs font-bold border-b-2 transition-colors flex items-center gap-1.5 ${
+              tab === "events" ? "border-[#0E4EBD] text-[#0E4EBD]" : "border-transparent text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            Events
+            <span className="px-1.5 py-0.2 bg-gray-100 text-gray-600 rounded-full text-[10px]">
+              {events.length}
+            </span>
+          </button>
+          <button
+            onClick={() => setTab("students")}
+            className={`px-4 py-3 text-xs font-bold border-b-2 transition-colors flex items-center gap-1.5 ${
+              tab === "students" ? "border-[#0E4EBD] text-[#0E4EBD]" : "border-transparent text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            Enrolled Students
+            <span className="px-1.5 py-0.2 bg-gray-100 text-gray-600 rounded-full text-[10px]">
+              {students.length}
+            </span>
+          </button>
         </div>
 
-        {/* Tab Content */}
+        {/* Content */}
         <div className="flex-1 overflow-y-auto p-6">
+          {tab === "overview" && (
+            <div className="space-y-5">
+              {/* Period Date Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                <div className="bg-gray-50 border border-gray-200 rounded-xl p-3.5">
+                  <div className="text-[11px] font-bold text-gray-500 uppercase">Start Date</div>
+                  <div className="text-sm font-bold text-[#001A4D] mt-1">{formatDate(semester.startDate)}</div>
+                </div>
+                <div className="bg-gray-50 border border-gray-200 rounded-xl p-3.5">
+                  <div className="text-[11px] font-bold text-gray-500 uppercase">End Date</div>
+                  <div className="text-sm font-bold text-[#001A4D] mt-1">{formatDate(semester.endDate)}</div>
+                </div>
+                <div className="bg-gray-50 border border-gray-200 rounded-xl p-3.5">
+                  <div className="text-[11px] font-bold text-gray-500 uppercase">Duration</div>
+                  <div className="text-sm font-bold text-[#0E4EBD] mt-1">{weeksBetween(semester.startDate, semester.endDate)}</div>
+                </div>
+                <div className="bg-gray-50 border border-gray-200 rounded-xl p-3.5">
+                  <div className="text-[11px] font-bold text-gray-500 uppercase">Re-enrollment Deadline</div>
+                  <div className="text-sm font-bold text-amber-600 mt-1">{formatDate(semester.reenrollDeadline)}</div>
+                </div>
+              </div>
+
+              {/* Real Metrics Summary */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="border border-blue-200 bg-blue-50/40 rounded-xl p-4">
+                  <div className="text-xs font-bold text-[#001A4D] uppercase tracking-wider mb-1">
+                    {academicTrack === "SHS" ? "Senior High School" : "College"} Students
+                  </div>
+                  <div className="text-3xl font-black text-[#001A4D]">{students.length}</div>
+                  <p className="text-xs text-gray-500 mt-1">Students enrolled in this academic period.</p>
+                </div>
+                <div className="border border-green-200 bg-green-50/40 rounded-xl p-4">
+                  <div className="text-xs font-bold text-green-900 uppercase tracking-wider mb-1">Events Hosted</div>
+                  <div className="text-3xl font-black text-green-700">{events.length}</div>
+                  <p className="text-xs text-gray-500 mt-1">Campus proposals and activities conducted.</p>
+                </div>
+              </div>
+
+              {/* Status Info Box */}
+              <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl text-xs space-y-2">
+                <div className="font-bold text-[#001A4D]">Period Status Information</div>
+                <div className="text-gray-600 leading-relaxed">
+                  {semester.status === "ACTIVE" ? (
+                    <span>This is currently the active period for {academicTrack === "SHS" ? "Senior High School" : "College"}. Active students can re-enroll and new event proposals anchor to this term.</span>
+                  ) : semester.status === "UPCOMING" ? (
+                    <span>This is an upcoming period scheduled to begin on {formatDate(semester.startDate)}. You can edit its dates or activate it through a semester rollover once the active period concludes.</span>
+                  ) : (
+                    <span>This period is completed. All associated event outcomes, attendance history, and student rosters are preserved for institutional audit.</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {tab === "events" && (
-            <div className="space-y-3">
-              {semester.events === 0 ? (
-                <div className="text-center py-10 text-gray-400">
-                  <Calendar className="w-8 h-8 mx-auto mb-2 opacity-40" />
+            <div>
+              {loadingData ? (
+                <div className="py-12 text-center text-gray-400">Loading events...</div>
+              ) : events.length === 0 ? (
+                <div className="py-12 text-center text-gray-400 space-y-2">
+                  <Calendar className="w-8 h-8 mx-auto text-gray-300" />
                   <p className="text-sm">No events recorded for this semester.</p>
                 </div>
               ) : (
-                <p className="text-gray-500 text-sm">Event records are pulled from the events module.</p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-gray-50 text-gray-600 font-bold uppercase border-b border-gray-200">
+                      <tr>
+                        <th className="px-3 py-2.5">Event Name</th>
+                        <th className="px-3 py-2.5">Organizer</th>
+                        <th className="px-3 py-2.5">Date</th>
+                        <th className="px-3 py-2.5">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {events.map((e) => (
+                        <tr key={e.id} className="hover:bg-gray-50">
+                          <td className="px-3 py-2.5 font-bold text-[#001A4D]">{e.title || e.eventName}</td>
+                          <td className="px-3 py-2.5 text-gray-600">{e.organizationName || e.org || "Campus"}</td>
+                          <td className="px-3 py-2.5 text-gray-500">{e.date || e.startDate || "—"}</td>
+                          <td className="px-3 py-2.5">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 text-gray-700">
+                              {e.status || e.proposalStatus}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
           )}
-          {tab === "attendance" && (
-            <div className="grid grid-cols-3 gap-4">
-              {[
-                { label: "Overall Attendance Rate", value: "—", color: "text-green-600" },
-                { label: "Total Check-ins", value: "—", color: "text-[#001A4D]" },
-                { label: "Avg per Event", value: "—", color: "text-[#0E4EBD]" },
-              ].map((s) => (
-                <div key={s.label} className="p-4 bg-white border border-gray-200 rounded-xl text-center">
-                  <p className={`text-3xl font-bold ${s.color}`}>{s.value}</p>
-                  <p className="text-gray-500 text-xs mt-1">{s.label}</p>
-                </div>
-              ))}
-            </div>
-          )}
-          {tab === "financial" && (
-            <div className="grid grid-cols-2 gap-4">
-              {[
-                { label: "Total Budget Allocated", value: "—", color: "text-[#001A4D]" },
-                { label: "Total Spent", value: "—", color: "text-[#0E4EBD]" },
-                { label: "Liquidations Filed", value: "—", color: "text-blue-600" },
-                { label: "Approved", value: "—", color: "text-green-600" },
-              ].map((s) => (
-                <div key={s.label} className="p-4 bg-white border border-gray-200 rounded-xl">
-                  <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
-                  <p className="text-gray-500 text-xs mt-1">{s.label}</p>
-                </div>
-              ))}
-            </div>
-          )}
+
           {tab === "students" && (
-            <div className="grid grid-cols-2 gap-4">
-              {[
-                { label: "Total Enrolled", value: String(semester.students) || "—", color: "text-[#001A4D]" },
-                { label: "Active at Semester End", value: "—", color: "text-green-600" },
-                { label: "Overall Compliance Rate", value: "—", color: "text-[#0E4EBD]" },
-                { label: "Re-enrollment Confirmation", value: "—", color: "text-blue-600" },
-              ].map((s) => (
-                <div key={s.label} className="p-4 bg-white border border-gray-200 rounded-xl">
-                  <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
-                  <p className="text-gray-500 text-xs mt-1">{s.label}</p>
+            <div>
+              {loadingData ? (
+                <div className="py-12 text-center text-gray-400">Loading students...</div>
+              ) : students.length === 0 ? (
+                <div className="py-12 text-center text-gray-400 space-y-2">
+                  <School className="w-8 h-8 mx-auto text-gray-300" />
+                  <p className="text-sm">No students recorded under this academic period.</p>
                 </div>
-              ))}
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-gray-50 text-gray-600 font-bold uppercase border-b border-gray-200">
+                      <tr>
+                        <th className="px-3 py-2.5">Student ID</th>
+                        <th className="px-3 py-2.5">Student Name</th>
+                        <th className="px-3 py-2.5">Program</th>
+                        <th className="px-3 py-2.5">Year &amp; Section</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {students.map((s) => (
+                        <tr key={s.id} className="hover:bg-gray-50">
+                          <td className="px-3 py-2.5 font-mono font-bold text-[#0E4EBD]">{s.studentId}</td>
+                          <td className="px-3 py-2.5 font-bold text-[#001A4D]">{s.firstName} {s.lastName}</td>
+                          <td className="px-3 py-2.5 text-gray-600">{s.courseCode || s.courseName}</td>
+                          <td className="px-3 py-2.5 text-gray-600">{s.yearLevel} - {s.section}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
         </div>
 
-        {/* Export Footer */}
-        <div className="p-4 border-t border-gray-200 bg-gray-50">
-          <p className="text-[#001A4D] font-bold text-sm mb-3">Generate Historical Report</p>
-          <div className="flex gap-3">
-            <button className="px-4 py-2 bg-[#001A4D] text-white rounded-lg text-xs font-medium flex items-center gap-1.5 hover:bg-[#001A4D]/90 transition-colors">
+        {/* Footer with Exports */}
+        <div className="px-6 py-3.5 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleExportEventsCSV}
+              disabled={events.length === 0}
+              className="px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed shadow-2xs"
+            >
               <Download className="w-3.5 h-3.5" />
-              Export Full Semester Report (PDF)
+              Export Events (CSV)
             </button>
-            <button className="px-4 py-2 border border-[#0E4EBD] text-[#0E4EBD] rounded-lg text-xs hover:bg-blue-50 transition-colors flex items-center gap-1.5">
-              <FileText className="w-3.5 h-3.5" />
-              Export Financial Summary (Excel)
-            </button>
-            <button className="px-4 py-2 border border-gray-300 text-gray-600 rounded-lg text-xs hover:bg-gray-50 transition-colors">
-              Export Attendance Data (CSV)
+            <button
+              onClick={handleExportStudentsCSV}
+              disabled={students.length === 0}
+              className="px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed shadow-2xs"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Export Students (CSV)
             </button>
           </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Archive Confirm Modal ─────────────────────────────────────────────────────
-function ArchiveConfirmModal({
-  semester,
-  onClose,
-  onConfirm,
-}: {
-  semester: SemesterDocument;
-  onClose: () => void;
-  onConfirm: () => Promise<void>;
-}) {
-  const [loading, setLoading] = useState(false);
-
-  async function handleConfirm() {
-    setLoading(true);
-    await onConfirm();
-    setLoading(false);
-    onClose();
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/55" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-[420px] overflow-hidden">
-        <div className="bg-gradient-to-r from-amber-500 to-amber-400 px-6 py-4 flex items-center gap-3">
-          <Archive className="w-5 h-5 text-white" />
-          <h3 className="text-white font-bold text-base">Archive Semester</h3>
-        </div>
-        <div className="p-5">
-          <p className="text-[#001A4D] font-medium mb-2">
-            Archive <strong>{semester.semester} · A.Y. {semester.academicYear}</strong>?
-          </p>
-          <p className="text-gray-500 text-sm">
-            This will mark the semester as <strong>COMPLETED</strong> and hide it from the active view. Historical data is preserved and accessible in the Archived tab.
-          </p>
-        </div>
-        <div className="px-5 py-4 border-t border-gray-200 flex items-center justify-end gap-3">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900">
-            Cancel
-          </button>
           <button
-            onClick={handleConfirm}
-            disabled={loading}
-            className="px-5 py-2.5 bg-amber-500 text-white rounded-lg text-sm font-medium flex items-center gap-2 hover:bg-amber-600 transition-colors"
+            onClick={onClose}
+            className="px-5 py-2 bg-[#001A4D] text-white rounded-lg text-xs font-bold hover:bg-[#001A4D]/90 transition-colors"
           >
-            {loading ? <Loader className="w-4 h-4 animate-spin" /> : <Archive className="w-4 h-4" />}
-            Archive Semester
+            Close
           </button>
         </div>
       </div>
     </div>
   );
 }
+
+
+
 
 // ─── Edit Semester Modal ───────────────────────────────────────────────────────
 interface EditSemesterModalProps {
@@ -1922,101 +2066,8 @@ function EditSemesterModal({ semester, existingSemesters, onClose }: EditSemeste
   );
 }
 
-// ─── Delete Confirm Modal ──────────────────────────────────────────────────────
-function DeleteConfirmModal({
-  semester,
-  onClose,
-  onConfirm,
-}: {
-  semester: SemesterDocument;
-  onClose: () => void;
-  onConfirm: () => Promise<void>;
-}) {
-  const [confirmText, setConfirmText] = useState("");
-  const [loading, setLoading] = useState(false);
 
-  const isConfirmed = confirmText.trim().toUpperCase() === "DELETE";
 
-  async function handleDelete() {
-    if (!isConfirmed) return;
-    setLoading(true);
-    await onConfirm();
-    setLoading(false);
-    onClose();
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-[440px] overflow-hidden">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-red-600 to-red-500 px-6 py-4 flex items-center gap-3">
-          <Trash2 className="w-5 h-5 text-white" />
-          <h3 className="text-white font-bold text-base">Delete Semester</h3>
-        </div>
-
-        <div className="p-5 space-y-4">
-          {/* Warning */}
-          <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
-            <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="text-red-700 text-xs font-semibold">This action is permanent and cannot be undone.</p>
-              <p className="text-red-600 text-xs mt-0.5">
-                All records associated with this semester will be permanently removed from the database.
-              </p>
-            </div>
-          </div>
-
-          {/* Semester info */}
-          <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl">
-            <p className="text-[#001A4D] font-bold text-sm">{semester.semester} · A.Y. {semester.academicYear}</p>
-            <p className="text-gray-500 text-xs mt-1">
-              {formatDate(semester.startDate)} — {formatDate(semester.endDate)}
-            </p>
-            <span className="mt-2 inline-flex px-2 py-0.5 bg-gray-100 text-gray-500 text-xs font-medium rounded-full">
-              ARCHIVED
-            </span>
-          </div>
-
-          {/* Confirmation input */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Type <span className="font-mono font-bold text-red-600">DELETE</span> to confirm
-            </label>
-            <input
-              type="text"
-              placeholder="DELETE"
-              value={confirmText}
-              onChange={(e) => setConfirmText(e.target.value)}
-              className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-red-400 focus:border-transparent font-mono ${
-                confirmText && !isConfirmed ? "border-red-400 bg-red-50" : "border-gray-300"
-              }`}
-            />
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="px-5 py-4 border-t border-gray-200 flex items-center justify-between">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 transition-colors">
-            Cancel
-          </button>
-          <button
-            onClick={handleDelete}
-            disabled={!isConfirmed || loading}
-            className={`px-5 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2 transition-all ${
-              isConfirmed && !loading
-                ? "bg-red-600 text-white hover:bg-red-700"
-                : "bg-gray-100 text-gray-400 cursor-not-allowed"
-            }`}
-          >
-            {loading ? <Loader className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-            Delete Permanently
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ─── Loading Skeleton ─────────────────────────────────────────────────────────
 function TableSkeleton() {
@@ -2030,8 +2081,7 @@ function TableSkeleton() {
           <div className="h-4 w-20 bg-gray-200 rounded" />
           <div className="h-4 w-20 bg-gray-200 rounded" />
           <div className="h-4 w-16 bg-gray-200 rounded" />
-          <div className="h-4 w-8 bg-gray-200 rounded" />
-          <div className="h-4 w-8 bg-gray-200 rounded" />
+          <div className="h-4 w-20 bg-gray-200 rounded" />
         </div>
       ))}
     </div>
@@ -2042,20 +2092,17 @@ function TableSkeleton() {
 export function AcademicSemesterSettings() {
   const { data: semesters, loading, error } = useSemesters();
 
-  const [activeTab, setActiveTab] = useState<"college" | "shs" | "archived">("college");
+  const [activeTab, setActiveTab] = useState<"college" | "shs" | "completed">("college");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [showAddModal, setShowAddModal] = useState(false);
   const [showRollover, setShowRollover] = useState(false);
   const [historyTarget, setHistoryTarget] = useState<SemesterDocument | null>(null);
-  const [archiveTarget, setArchiveTarget] = useState<SemesterDocument | null>(null);
   const [editTarget, setEditTarget]       = useState<SemesterDocument | null>(null);
-  const [deleteTarget, setDeleteTarget]   = useState<SemesterDocument | null>(null);
 
   const activeCollegeSemester = useMemo(
     () =>
       semesters.find(
         (s) =>
-          !s.archived &&
           s.status === "ACTIVE" &&
           (s.academicLevel === "COLLEGE" || (!s.academicLevel && !String(s.semester).includes("Trimester")))
       ),
@@ -2066,12 +2113,24 @@ export function AcademicSemesterSettings() {
     () =>
       semesters.find(
         (s) =>
-          !s.archived &&
           s.status === "ACTIVE" &&
           (s.academicLevel === "SHS" || String(s.semester).includes("Trimester"))
       ),
     [semesters]
   );
+
+  // Rollover validation: active term end date or reenrollment deadline must be passed
+  const isCollegeRolloverReady = Boolean(
+    activeCollegeSemester &&
+    (isDeadlinePassed(activeCollegeSemester.endDate) || isDeadlinePassed(activeCollegeSemester.reenrollDeadline))
+  );
+
+  const isShsRolloverReady = Boolean(
+    activeShsSemester &&
+    (isDeadlinePassed(activeShsSemester.endDate) || isDeadlinePassed(activeShsSemester.reenrollDeadline))
+  );
+
+  const canAnyRollover = isCollegeRolloverReady || isShsRolloverReady;
 
   const currentDisplayActiveSemester = activeTab === "shs" ? activeShsSemester : activeCollegeSemester;
   const bannerState = deriveBannerState(
@@ -2080,16 +2139,16 @@ export function AcademicSemesterSettings() {
 
   const filteredSemesters = useMemo(() => {
     let list: SemesterDocument[] = [];
-    if (activeTab === "archived") {
-      list = semesters.filter((s) => s.archived || s.status === "COMPLETED");
+    if (activeTab === "completed") {
+      list = semesters.filter((s) => s.status === "COMPLETED");
     } else if (activeTab === "shs") {
       list = semesters.filter(
-        (s) => !s.archived && (s.academicLevel === "SHS" || String(s.semester).includes("Trimester"))
+        (s) => s.status !== "COMPLETED" && (s.academicLevel === "SHS" || String(s.semester).includes("Trimester"))
       );
     } else {
       list = semesters.filter(
         (s) =>
-          !s.archived &&
+          s.status !== "COMPLETED" &&
           (s.academicLevel === "COLLEGE" || (!s.academicLevel && !String(s.semester).includes("Trimester")))
       );
     }
@@ -2105,7 +2164,17 @@ export function AcademicSemesterSettings() {
         </div>
         <button
           onClick={() => setShowRollover(true)}
-          className="px-5 py-2.5 bg-[#001A4D] hover:bg-[#002D72] text-white rounded-lg font-bold text-sm flex items-center gap-2 transition-colors shadow-xs cursor-pointer"
+          disabled={!canAnyRollover}
+          className={`px-5 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors shadow-xs ${
+            canAnyRollover
+              ? "bg-[#001A4D] hover:bg-[#002D72] text-white cursor-pointer"
+              : "bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed"
+          }`}
+          title={
+            !canAnyRollover
+              ? "Rollover Locked: Neither College nor Senior High active term has reached its end date or re-enrollment deadline yet."
+              : "Run Semester Rollover"
+          }
         >
           <RefreshCw className="w-4 h-4" />
           Run Semester Rollover
@@ -2116,6 +2185,12 @@ export function AcademicSemesterSettings() {
       <ActiveSemesterBanner
         state={bannerState}
         activeSemester={currentDisplayActiveSemester}
+        canRollover={
+          currentDisplayActiveSemester
+            ? isDeadlinePassed(currentDisplayActiveSemester.endDate) ||
+              isDeadlinePassed(currentDisplayActiveSemester.reenrollDeadline)
+            : false
+        }
         onRollover={() => setShowRollover(true)}
       />
 
@@ -2138,7 +2213,7 @@ export function AcademicSemesterSettings() {
             <div className="flex gap-1 bg-gray-50 p-1 rounded-xl border border-gray-200">
               <button
                 onClick={() => setActiveTab("college")}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   activeTab === "college"
                     ? "bg-[#001A4D] text-[#FFD41C] shadow-xs"
                     : "text-gray-600 hover:text-gray-900"
@@ -2148,7 +2223,7 @@ export function AcademicSemesterSettings() {
               </button>
               <button
                 onClick={() => setActiveTab("shs")}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   activeTab === "shs"
                     ? "bg-amber-600 text-white shadow-xs"
                     : "text-gray-600 hover:text-gray-900"
@@ -2157,14 +2232,14 @@ export function AcademicSemesterSettings() {
                 Senior High School (Trimesters)
               </button>
               <button
-                onClick={() => setActiveTab("archived")}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                  activeTab === "archived"
-                    ? "bg-gray-700 text-white shadow-xs"
+                onClick={() => setActiveTab("completed")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  activeTab === "completed"
+                    ? "bg-[#001A4D] text-[#FFD41C] shadow-xs"
                     : "text-gray-600 hover:text-gray-900"
                 }`}
               >
-                Archived &amp; Completed
+                Completed
               </button>
             </div>
           </div>
@@ -2200,9 +2275,9 @@ export function AcademicSemesterSettings() {
                 ? "No active or upcoming college semesters."
                 : activeTab === "shs"
                 ? "No active or upcoming SHS trimesters."
-                : "No archived semesters."}
+                : "No completed semesters."}
             </p>
-            {activeTab !== "archived" && (
+            {activeTab !== "completed" && (
               <button
                 onClick={() => setShowAddModal(true)}
                 className="mt-3 px-4 py-2 text-[#0E4EBD] text-sm font-bold hover:underline flex items-center gap-1 mx-auto cursor-pointer"
@@ -2261,10 +2336,7 @@ export function AcademicSemesterSettings() {
                     Duration
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide border-b border-[#E0E0E0]">
-                    Events
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide border-b border-[#E0E0E0]">
-                    Students
+                    Re-enrollment Deadline
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide border-b border-[#E0E0E0]">
                     Actions
@@ -2294,15 +2366,16 @@ export function AcademicSemesterSettings() {
                     <td className="px-4 py-3 text-gray-500 text-sm">{formatDate(sem.startDate)}</td>
                     <td className="px-4 py-3 text-gray-500 text-sm">{formatDate(sem.endDate)}</td>
                     <td className="px-4 py-3 text-gray-500 text-sm">{weeksBetween(sem.startDate, sem.endDate)}</td>
-                    <td className="px-4 py-3 text-[#0E4EBD] font-bold text-sm">{sem.events}</td>
-                    <td className="px-4 py-3 text-[#001A4D] font-bold text-sm">{sem.students}</td>
+                    <td className="px-4 py-3 text-gray-700 font-medium text-sm">
+                      {sem.reenrollDeadline ? formatDate(sem.reenrollDeadline) : "—"}
+                    </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1">
                         {/* View — always available */}
                         <button
                           onClick={() => setHistoryTarget(sem)}
                           className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-blue-50 text-blue-600 transition-colors"
-                          title="View Semester Data"
+                          title="View Semester Details"
                         >
                           <Eye className="w-4 h-4" />
                         </button>
@@ -2326,28 +2399,6 @@ export function AcademicSemesterSettings() {
                         >
                           <Edit className="w-4 h-4" />
                         </button>
-
-                        {/* Archive — shown only for non-archived, non-ACTIVE */}
-                        {!sem.archived && sem.status !== "ACTIVE" && (
-                          <button
-                            onClick={() => setArchiveTarget(sem)}
-                            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-amber-50 text-amber-500 transition-colors"
-                            title="Archive Semester"
-                          >
-                            <Archive className="w-4 h-4" />
-                          </button>
-                        )}
-
-                        {/* Delete — only for archived semesters */}
-                        {sem.archived && (
-                          <button
-                            onClick={() => setDeleteTarget(sem)}
-                            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-red-50 text-red-500 transition-colors"
-                            title="Delete Semester (archived only)"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
                       </div>
                     </td>
                   </tr>
@@ -2377,25 +2428,11 @@ export function AcademicSemesterSettings() {
       {historyTarget && (
         <SemesterHistoryModal semester={historyTarget} onClose={() => setHistoryTarget(null)} />
       )}
-      {archiveTarget && (
-        <ArchiveConfirmModal
-          semester={archiveTarget}
-          onClose={() => setArchiveTarget(null)}
-          onConfirm={() => archiveSemester(archiveTarget.id)}
-        />
-      )}
       {editTarget && (
         <EditSemesterModal
           semester={editTarget}
           existingSemesters={semesters}
           onClose={() => setEditTarget(null)}
-        />
-      )}
-      {deleteTarget && (
-        <DeleteConfirmModal
-          semester={deleteTarget}
-          onClose={() => setDeleteTarget(null)}
-          onConfirm={() => deleteSemester(deleteTarget.id)}
         />
       )}
     </div>

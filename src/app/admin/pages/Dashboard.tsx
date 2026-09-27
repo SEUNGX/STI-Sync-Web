@@ -4,7 +4,6 @@ import {
   CalendarCheck,
   Receipt,
   Building2,
-  BarChart3,
   Shield,
   TrendingUp,
   UserCheck,
@@ -56,27 +55,35 @@ export function Dashboard() {
 
   // ─── Metrics Computation ───────────────────────────────────────────────────
   const pendingStudents = useMemo(() => {
-    return students.filter((s) => s.status === "PENDING");
+    return students.filter((s) => s.status === "PENDING" || (s as any).status === "pending");
   }, [students]);
 
   const activeStudents = useMemo(() => {
-    return students.filter((s) => s.status === "ACTIVE");
+    return students.filter((s) => s.status === "ACTIVE" || (s as any).status === "active");
   }, [students]);
 
   const pendingEvents = useMemo(() => {
     return events.filter(
-      (e) => e.proposalStatus === "pending_review" || e.proposalStatus === "pending"
+      (e) =>
+        e.proposalStatus === "pending_review" ||
+        e.proposalStatus === "pending" ||
+        (e as any).proposalStatus === "submitted" ||
+        (e as any).status === "pending"
     );
   }, [events]);
 
   const pendingLiquidations = useMemo(() => {
     return liquidations.filter(
-      (l) => l.status === "pending_adviser_review" || (l as any).status === "submitted"
+      (l) =>
+        l.status === "pending" ||
+        l.status === "pending_adviser_review" ||
+        (l as any).status === "submitted" ||
+        (l as any).status === "pending_review"
     );
   }, [liquidations]);
 
   const pendingIncomingDocs = useMemo(() => {
-    return incomingDocs.filter((d) => d.status === "Pending");
+    return incomingDocs.filter((d) => d.status === "Pending" || (d as any).status === "pending");
   }, [incomingDocs]);
 
   const activeOrgs = useMemo(() => {
@@ -139,25 +146,27 @@ export function Dashboard() {
         subtitle: `${hostInfo?.acronym || hostInfo?.name || "Student Club"} · Proposed`,
         timestampMs: ms,
         dateFormatted: formatTimestampDate(e.createdAt),
-        route: `/home/event-approvals?id=${e.id}`,
+        route: `/home/event-approvals?tab=pending&id=${e.id}`,
         badgeColor: "bg-[#0E4EBD]",
       });
     });
 
     // 3. Pending Liquidations (Route directly to specific liquidation review)
     pendingLiquidations.forEach((l) => {
-      const ms = getMillis(l.updatedAt || l.createdAt);
-      const totalExp = Number(l.totalExpenses || (l as any).totalAmount || 0);
+      const ms = getMillis(l.submittedAt || l.updatedAt || l.createdAt);
+      const totalExp = Number(l.totalActualSpending ?? (l as any).totalExpenses ?? (l as any).totalAmount ?? 0);
+      const orgName = l.organizationName || orgMap.get(l.organizationId)?.name || "Student Club";
+      const title = l.eventTitle || (l as any).eventName || (l as any).title || "Financial Liquidation";
       items.push({
         id: `liq-${l.id}`,
         rawId: l.id,
         domain: "liquidation",
-        domainLabel: "Liquidation Report",
-        title: l.eventName || (l as any).title || "Financial Liquidation",
-        subtitle: `${l.organizationName || "Club"} · ${formatCurrency(totalExp)}`,
+        domainLabel: "Financial Liquidation",
+        title: title,
+        subtitle: `${orgName} · ${formatCurrency(totalExp)}`,
         timestampMs: ms,
-        dateFormatted: formatTimestampDate(l.updatedAt || l.createdAt),
-        route: `/home/liquidations?id=${l.id}`,
+        dateFormatted: formatTimestampDate(l.submittedAt || l.updatedAt || l.createdAt),
+        route: `/home/liquidations?tab=pending&id=${l.id}`,
         badgeColor: "bg-amber-500",
       });
     });
@@ -231,24 +240,14 @@ export function Dashboard() {
               {greeting}, {adviserDisplayName}.
             </h2>
             <p className="text-white/80 text-sm mt-1 max-w-2xl">
-              {profile?.campusName || "STI College"} — Real-time overview of student registrations, event proposals, organization activities, and financial reviews.
+              STI College Ormoc — Real-time overview of student verifications, event proposals, organization activities, and financial reviews.
             </p>
-          </div>
-
-          <div className="flex items-center gap-2 self-start md:self-auto">
-            <Button
-              onClick={() => navigate("/home/reports")}
-              className="bg-white text-[#001A4D] hover:bg-gray-100 font-bold shadow-sm cursor-pointer"
-            >
-              <BarChart3 className="w-4 h-4 mr-1.5 text-[#0E4EBD]" />
-              Reports Center
-            </Button>
           </div>
         </div>
         <Shield className="absolute right-6 top-1/2 -translate-y-1/2 w-44 h-44 opacity-10 pointer-events-none" />
       </div>
 
-      {/* Top 5 Real-Time Reactive Metric Cards */}
+      {/* Top 5 Real-Time Reactive Metric Cards (Non-redirecting informative summary cards) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {/* 1. Pending Student Verifications */}
         <MetricCard
@@ -257,7 +256,6 @@ export function Dashboard() {
           icon={UserCheck}
           gradient="red-orange"
           change="New student registrations"
-          onClick={() => navigate("/home/students")}
           badge={
             pendingStudents.length > 0 ? (
               <span className="px-2.5 py-1 bg-white text-red-700 rounded-full text-xs font-bold shadow-xs">
@@ -278,7 +276,6 @@ export function Dashboard() {
           icon={CalendarCheck}
           gradient="blue"
           change="Club proposals awaiting SAO"
-          onClick={() => navigate("/home/event-approvals")}
           badge={
             pendingEvents.length > 0 ? (
               <span className="px-2.5 py-1 bg-[#FFD41C] text-[#001A4D] rounded-full text-xs font-bold shadow-xs">
@@ -299,7 +296,6 @@ export function Dashboard() {
           icon={Receipt}
           gradient="gold"
           change="Post-event financial reports"
-          onClick={() => navigate("/home/liquidations")}
           badge={
             pendingLiquidations.length > 0 ? (
               <span className="px-2.5 py-1 bg-[#001A4D] text-[#FFD41C] rounded-full text-xs font-bold shadow-xs">
@@ -320,8 +316,6 @@ export function Dashboard() {
           icon={Building2}
           gradient="green"
           change="Recognized student clubs"
-          onClick={() => navigate("/home/organizations")}
-          trending="up"
         />
 
         {/* 5. Active Enrolled Students */}
@@ -331,8 +325,6 @@ export function Dashboard() {
           icon={Users}
           gradient="navy"
           change="Currently verified students"
-          onClick={() => navigate("/home/students")}
-          trending="up"
         />
       </div>
 
@@ -396,12 +388,9 @@ export function Dashboard() {
         {/* 2. Organization Activity (Fixed Height h-[420px], Rows Pushed Directly to Top) */}
         <Card className="lg:col-span-4 h-[420px] border-[#E0E0E0] shadow-sm rounded-2xl flex flex-col gap-0 overflow-hidden">
           <CardHeader className="border-b border-gray-100 py-3.5 px-4 pb-3 flex-shrink-0">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Building2 className="w-5 h-5 text-[#0E4EBD]" />
-                <CardTitle className="text-[#001A4D] text-lg font-bold">Organization Activity</CardTitle>
-              </div>
-              <span className="text-xs text-gray-500 font-medium">{activeOrgs.length} Active Clubs</span>
+            <div className="flex items-center gap-2">
+              <Building2 className="w-5 h-5 text-[#0E4EBD]" />
+              <CardTitle className="text-[#001A4D] text-lg font-bold">Organization Activity</CardTitle>
             </div>
           </CardHeader>
           <CardContent className="px-4 pt-3 pb-3 flex-1 flex flex-col justify-start overflow-hidden">
@@ -458,7 +447,7 @@ export function Dashboard() {
           </CardHeader>
           <CardContent className="px-4 pt-3 pb-3 flex-1 flex flex-col justify-start space-y-2 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
             <Button
-              onClick={() => navigate("/home/students")}
+              onClick={() => navigate("/home/students?tab=pending")}
               className="w-full bg-[#001A4D] hover:bg-[#0E4EBD] text-white justify-between font-semibold text-xs py-3.5 cursor-pointer"
             >
               <span className="flex items-center gap-2">
@@ -473,7 +462,7 @@ export function Dashboard() {
             </Button>
 
             <Button
-              onClick={() => navigate("/home/event-approvals")}
+              onClick={() => navigate("/home/event-approvals?tab=pending")}
               variant="outline"
               className="w-full border-gray-300 text-[#001A4D] hover:bg-gray-50 justify-between font-semibold text-xs py-3.5 cursor-pointer"
             >
@@ -489,7 +478,7 @@ export function Dashboard() {
             </Button>
 
             <Button
-              onClick={() => navigate("/home/liquidations")}
+              onClick={() => navigate("/home/liquidations?tab=pending")}
               variant="outline"
               className="w-full border-gray-300 text-[#001A4D] hover:bg-gray-50 justify-between font-semibold text-xs py-3.5 cursor-pointer"
             >
@@ -519,7 +508,7 @@ export function Dashboard() {
               className="w-full border-gray-300 text-[#001A4D] hover:bg-gray-50 justify-start font-semibold text-xs py-3.5 cursor-pointer"
             >
               <TrendingUp className="w-4 h-4 mr-2 text-green-600" />
-              Live Attendance Gate
+              Attendance Gate
             </Button>
           </CardContent>
         </Card>
