@@ -96,6 +96,17 @@ export default function Step5Budget({ data, onUpdate, isOfficer, errors = {}, is
     }
   }, [data.studentPayablesEnabled, calculatedPerStudent]);
 
+  // If event visibility is turned off, automatically disable and clear student payables
+  useEffect(() => {
+    if (data.isVisible === false && data.studentPayablesEnabled) {
+      onUpdate({
+        studentPayablesEnabled: false,
+        adminFeeOverride: 0,
+        totalExpectedCollection: 0,
+      });
+    }
+  }, [data.isVisible, data.studentPayablesEnabled]);
+
   const handleAmountOverrideChange = (val: number) => {
     onUpdate({ adminFeeOverride: val, totalExpectedCollection: val * participantCount });
   };
@@ -182,27 +193,28 @@ export default function Step5Budget({ data, onUpdate, isOfficer, errors = {}, is
               <div className="flex items-center bg-gray-100 rounded-lg p-1 mr-2">
                 <span className="text-sm text-gray-700 mr-2 ml-1 flex items-center gap-1">
                   <span>Payables:</span>
-                  {isRestricted && <Lock className="w-3 h-3 text-amber-600" />}
+                  {(isRestricted || data.isVisible === false) && <Lock className="w-3 h-3 text-amber-600" />}
                 </span>
                 <button
                   type="button"
-                  disabled={isRestricted}
+                  disabled={isRestricted || data.isVisible === false}
                   onClick={() => updateField('studentPayablesEnabled', false)}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${isRestricted ? 'cursor-not-allowed opacity-75' : 'cursor-pointer'} ${!data.studentPayablesEnabled ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${isRestricted || data.isVisible === false ? 'cursor-not-allowed opacity-75' : 'cursor-pointer'} ${!data.studentPayablesEnabled ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
                 >
                   None
                 </button>
                 <button
                   type="button"
-                  disabled={isRestricted}
+                  disabled={isRestricted || data.isVisible === false}
                   onClick={() => updateField('studentPayablesEnabled', true)}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${isRestricted ? 'cursor-not-allowed opacity-75' : 'cursor-pointer'} ${data.studentPayablesEnabled ? `bg-white shadow ${accentText}` : 'text-gray-500 hover:text-gray-700'}`}
+                  title={data.isVisible === false ? 'Payables are disabled because Student Feed Visibility is turned off in Step 1' : undefined}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${isRestricted || data.isVisible === false ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'} ${data.studentPayablesEnabled ? `bg-white shadow ${accentText}` : 'text-gray-500 hover:text-gray-700'}`}
                 >
                   Required
                 </button>
               </div>
 
-              {data.studentPayablesEnabled && !isRestricted && (
+              {data.studentPayablesEnabled && !isRestricted && data.isVisible !== false && (
                 <button
                   type="button"
                   onClick={() => setShowPayables(true)}
@@ -223,6 +235,15 @@ export default function Step5Budget({ data, onUpdate, isOfficer, errors = {}, is
               )}
             </div>
           </div>
+
+          {data.isVisible === false && (
+            <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>
+                <strong>Student Feed Visibility Disabled:</strong> Student payables and fees cannot be configured because this event is hidden from student feeds.
+              </span>
+            </div>
+          )}
 
           {budgetItems.length === 0 ? (
             <div className="p-8 border-2 border-dashed border-gray-200 rounded-xl bg-gray-50 text-center space-y-2">
@@ -249,7 +270,7 @@ export default function Step5Budget({ data, onUpdate, isOfficer, errors = {}, is
                 <table className="w-full min-w-[700px]">
                   <thead className="bg-gray-100">
                     <tr>
-                      <th className="px-3 py-2.5 text-left text-xs font-bold text-gray-700 w-[25%]">Item Name / Category</th>
+                      <th className="px-3 py-2.5 text-left text-xs font-bold text-gray-700 w-[25%]">Item Name</th>
                       <th className="px-3 py-2.5 text-left text-xs font-bold text-gray-700 w-[30%]">Description</th>
                       <th className="px-3 py-2.5 text-left text-xs font-bold text-gray-700 w-[12%]">Quantity</th>
                       <th className="px-3 py-2.5 text-left text-xs font-bold text-gray-700 w-[18%]">Estimated Unit Cost</th>

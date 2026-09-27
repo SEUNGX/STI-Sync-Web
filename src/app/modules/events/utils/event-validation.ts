@@ -8,6 +8,34 @@ export function timeToMinutes(timeStr?: string): number {
   return h * 60 + m;
 }
 
+export function addMinutesToTime(timeStr: string, minutesToAdd: number): string {
+  if (!timeStr) return '';
+  const [hStr, mStr] = timeStr.split(':');
+  let h = parseInt(hStr, 10);
+  let m = parseInt(mStr, 10);
+  if (isNaN(h) || isNaN(m)) return timeStr;
+
+  let totalMins = h * 60 + m + minutesToAdd;
+  if (totalMins < 0) totalMins = (totalMins % 1440) + 1440;
+  totalMins = totalMins % 1440;
+
+  const newH = Math.floor(totalMins / 60);
+  const newM = totalMins % 60;
+  return `${newH.toString().padStart(2, '0')}:${newM.toString().padStart(2, '0')}`;
+}
+
+export function formatTime12Hour(timeStr?: string): string {
+  if (!timeStr) return '';
+  const [hStr, mStr] = timeStr.split(':');
+  let h = parseInt(hStr, 10);
+  if (isNaN(h)) return timeStr;
+  const m = mStr || '00';
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12;
+  if (h === 0) h = 12;
+  return `${h}:${m} ${ampm}`;
+}
+
 export interface InternalConflict {
   sessionAIndex: number;
   sessionBIndex: number;
@@ -197,14 +225,6 @@ export function validateStep1(data: EventFormData, isOfficer = false): StepValid
     fieldErrors.eventTypeId = 'Event Type is required.';
   }
 
-  const hasCategory =
-    Boolean(data.eventCategoryId && data.eventCategoryId !== '__other__') ||
-    Boolean(data.customEventCategoryName?.trim());
-  if (!hasCategory) {
-    errors.push('Please select or specify an Event Category.');
-    fieldErrors.eventCategoryId = 'Event Category is required.';
-  }
-
   if (!data.bannerImageUrl || !data.bannerImageUrl.trim()) {
     errors.push('Event Banner Image is required. Please upload an image.');
     fieldErrors.bannerImageUrl = 'Banner image is required.';
@@ -242,11 +262,6 @@ export function validateStep2(
   const errors: string[] = [];
   const fieldErrors: Record<string, string> = {};
 
-  if (!data.semesterId) {
-    errors.push('Active Semester is required.');
-    fieldErrors.semesterId = 'Please select an active semester.';
-  }
-
   const hasVenue =
     Boolean(data.venueId && data.venueId !== '__other__') ||
     Boolean(data.customVenueName?.trim());
@@ -254,6 +269,10 @@ export function validateStep2(
     errors.push('Venue is required. Please select or add a venue.');
     fieldErrors.venueId = 'Venue is required.';
   }
+
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
   const sessions = data.sessions || [];
   if (sessions.length === 0) {
@@ -285,6 +304,18 @@ export function validateStep2(
           errors.push(`Session ${sNum}: Start time must be before end time.`);
           fieldErrors[`session_${idx}_time`] = 'Start time must be before end time.';
         }
+
+        // Past time check if session date is today
+        if (s.date === todayStr) {
+          if (startMin < currentMinutes) {
+            errors.push(`Session ${sNum}: Start time cannot be in the past for today's date.`);
+            fieldErrors[`session_${idx}_startTime`] = 'Start time cannot be in the past.';
+          }
+          if (endMin <= currentMinutes) {
+            errors.push(`Session ${sNum}: End time cannot be in the past for today's date.`);
+            fieldErrors[`session_${idx}_endTime`] = 'End time cannot be in the past.';
+          }
+        }
       }
     });
   }
@@ -301,12 +332,86 @@ export function validateStep2(
     }
   }
 
-  // Attendance scanning thresholds check
+  // Attendance scanning thresholds & scanning windows check
+  const isQREnabled = Boolean(data.enableQRTickets === true || (data as any).enableQR === true);
   const grace = data.gracePeriodMinutes ?? 15;
   const late = data.lateThresholdMinutes ?? 60;
-  if (grace >= late && late > 0) {
-    errors.push(`Grace Period (${grace} mins) must be less than Late Threshold (${late} mins).`);
-    fieldErrors.gracePeriod = 'Grace period must be less than late threshold.';
+
+  if (isQREnabled) {
+    if (grace >= late && late > 0) {
+      errors.push(`Grace Period (${grace} mins) must be less than Late Threshold (${late} mins).`);
+      fieldErrors.gracePeriod = 'Grace period must be less than late threshold.';
+    }
+
+    sessions.forEach((s, idx) => {
+      const sNum = idx + 1;
+      const startMin = timeToMinutes(s.startTime);
+
+      if (!s.timeInOpen) {
+        errors.push(`Session ${sNum}: Time-In Opens time is required.`);
+        fieldErrors[`session_${idx}_timeInOpen`] = 'Time-In Opens is required.';
+      }
+      if (!s.timeInClose) {
+        errors.push(`Session ${sNum}: Time-In Closes time is required.`);
+        fieldErrors[`session_${idx}_timeInClose`] = 'Time-In Closes is required.';
+      }
+
+      if (s.timeInOpen && s.startTime) {
+        const inOpenMin = timeToMinutes(s.timeInOpen);
+        if (inOpenMin > startMin) {
+          errors.push(`Session ${sNum}: Time-In Opens (${s.timeInOpen}) cannot be after Session Start (${s.startTime}). Early arrivals must be able to scan.`);
+          fieldErrors[`session_${idx}_timeInOpen`] = 'Time-In Opens must be on or before session start.';
+        }
+      }
+
+      if (s.timeInOpen && s.timeInClose) {
+        const inOpenMin = timeToMinutes(s.timeInOpen);
+        const inCloseMin = timeToMinutes(s.timeInClose);
+        if (inOpenMin >= inCloseMin) {
+          errors.push(`Session ${sNum}: Time-In Opens (${s.timeInOpen}) must be earlier than Time-In Closes (${s.timeInClose}).`);
+          fieldErrors[`session_${idx}_timeInClose`] = 'Time-In Closes must be after Time-In Opens.';
+        }
+      }
+
+      if (s.startTime && s.timeInClose) {
+        const inCloseMin = timeToMinutes(s.timeInClose);
+        const graceCutoffMin = startMin + grace;
+        if (inCloseMin < graceCutoffMin) {
+          const graceCutoffStr = addMinutesToTime(s.startTime, grace);
+          errors.push(`Session ${sNum}: Time-In Closes (${s.timeInClose}) cannot be earlier than the Grace Period cutoff (${graceCutoffStr}).`);
+          fieldErrors[`session_${idx}_timeInClose`] = `Time-In Closes must be at or after Grace Period cutoff (${graceCutoffStr}).`;
+        }
+      }
+
+      if (s.hasTimeOut) {
+        if (!s.timeOutOpen) {
+          errors.push(`Session ${sNum}: Time-Out Opens time is required.`);
+          fieldErrors[`session_${idx}_timeOutOpen`] = 'Time-Out Opens is required.';
+        }
+        if (!s.timeOutClose) {
+          errors.push(`Session ${sNum}: Time-Out Closes time is required.`);
+          fieldErrors[`session_${idx}_timeOutClose`] = 'Time-Out Closes is required.';
+        }
+
+        if (s.timeInClose && s.timeOutOpen) {
+          const inCloseMin = timeToMinutes(s.timeInClose);
+          const outOpenMin = timeToMinutes(s.timeOutOpen);
+          if (outOpenMin < inCloseMin) {
+            errors.push(`Session ${sNum}: Time-Out Opens (${s.timeOutOpen}) cannot be earlier than Time-In Closes (${s.timeInClose}).`);
+            fieldErrors[`session_${idx}_timeOutOpen`] = 'Time-Out Opens must be at or after Time-In Closes.';
+          }
+        }
+
+        if (s.timeOutOpen && s.timeOutClose) {
+          const outOpenMin = timeToMinutes(s.timeOutOpen);
+          const outCloseMin = timeToMinutes(s.timeOutClose);
+          if (outOpenMin >= outCloseMin) {
+            errors.push(`Session ${sNum}: Time-Out Opens (${s.timeOutOpen}) must be earlier than Time-Out Closes (${s.timeOutClose}).`);
+            fieldErrors[`session_${idx}_timeOutClose`] = 'Time-Out Closes must be after Time-Out Opens.';
+          }
+        }
+      }
+    });
   }
 
   // Internal Overlap Conflicts
@@ -482,6 +587,8 @@ export function validateStep7(data: EventFormData, isOfficer = false): StepValid
 
   if (isOfficer && !data.isCertified && !data.officerAcknowledgement) {
     errors.push('Officer Proposal Acknowledgement & Certification must be checked.');
+  } else if (!isOfficer && !data.isCertified && !data.officerAcknowledgement) {
+    errors.push('SAO Adviser Authorization must be checked before publishing.');
   }
 
   return {

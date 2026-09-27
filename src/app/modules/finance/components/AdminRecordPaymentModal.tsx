@@ -25,12 +25,9 @@ export function AdminRecordPaymentModal({
   const displaySchoolId = resolvedSchoolId || payable.studentSchoolId || (payable as any).schoolId || payable.studentId || 'N/A';
 
   const [paymentAmount, setPaymentAmount] = useState<number>(remaining);
-  const [paymentMethod, setPaymentMethod] = useState<string>('cash');
-  const [receiptNumber, setReceiptNumber] = useState<string>('');
-  const [unlockQRTicket, setUnlockQRTicket] = useState<boolean>(
-    payable.qrTicketUnlocked ?? true
-  );
+  const [unlockQRTicket, setUnlockQRTicket] = useState<boolean>(true);
   const [notes, setNotes] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const isPayableClosed =
     payable.status === 'waived' ||
     payable.status === 'refund_pending' ||
@@ -47,9 +44,9 @@ export function AdminRecordPaymentModal({
         payable.id,
         paymentAmount,
         recordedByUid || 'admin',
-        paymentMethod,
+        'cash',
         unlockQRTicket,
-        receiptNumber.trim() || undefined,
+        undefined,
         notes.trim() || undefined
       );
       onClose();
@@ -169,38 +166,6 @@ export function AdminRecordPaymentModal({
               </label>
             </div>
           )}
-
-          {/* Payment Method */}
-          <div>
-            <label className="block text-xs font-semibold text-[#001A4D] mb-1">
-              Payment Method
-            </label>
-            <select
-              value={paymentMethod}
-              onChange={(e) => setPaymentMethod(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-[#7F77DD] bg-white cursor-pointer"
-            >
-              <option value="cash">Cash (Over the Counter)</option>
-              <option value="gcash">GCash</option>
-              <option value="maya">Maya</option>
-              <option value="bank_transfer">Bank Deposit / Transfer</option>
-              <option value="other">Other Official Receipt</option>
-            </select>
-          </div>
-
-          {/* Receipt / Reference # */}
-          <div>
-            <label className="block text-xs font-semibold text-[#001A4D] mb-1">
-              Official Receipt (OR) / Ref # (Optional)
-            </label>
-            <input
-              type="text"
-              value={receiptNumber}
-              onChange={(e) => setReceiptNumber(e.target.value)}
-              placeholder="e.g. OR# 987654 or GCash Ref# 10293847"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-[#7F77DD]"
-            />
-          </div>
 
           {/* Notes / Reference */}
           <div>

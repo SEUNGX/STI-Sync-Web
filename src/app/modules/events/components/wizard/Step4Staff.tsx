@@ -1,10 +1,9 @@
-import { useState, useEffect, useMemo } from 'react';
-import { Plus, Trash2, Shield, Search, Building2 } from 'lucide-react';
-import { collection, onSnapshot } from 'firebase/firestore';
-import { db } from '../../../../../services/firebase';
-import { useOrgOfficers, useOrganizationStream } from '../../../organizations';
+import { useState, useMemo } from 'react';
+import { Shield, Plus, Trash2, Building2, Search } from 'lucide-react';
+import { useOrganizationStream } from '../../../organizations';
+import { useAdviserProfile } from '../../../auth/hooks/useAdviserProfile';
+import { useOrgOfficers } from '../../../organizations/hooks/useOrgOfficers';
 import type { EventFormData, EventScanner } from '../../types/event.types';
-import { useOfficerProfile } from '../../../../auth/hooks/useOfficerProfile';
 
 interface Step4Props {
   data: EventFormData;
@@ -13,64 +12,42 @@ interface Step4Props {
   errors?: Record<string, string>;
 }
 
-export default function Step4Staff({ data, onUpdate, isOfficer, errors = {} }: Step4Props) {
-  const { profile: officerProfile } = useOfficerProfile();
-  const showOfficerMode = isOfficer !== undefined ? isOfficer : !!officerProfile;
+export default function Step4Staff({ data, onUpdate, isOfficer = false, errors = {} }: Step4Props) {
+  const { data: orgs, loading: orgsLoading } = useOrganizationStream();
+  const { profile: adviserProfile } = useAdviserProfile();
+  const [selectedOrgFilter, setSelectedOrgFilter] = useState<string>('all');
+  const [officerSearchQuery, setOfficerSearchQuery] = useState<string>('');
 
-  // Dynamic Theme Styling based on Officer vs Admin
+  const activeOrgs = useMemo(() => orgs.filter(o => !o.archived && o.status === 'active'), [orgs]);
+
+  // Mode: In officer wizard, restrict officer fetch to their hosting org
+  const showOfficerMode = isOfficer && !!data.hostingOrgId;
+  const effectiveOrgId = showOfficerMode ? data.hostingOrgId : (selectedOrgFilter || 'all');
+
+  // Fetch officers
+  const { officers, loading: officersLoading } = useOrgOfficers(effectiveOrgId);
+
+  // Theme styling based on context
   const accentBorder = 'border-[#0E4EBD]';
   const accentText = 'text-[#0E4EBD]';
   const accentBg = 'bg-[#0E4EBD]';
   const accentFocusRing = 'focus:ring-[#0E4EBD]';
   const accentGradient = 'from-[#001A4D] to-[#0E4EBD]';
 
-  // Stream active organizations for Admin org filter
-  const { data: orgs, loading: orgsLoading } = useOrganizationStream();
-  const activeOrgs = useMemo(() => orgs.filter(o => !o.archived), [orgs]);
+  const defaultScanner: EventScanner = {
+    id: '1',
+    name: 'Primary Scanner',
+    officerUserId: '',
+    officerName: '',
+    role: 'Door Scanner',
+    canCheckIn: true,
+    canCheckOut: true,
+    canViewList: false,
+    canEditRecords: false,
+    allowManualAttendance: false,
+  };
 
-  // Admin filter states
-  const [selectedOrgFilter, setSelectedOrgFilter] = useState<string>('all');
-  const [officerSearchQuery, setOfficerSearchQuery] = useState<string>('');
-
-  // Target org ID for fetching officers
-  const queryOrgId = showOfficerMode ? data.hostingOrgId : selectedOrgFilter;
-  const { officers, loading: officersLoading } = useOrgOfficers(queryOrgId || (showOfficerMode ? '' : 'all'));
-
-  const [advisers, setAdvisers] = useState<any[]>([]);
-
-  // Fetch real SAS Adviser / Admin profiles from Firestore
-  useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'sas_admins'), (snap) => {
-      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setAdvisers(docs);
-    }, (err) => {
-      console.warn('Failed to stream sas_admins:', err);
-    });
-    return () => unsub();
-  }, []);
-  
-  // Set default scanners if none exist
-  useEffect(() => {
-    if (!data.scanners || data.scanners.length === 0) {
-      onUpdate({
-        scanners: [{
-          id: Date.now().toString(),
-          officerName: '',
-          officerUserId: null,
-          organizationId: null,
-          organizationName: null,
-          fullAccess: false,
-          canCheckIn: true,
-          canCheckOut: true,
-          canViewList: false,
-          canEditRecords: false,
-          allowManualAttendance: false
-        }]
-      });
-    }
-  }, []);
-
-  const scanners = data.scanners || [];
+  const scanners = (data.scanners && data.scanners.length > 0) ? data.scanners : [defaultScanner];
 
   const updateField = (field: keyof EventFormData, value: any) => {
     onUpdate({ [field]: value });
@@ -79,39 +56,25 @@ export default function Step4Staff({ data, onUpdate, isOfficer, errors = {} }: S
   const addScanner = () => {
     const newScanner: EventScanner = {
       id: Date.now().toString(),
+      name: `Scanner ${scanners.length + 1}`,
+      officerUserId: '',
       officerName: '',
-      officerUserId: null,
-      organizationId: null,
-      organizationName: null,
-      fullAccess: false,
+      role: 'Door Scanner',
       canCheckIn: true,
       canCheckOut: true,
       canViewList: false,
       canEditRecords: false,
-      allowManualAttendance: false
+      allowManualAttendance: false,
     };
-    updateField('scanners', [...scanners, newScanner]);
+    onUpdate({ scanners: [...scanners, newScanner] });
   };
 
   const removeScanner = (id: string) => {
-    updateField('scanners', scanners.filter(s => s.id !== id));
+    onUpdate({ scanners: scanners.filter(s => s.id !== id) });
   };
 
   const updateScanner = (id: string, updates: Partial<EventScanner>) => {
     updateField('scanners', scanners.map(s => s.id === id ? { ...s, ...updates } : s));
-  };
-
-  const toggleScannerFullAccess = (id: string) => {
-    updateField('scanners', scanners.map(s =>
-      s.id === id ? { 
-        ...s, 
-        fullAccess: !s.fullAccess, 
-        canCheckIn: true, 
-        canCheckOut: true, 
-        canViewList: false, 
-        canEditRecords: false 
-      } : s
-    ));
   };
 
   // Filter officers based on search query
@@ -129,20 +92,13 @@ export default function Step4Staff({ data, onUpdate, isOfficer, errors = {} }: S
     });
   }, [officers, officerSearchQuery, activeOrgs]);
 
-  const activeAdviser = advisers.find(a => a.status === 'active') || advisers[0];
-
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
       <div className="space-y-6">
 
-        {/* Section A — Event Core Team & SAS Adviser */}
+        {/* Section A — SAS Event Supervisor */}
         <div>
-          <div className={`border-l-4 ${accentBorder} pl-3 mb-4`}>
-            <h3 className="text-[#001A4D] font-bold text-base">Event Core Team</h3>
-          </div>
-
           <div className="space-y-3">
-            {/* SAS Supervisor banner */}
             <div className={`p-4 bg-gradient-to-br ${accentGradient} rounded-xl border-2 border-[#FFC107] text-white shadow-xs`}>
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
@@ -156,14 +112,14 @@ export default function Step4Staff({ data, onUpdate, isOfficer, errors = {} }: S
 
               <div className="flex items-center gap-3 px-4 py-3 bg-white rounded-lg text-gray-900 shadow-xs">
                 <div className={`w-9 h-9 rounded-full bg-gradient-to-br ${accentGradient} flex items-center justify-center text-white font-bold text-sm`}>
-                  {activeAdviser?.fullName?.charAt(0) || 'S'}
+                  {adviserProfile?.displayName?.charAt(0) || adviserProfile?.name?.charAt(0) || 'S'}
                 </div>
                 <div>
                   <div className="font-bold text-gray-900 text-sm">
-                    {activeAdviser?.fullName || activeAdviser?.name || 'Student Affairs and Services (SAS)'}
+                    {adviserProfile?.displayName || adviserProfile?.name || 'Student Affairs and Services (SAS)'}
                   </div>
                   <div className="text-xs text-gray-500">
-                    {activeAdviser?.email || 'sas.adviser@sti.edu'} • {activeAdviser?.role || 'SAS Administrator'}
+                    {adviserProfile?.email || 'sas.adviser@sti.edu'} • {adviserProfile?.role || 'SAS Administrator'}
                   </div>
                 </div>
               </div>
@@ -258,6 +214,12 @@ export default function Step4Staff({ data, onUpdate, isOfficer, errors = {} }: S
             <div className="space-y-4">
               {scanners.map((scanner, index) => {
                 const assignedOrg = activeOrgs.find(o => o.id === scanner.organizationId);
+                const isCurrentInFiltered = filteredOfficers.some(
+                  o => (o.studentId || (o as any).authUid || o.id) === scanner.officerUserId
+                );
+                const currentAssignedOfficer = officers.find(
+                  o => (o.studentId || (o as any).authUid || o.id) === scanner.officerUserId
+                );
 
                 return (
                   <div key={scanner.id} className="p-4 border border-gray-200 rounded-xl bg-white shadow-xs">
@@ -316,6 +278,15 @@ export default function Step4Staff({ data, onUpdate, isOfficer, errors = {} }: S
                             ? 'No matching active officers found'
                             : 'Select officer from list...'}
                         </option>
+
+                        {/* Always include currently selected officer if not in filtered search list to prevent losing selection */}
+                        {!isCurrentInFiltered && scanner.officerUserId && (
+                          <option value={scanner.officerUserId}>
+                            {scanner.organizationName ? `[${scanner.organizationName}] ` : ''}
+                            {scanner.officerName || currentAssignedOfficer?.studentName || scanner.officerUserId} (Assigned)
+                          </option>
+                        )}
+
                         {filteredOfficers.map(o => {
                           const val = o.studentId || (o as any).authUid || o.id;
                           const studentIdPart = o.studentId ? ` (${o.studentId})` : '';
@@ -337,57 +308,37 @@ export default function Step4Staff({ data, onUpdate, isOfficer, errors = {} }: S
                       )}
                     </div>
 
-                    {/* Grant Full Admin Scanner Access */}
-                    <div className="mb-3 flex items-center gap-3 p-3 bg-blue-50/50 border border-blue-200 rounded-lg">
-                      <div className="flex-1">
-                        <div className="text-xs font-semibold text-gray-900 flex items-center gap-1.5">
-                          <span>Grant Full Scanner Access</span>
-                          <span className={`px-1.5 py-0.2 ${accentBg} text-white text-[10px] rounded font-bold`}>All Modes</span>
-                        </div>
-                        <div className="text-[11px] text-gray-600">Enables full check-in, check-out, and manual attendance entry</div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => toggleScannerFullAccess(scanner.id)}
-                        className={`relative w-11 h-5.5 rounded-full transition-colors flex-shrink-0 cursor-pointer ${scanner.fullAccess ? accentBg : 'bg-gray-300'}`}
-                      >
-                        <div className={`absolute top-0.5 left-0.5 w-4.5 h-4.5 bg-white rounded-full transition-transform ${scanner.fullAccess ? 'translate-x-5.5' : ''}`} />
-                      </button>
-                    </div>
-
                     {/* Permissions */}
-                    {!scanner.fullAccess && (
-                      <div className="space-y-1.5">
-                        <div className="text-[11px] font-semibold text-gray-700 mb-1">Scanner Permissions</div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          {[
-                            { key: 'canCheckIn', label: 'Check-in Attendees' },
-                            { key: 'canCheckOut', label: 'Check-out Attendees' },
-                          ].map((perm) => (
-                            <label key={perm.key} className="flex items-center gap-2 px-2.5 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer text-xs">
-                              <input
-                                type="checkbox"
-                                checked={scanner[perm.key as keyof EventScanner] as boolean}
-                                onChange={(e) => updateScanner(scanner.id, { [perm.key]: e.target.checked })}
-                                className={`${accentText} ${accentFocusRing} rounded w-3.5 h-3.5`}
-                              />
-                              <span className="text-gray-700 font-medium">{perm.label}</span>
-                            </label>
-                          ))}
-                        </div>
-
-                        {/* Allow manual or flagged attendance */}
-                        <label className="flex items-center gap-2 px-2.5 py-2 border border-[#FFC107]/40 bg-amber-50/70 rounded-lg hover:bg-amber-100/70 cursor-pointer text-xs mt-2">
-                          <input
-                            type="checkbox"
-                            checked={scanner.allowManualAttendance}
-                            onChange={(e) => updateScanner(scanner.id, { allowManualAttendance: e.target.checked })}
-                            className="text-[#FFC107] focus:ring-[#FFC107] rounded w-3.5 h-3.5"
-                          />
-                          <span className="text-gray-800 font-medium">Allow Manual or Flagged Attendance Entry</span>
-                        </label>
+                    <div className="space-y-1.5">
+                      <div className="text-[11px] font-semibold text-gray-700 mb-1">Scanner Permissions</div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {[
+                          { key: 'canCheckIn', label: 'Check-in Attendees' },
+                          { key: 'canCheckOut', label: 'Check-out Attendees' },
+                        ].map((perm) => (
+                          <label key={perm.key} className="flex items-center gap-2 px-2.5 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer text-xs">
+                            <input
+                              type="checkbox"
+                              checked={scanner[perm.key as keyof EventScanner] as boolean}
+                              onChange={(e) => updateScanner(scanner.id, { [perm.key]: e.target.checked })}
+                              className={`${accentText} ${accentFocusRing} rounded w-3.5 h-3.5`}
+                            />
+                            <span className="text-gray-700 font-medium">{perm.label}</span>
+                          </label>
+                        ))}
                       </div>
-                    )}
+
+                      {/* Allow manual or flagged attendance */}
+                      <label className="flex items-center gap-2 px-2.5 py-2 border border-[#FFC107]/40 bg-amber-50/70 rounded-lg hover:bg-amber-100/70 cursor-pointer text-xs mt-2">
+                        <input
+                          type="checkbox"
+                          checked={scanner.allowManualAttendance}
+                          onChange={(e) => updateScanner(scanner.id, { allowManualAttendance: e.target.checked })}
+                          className="text-[#FFC107] focus:ring-[#FFC107] rounded w-3.5 h-3.5"
+                        />
+                        <span className="text-gray-800 font-medium">Allow Manual or Flagged Attendance Entry</span>
+                      </label>
+                    </div>
                   </div>
                 );
               })}

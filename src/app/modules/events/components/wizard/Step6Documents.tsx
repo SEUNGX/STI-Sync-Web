@@ -213,11 +213,15 @@ export default function Step6Documents({ data, onUpdate, isOfficer, errors = {} 
       },
       {
         id: 6,
-        check: 'Officer Proposal Acknowledgement certified',
+        check: isOfficer ? 'Officer Proposal Acknowledgement certified' : 'SAO Adviser Authorization certified',
         status: isCertified ? ('passed' as const) : ('warning' as const),
         reason: isCertified
-          ? 'Proposal certified accurate and ready for SAO review'
-          : 'Officer proposal acknowledgement pending certification',
+          ? isOfficer
+            ? 'Proposal certified accurate and ready for SAO review'
+            : 'Event creation authorized under SAO Adviser authority'
+          : isOfficer
+          ? 'Officer proposal acknowledgement pending certification'
+          : 'SAO Adviser authorization pending confirmation',
         auto: true,
       },
     ];

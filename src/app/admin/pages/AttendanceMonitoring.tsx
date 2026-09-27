@@ -14,6 +14,7 @@ import { useStudents } from "../../modules/students/hooks/useStudentStream";
 import { useDepartments, useCourses, useSections } from "../../modules/academic/hooks/useAcademicStream";
 import { useOrganizationStream } from "../../modules/organizations/hooks/useOrganizationStream";
 import { recordEventFinePayables } from "../../modules/finance/services/payable.service";
+import { format12HourTime } from "../../utils/date";
 
 import { AttendanceFilterToolbar } from "../../modules/attendance/components/AttendanceFilterToolbar";
 import { AttendanceExportPreviewModal } from "../../modules/attendance/components/AttendanceExportPreviewModal";
@@ -554,8 +555,8 @@ export function AttendanceMonitoring() {
           id: sId,
           label: s.title || `Session ${i + 1}`,
           date: s.date || "TBA",
-          timeStart: s.startTime || "8:00 AM",
-          timeEnd: s.endTime || "5:00 PM",
+          timeStart: format12HourTime(s.startTime) || "8:00 AM",
+          timeEnd: format12HourTime(s.endTime) || "5:00 PM",
           records: enrichedRecords.filter(r => r.sessionId === sId || (!r.sessionId && i === 0)),
         };
       }) : [

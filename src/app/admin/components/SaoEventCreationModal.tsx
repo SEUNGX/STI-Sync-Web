@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, Shield, Rocket, Save, AlertTriangle, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import Step1EventDetails from '../../modules/events/components/wizard/Step1EventDetails';
@@ -60,11 +60,35 @@ export default function SaoEventCreationModal({
     initialDraft ? inferLastStep(initialDraft) : 0
   );
   const [formData, setFormData] = useState<EventFormData>(
-    initialDraft ? { hostingOrgId: initialDraft.hostingOrgId || 'sas', ...initialDraft } : { hostingOrgId: 'sas' }
+    initialDraft
+      ? { hostingOrgId: initialDraft.hostingOrgId || 'sas', ...initialDraft }
+      : { hostingOrgId: 'sas', enableQRTickets: false, enableQR: false }
   );
   const [activeDraftId, setActiveDraftId] = useState<string | undefined>(draftId);
   const [saving, setSaving] = useState(false);
   const [stepErrors, setStepErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (isOpen) {
+      setCurrentStep(initialDraft ? inferLastStep(initialDraft) : 0);
+      setStepErrors({});
+      setActiveDraftId(draftId || initialDraft?.id);
+      if (initialDraft) {
+        setFormData({
+          hostingOrgId: initialDraft.hostingOrgId || 'sas',
+          ...initialDraft,
+        });
+      } else {
+        setFormData({
+          hostingOrgId: 'sas',
+          enableQRTickets: false,
+          enableQR: false,
+          attendanceEnabled: true,
+          sessions: [],
+        });
+      }
+    }
+  }, [isOpen, initialDraft, draftId]);
 
   const { createEvent, saveDraft, loading } = useEventCreation();
   const { events: allEvents } = useAllEvents();

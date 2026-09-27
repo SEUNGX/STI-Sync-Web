@@ -245,6 +245,7 @@ export async function recordPayment(
 
   const data = snap.data() as PayableDocument;
   const currentPaid = Number(data.paidAmount) || 0;
+  const assigned = Number(data.assignedAmount) || 0;
   // GUARD: Reject if payable is closed, waived, refunded, or queued for refund
   if (data.status === 'waived') {
     throw new Error('Cannot record payment: This payable has been waived.');

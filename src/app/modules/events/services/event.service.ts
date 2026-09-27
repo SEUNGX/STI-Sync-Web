@@ -81,18 +81,41 @@ export async function generatePayablesForEvent(
     const q = query(collection(db, STUDENTS_COLLECTION));
     const snapshot = await getDocs(q);
 
+    // Fetch courses for ID / Code / Name lookup
+    let coursesList: any[] = [];
+    try {
+      const coursesSnap = await getDocs(collection(db, 'courses'));
+      coursesList = coursesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch (e) {
+      console.warn('[generatePayablesForEvent] Error fetching courses:', e);
+    }
+
+    // If org members only, fetch active members of hosting org
+    const memberStudentIds = new Set<string>();
+    if (eventData.targetAudienceScope === 'members' && eventData.hostingOrgId) {
+      try {
+        const orgMembersSnap = await getDocs(
+          query(
+            collection(db, 'organization_members'),
+            where('organizationId', '==', eventData.hostingOrgId),
+            where('status', '==', 'active')
+          )
+        );
+        orgMembersSnap.docs.forEach((d) => {
+          const m = d.data();
+          if (m.studentId) memberStudentIds.add(String(m.studentId).trim());
+          if (m.studentSchoolId) memberStudentIds.add(String(m.studentSchoolId).trim());
+          if (m.authUid) memberStudentIds.add(String(m.authUid).trim());
+        });
+      } catch (e) {
+        console.warn('[generatePayablesForEvent] Error fetching org members:', e);
+      }
+    }
+
     const targetYearLevels = eventData.targetYearLevels || [];
     const targetCourses = eventData.targetCourses || eventData.allowedCourses || [];
     const targetSections = eventData.targetSections || [];
     const targetDeptIds = eventData.targetDepartmentIds || [];
-    const isAllStudents =
-      eventData.targetAudienceScope === 'all' ||
-      eventData.targetAudience === 'all' ||
-      (!eventData.targetAudienceScope &&
-        targetYearLevels.length === 0 &&
-        targetCourses.length === 0 &&
-        targetSections.length === 0 &&
-        targetDeptIds.length === 0);
 
     const studentsToCharge = snapshot.docs
       .map((d) => ({ id: d.id, ...d.data() }))
@@ -108,31 +131,71 @@ export async function generatePayablesForEvent(
           return false;
         }
 
-        // Accept students whose status is ACTIVE, active, or not explicitly INACTIVE/SUSPENDED/ARCHIVED
-        if (
-          student.status &&
-          ['INACTIVE', 'SUSPENDED', 'ARCHIVED', 'RETURNED'].includes(
-            String(student.status).toUpperCase()
-          )
-        ) {
-          return false;
+        // 1. Only ACTIVE students
+        const isActive =
+          !student.archived &&
+          (student.status === 'ACTIVE' || (!student.status && !student.archived) || String(student.status).toUpperCase() === 'ACTIVE') &&
+          student.status !== 'INACTIVE' &&
+          student.status !== 'ARCHIVED' &&
+          student.status !== 'RETURNED' &&
+          student.status !== 'DROPPED' &&
+          student.status !== 'SUSPENDED';
+
+        if (!isActive) return false;
+
+        // 2. Org Members constraint
+        if (eventData.targetAudienceScope === 'members') {
+          if (memberStudentIds.size > 0) {
+            const isMember =
+              memberStudentIds.has(student.id) ||
+              memberStudentIds.has(student.authUid) ||
+              memberStudentIds.has(student.studentId);
+            if (!isMember) return false;
+          }
         }
-        if (isAllStudents) return true;
 
-        const matchesCourse =
-          targetCourses.length === 0 ||
-          targetCourses.includes(student.courseId) ||
-          targetCourses.includes(student.courseCode);
-        const matchesSection =
-          targetSections.length === 0 ||
-          targetSections.includes(student.section) ||
-          targetSections.includes(student.id);
-        const matchesDept =
-          targetDeptIds.length === 0 || targetDeptIds.includes(student.departmentId);
-        const matchesYear =
-          targetYearLevels.length === 0 || targetYearLevels.includes(student.yearLevel);
+        // 3. Course Filter
+        if (targetCourses.length > 0) {
+          const matchesCourse =
+            targetCourses.includes(student.courseId) ||
+            targetCourses.includes(student.courseCode) ||
+            targetCourses.some((cId: string) => {
+              const c = coursesList.find((item) => item.id === cId);
+              return c && (student.courseName === c.name || student.courseCode === c.code || student.courseId === c.id);
+            });
+          if (!matchesCourse) return false;
+        }
 
-        return matchesCourse && matchesSection && matchesDept && matchesYear;
+        // 4. Year Level Filter
+        if (targetYearLevels.length > 0) {
+          const matchesYear = targetYearLevels.some((y: string) => {
+            if (student.yearLevel === y) return true;
+            if ((y === 'G11' || y === 'Grade 11') && (student.yearLevel === 'G11' || student.yearLevel === 'Grade 11' || student.yearLevel === 11 || student.yearLevel === '11')) return true;
+            if ((y === 'G12' || y === 'Grade 12') && (student.yearLevel === 'G12' || student.yearLevel === 'Grade 12' || student.yearLevel === 12 || student.yearLevel === '12')) return true;
+            if (y === '1st Year' && (student.yearLevel === '1st Year' || student.yearLevel === 1 || student.yearLevel === '1')) return true;
+            if (y === '2nd Year' && (student.yearLevel === '2nd Year' || student.yearLevel === 2 || student.yearLevel === '2')) return true;
+            if (y === '3rd Year' && (student.yearLevel === '3rd Year' || student.yearLevel === 3 || student.yearLevel === '3')) return true;
+            if (y === '4th Year' && (student.yearLevel === '4th Year' || student.yearLevel === 4 || student.yearLevel === '4')) return true;
+            return false;
+          });
+          if (!matchesYear) return false;
+        }
+
+        // 5. Section Filter
+        if (targetSections.length > 0) {
+          const matchesSection =
+            targetSections.includes(student.section) ||
+            targetSections.includes(student.id);
+          if (!matchesSection) return false;
+        }
+
+        // 6. Department Filter
+        if (targetDeptIds.length > 0) {
+          const matchesDept = targetDeptIds.includes(student.departmentId);
+          if (!matchesDept) return false;
+        }
+
+        return true;
       });
 
     console.log(
@@ -464,7 +527,7 @@ const buildEventSnapshot = (data: any) => {
     objectives: data.objectives || [],
     bannerImageUrl: data.bannerImageUrl || '',
     hostingOrgId: data.hostingOrgId || '',
-    enableQRTickets: data.enableQRTickets !== false && data.enableQR !== false,
+    enableQRTickets: Boolean(data.enableQRTickets === true || data.enableQR === true),
     semesterId: data.semesterId || '',
     schoolYear: data.schoolYear || '',
     venueId: data.venueId || '',

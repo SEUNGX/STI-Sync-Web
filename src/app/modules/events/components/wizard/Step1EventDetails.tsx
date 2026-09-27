@@ -1,9 +1,9 @@
 import { useState, useEffect, KeyboardEvent } from 'react';
-import { Lock, Upload, Tag, Layers, X, Check, Plus, Edit2, Sparkles, AlertCircle } from 'lucide-react';
+import { Lock, Upload, Tag, X, Check, Plus, Edit2, Sparkles, AlertCircle, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import { useOrganizationStream } from '../../../organizations';
-import { useEventTypesStream, useEventCategoriesStream } from '../../hooks/useEventConfigStream';
-import { createEventType, createEventCategory } from '../../services/event-config.service';
+import { useEventTypesStream } from '../../hooks/useEventConfigStream';
+import { createEventType } from '../../services/event-config.service';
 import type { EventFormData } from '../../types/event.types';
 import { useOfficerProfile } from '../../../../auth/hooks/useOfficerProfile';
 import { useAdviserProfile } from '../../../auth/hooks/useAdviserProfile';
@@ -26,7 +26,6 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer, errors = 
   // Streams
   const { data: orgs, loading: orgsLoading } = useOrganizationStream();
   const { eventTypes, loading: typesLoading } = useEventTypesStream();
-  const { categories, loading: categoriesLoading } = useEventCategoriesStream();
 
   // Custom Event Type Modal State
   const [showCustomTypeModal, setShowCustomTypeModal] = useState(false);
@@ -34,13 +33,6 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer, errors = 
   const [customTypeColor, setCustomTypeColor] = useState('#1E70E8');
   const [saveTypePermanently, setSaveTypePermanently] = useState(true);
   const [isSavingType, setIsSavingType] = useState(false);
-
-  // Custom Event Category Modal State
-  const [showCustomCategoryModal, setShowCustomCategoryModal] = useState(false);
-  const [customCategoryName, setCustomCategoryName] = useState('');
-  const [customCategoryTypeId, setCustomCategoryTypeId] = useState(data.eventTypeId || '');
-  const [saveCategoryPermanently, setSaveCategoryPermanently] = useState(true);
-  const [isSavingCategory, setIsSavingCategory] = useState(false);
 
   // Determine Creator Details
   const showOfficerMode = isOfficer !== undefined ? isOfficer : !!officerProfile;
@@ -68,12 +60,9 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer, errors = 
   const accentFocusRing = 'focus:ring-[#0E4EBD]';
   const accentGradient = 'from-[#001A4D] to-[#0E4EBD]';
 
-  // Active Orgs, Types, Categories
+  // Active Orgs, Types
   const activeOrgs = orgs.filter(o => !o.archived);
   const activeTypes = eventTypes.filter(t => !t.archived);
-
-  // Filter categories based on selected event type
-  const activeCategories = categories.filter(c => !c.archived && c.typeId === data.eventTypeId);
 
   const [objectiveInput, setObjectiveInput] = useState('');
   const [isUploadingBanner, setIsUploadingBanner] = useState(false);
@@ -111,6 +100,9 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer, errors = 
         isVisible: false,
         visibleToStudents: false,
         visibilityStart: null,
+        studentPayablesEnabled: false,
+        adminFeeOverride: 0,
+        totalExpectedCollection: 0,
       });
     }
   };
@@ -165,19 +157,6 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer, errors = 
         eventCategoryId: '',
         customEventCategoryName: null,
       });
-      setCustomCategoryTypeId(val);
-    }
-  };
-
-  const handleEventCategoryChange = (val: string) => {
-    if (val === '__other__') {
-      setCustomCategoryTypeId(data.eventTypeId || '');
-      setShowCustomCategoryModal(true);
-    } else {
-      onUpdate({
-        eventCategoryId: val,
-        customEventCategoryName: null,
-      });
     }
   };
 
@@ -201,7 +180,6 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer, errors = 
           eventCategoryId: '',
           customEventCategoryName: null,
         });
-        setCustomCategoryTypeId(docRef.id);
         toast.success(`Event type "${customTypeName.trim()}" saved and selected!`);
       } else {
         onUpdate({
@@ -211,7 +189,6 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer, errors = 
           eventCategoryId: '',
           customEventCategoryName: null,
         });
-        setCustomCategoryTypeId('__other__');
         toast.success(`Custom event type "${customTypeName.trim()}" set for this event.`);
       }
       setShowCustomTypeModal(false);
@@ -224,46 +201,9 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer, errors = 
     }
   };
 
-  const handleCreateCustomCategory = async () => {
-    if (!customCategoryName.trim()) {
-      toast.error('Please enter a category name.');
-      return;
-    }
-    setIsSavingCategory(true);
-    try {
-      const typeIdToUse = customCategoryTypeId || data.eventTypeId || '';
-      if (saveCategoryPermanently && typeIdToUse && typeIdToUse !== '__other__') {
-        const docRef = await createEventCategory({
-          name: customCategoryName.trim(),
-          typeId: typeIdToUse,
-          archived: false,
-        });
-        onUpdate({
-          eventCategoryId: docRef.id,
-          customEventCategoryName: null,
-        });
-        toast.success(`Category "${customCategoryName.trim()}" saved and selected!`);
-      } else {
-        onUpdate({
-          eventCategoryId: '__other__',
-          customEventCategoryName: customCategoryName.trim(),
-        });
-        toast.success(`Custom category "${customCategoryName.trim()}" set for this event.`);
-      }
-      setShowCustomCategoryModal(false);
-      setCustomCategoryName('');
-    } catch (err) {
-      console.error('Failed to create category:', err);
-      toast.error('Failed to create category. Please try again.');
-    } finally {
-      setIsSavingCategory(false);
-    }
-  };
-
   const selectedOrg = activeOrgs.find(o => o.id === data.hostingOrgId) ||
     (showOfficerMode && officerProfile?.activeOrganizationId ? activeOrgs.find(o => o.id === officerProfile.activeOrganizationId) : null);
   const selectedType = activeTypes.find(t => t.id === data.eventTypeId);
-  const selectedCategory = activeCategories.find(c => c.id === data.eventCategoryId);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-6">
@@ -276,19 +216,6 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer, errors = 
             <h3 className="text-[#001A4D] font-bold text-base">Administrative Context</h3>
           </div>
           <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Event Reference ID</label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={data.referenceId || (showOfficerMode ? 'EVT-PROP-[Auto-Generated]' : 'EVT-ADM-[Auto-Generated]')}
-                  disabled
-                  className="w-full px-4 py-2.5 bg-gray-100 border border-gray-300 rounded-lg text-gray-600 pr-10"
-                />
-                <Lock className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              </div>
-            </div>
-
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Created By</label>
               <div className="flex items-center gap-3 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg">
@@ -411,114 +338,57 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer, errors = 
               </span>
             )}
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center gap-1.5">
-                <span>Event Type <span className="text-red-500">*</span></span>
-                {isRestricted && <Lock className="w-3.5 h-3.5 text-amber-600" />}
-              </label>
-              <select
-                value={data.customEventTypeName ? '__other__' : (data.eventTypeId || '')}
-                onChange={(e) => handleEventTypeChange(e.target.value)}
-                disabled={typesLoading || isRestricted}
-                className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:border-transparent disabled:opacity-60 disabled:bg-gray-100 transition-colors ${errors.eventTypeId
-                    ? 'border-red-500 ring-2 ring-red-200 focus:ring-red-500'
-                    : `border-gray-300 ${accentFocusRing}`
-                  }`}
-              >
-                <option value="">{typesLoading ? 'Loading types...' : 'Select type...'}</option>
-                {activeTypes.map(t => (
-                  <option key={t.id} value={t.id}>{t.name}</option>
-                ))}
-                {!isRestricted && <option value="__other__">Other / Custom Event Type...</option>}
-              </select>
-              {errors.eventTypeId && (
-                <p className="text-xs text-red-600 mt-1.5 font-medium flex items-center gap-1.5">
-                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                  <span>{errors.eventTypeId}</span>
-                </p>
-              )}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center gap-1.5">
+              <span>Event Type <span className="text-red-500">*</span></span>
+              {isRestricted && <Lock className="w-3.5 h-3.5 text-amber-600" />}
+            </label>
+            <select
+              value={data.customEventTypeName ? '__other__' : (data.eventTypeId || '')}
+              onChange={(e) => handleEventTypeChange(e.target.value)}
+              disabled={typesLoading || isRestricted}
+              className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:border-transparent disabled:opacity-60 disabled:bg-gray-100 transition-colors ${errors.eventTypeId
+                  ? 'border-red-500 ring-2 ring-red-200 focus:ring-red-500'
+                  : `border-gray-300 ${accentFocusRing}`
+                }`}
+            >
+              <option value="">{typesLoading ? 'Loading types...' : 'Select type...'}</option>
+              {activeTypes.map(t => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+              {!isRestricted && <option value="__other__">Other / Custom Event Type...</option>}
+            </select>
+            {errors.eventTypeId && (
+              <p className="text-xs text-red-600 mt-1.5 font-medium flex items-center gap-1.5">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                <span>{errors.eventTypeId}</span>
+              </p>
+            )}
 
-              {data.customEventTypeName && (
-                <div className="mt-2 p-2.5 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="w-3 h-3 rounded-full border border-white shadow-xs"
-                      style={{ backgroundColor: data.customEventTypeColor || '#1E70E8' }}
-                    />
-                    <span>Custom Event Type: <strong>{data.customEventTypeName}</strong></span>
-                  </div>
-                  {!isRestricted && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCustomTypeName(data.customEventTypeName || '');
-                        setCustomTypeColor(data.customEventTypeColor || '#1E70E8');
-                        setShowCustomTypeModal(true);
-                      }}
-                      className="text-[#0E4EBD] hover:underline font-bold text-xs cursor-pointer"
-                    >
-                      Edit
-                    </button>
-                  )}
+            {data.customEventTypeName && (
+              <div className="mt-2 p-2.5 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span
+                    className="w-3 h-3 rounded-full border border-white shadow-xs"
+                    style={{ backgroundColor: data.customEventTypeColor || '#1E70E8' }}
+                  />
+                  <span>Custom Event Type: <strong>{data.customEventTypeName}</strong></span>
                 </div>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center gap-1.5">
-                <span>Category <span className="text-red-500">*</span></span>
-                {isRestricted && <Lock className="w-3.5 h-3.5 text-amber-600" />}
-              </label>
-              <select
-                value={data.customEventCategoryName ? '__other__' : (data.eventCategoryId || '')}
-                onChange={(e) => handleEventCategoryChange(e.target.value)}
-                disabled={(!data.eventTypeId && !data.customEventTypeName) || categoriesLoading || isRestricted}
-                className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:border-transparent disabled:opacity-60 disabled:bg-gray-100 transition-colors ${errors.eventCategoryId
-                    ? 'border-red-500 ring-2 ring-red-200 focus:ring-red-500'
-                    : `border-gray-300 ${accentFocusRing}`
-                  }`}
-              >
-                <option value="">
-                  {!data.eventTypeId && !data.customEventTypeName
-                    ? 'Select a type first'
-                    : categoriesLoading
-                      ? 'Loading...'
-                      : 'Select category...'}
-                </option>
-                {activeCategories.map(c => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-                {!isRestricted && <option value="__other__">Other / Custom Category...</option>}
-              </select>
-              {errors.eventCategoryId && (
-                <p className="text-xs text-red-600 mt-1.5 font-medium flex items-center gap-1.5">
-                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                  <span>{errors.eventCategoryId}</span>
-                </p>
-              )}
-
-              {data.customEventCategoryName && (
-                <div className="mt-2 p-2.5 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900 flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    <Layers className="w-3.5 h-3.5 text-[#0E4EBD]" />
-                    <span>Custom Category: <strong>{data.customEventCategoryName}</strong></span>
-                  </div>
-                  {!isRestricted && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCustomCategoryName(data.customEventCategoryName || '');
-                        setShowCustomCategoryModal(true);
-                      }}
-                      className="text-[#0E4EBD] hover:underline font-bold text-xs cursor-pointer"
-                    >
-                      Edit
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
+                {!isRestricted && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCustomTypeName(data.customEventTypeName || '');
+                      setCustomTypeColor(data.customEventTypeColor || '#1E70E8');
+                      setShowCustomTypeModal(true);
+                    }}
+                    className="text-[#0E4EBD] hover:underline font-bold text-xs cursor-pointer"
+                  >
+                    Edit
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -532,28 +402,42 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer, errors = 
               </span>
             )}
           </div>
-          <div className="space-y-3">
+          <div className="space-y-4">
             {[
               { key: 'enableQRTickets', label: 'Enable QR Tickets', desc: 'Generate scannable QR code tickets & attendance scanner option', admin: false },
             ].map((setting) => {
-              const isQRActive = data.enableQRTickets !== false && (data as any).enableQR !== false;
+              const isQRActive = Boolean(data.enableQRTickets === true || (data as any).enableQR === true);
+
               return (
-                <div key={setting.key} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-gray-900">{setting.label}</span>
-                      {isRestricted && <Lock className="w-3.5 h-3.5 text-amber-600" />}
+                <div key={setting.key} className="p-3.5 border border-gray-200 rounded-xl space-y-3 bg-white shadow-2xs">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-gray-900 text-sm">{setting.label}</span>
+                        {isRestricted && <Lock className="w-3.5 h-3.5 text-amber-600" />}
+                      </div>
+                      <p className="text-xs text-gray-600 mt-0.5">{setting.desc}</p>
                     </div>
-                    <p className="text-sm text-gray-600">{setting.desc}</p>
+                    <button
+                      type="button"
+                      disabled={isRestricted}
+                      onClick={() => {
+                        const nextVal = !isQRActive;
+                        const updates: Partial<EventFormData> = {
+                          enableQRTickets: nextVal,
+                          enableQR: nextVal,
+                        };
+                        if (nextVal) {
+                          if (data.gracePeriodMinutes === undefined) updates.gracePeriodMinutes = 15;
+                          if (data.lateThresholdMinutes === undefined) updates.lateThresholdMinutes = 60;
+                        }
+                        onUpdate(updates);
+                      }}
+                      className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ml-4 ${isRestricted ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'} ${isQRActive ? accentBg : 'bg-gray-300'}`}
+                    >
+                      <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${isQRActive ? 'translate-x-6' : ''}`} />
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    disabled={isRestricted}
-                    onClick={() => updateField('enableQRTickets' as keyof EventFormData, !isQRActive)}
-                    className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ml-4 ${isRestricted ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'} ${isQRActive ? accentBg : 'bg-gray-300'}`}
-                  >
-                    <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${isQRActive ? 'translate-x-6' : ''}`} />
-                  </button>
                 </div>
               );
             })}
@@ -800,97 +684,6 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer, errors = 
                 className={`flex-1 py-2.5 ${accentBg} text-white rounded-xl text-xs font-bold hover:opacity-90 disabled:opacity-50 transition-colors cursor-pointer`}
               >
                 {isSavingType ? 'Saving...' : 'Apply Event Type'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Custom Category Modal */}
-      {showCustomCategoryModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-gray-200 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
-              <div className="flex items-center gap-2">
-                <Layers className={`w-5 h-5 ${accentText}`} />
-                <h3 className="font-bold text-[#001A4D] text-base">Add Category</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowCustomCategoryModal(false)}
-                className="text-gray-400 hover:text-gray-600 p-1.5 rounded-lg hover:bg-gray-100 cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">
-                  Associated Event Type
-                </label>
-                <select
-                  value={customCategoryTypeId || data.eventTypeId || ''}
-                  onChange={(e) => setCustomCategoryTypeId(e.target.value)}
-                  className={`w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 ${accentFocusRing} focus:border-transparent`}
-                >
-                  <option value="">Select Event Type...</option>
-                  {activeTypes.map((t) => (
-                    <option key={t.id} value={t.id}>{t.name}</option>
-                  ))}
-                  {data.customEventTypeName && (
-                    <option value="__other__">{data.customEventTypeName} (Custom Type)</option>
-                  )}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">
-                  Category Name <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Academic, Leadership, Cultural, Sports"
-                  value={customCategoryName}
-                  onChange={(e) => setCustomCategoryName(e.target.value)}
-                  className={`w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 ${accentFocusRing} focus:border-transparent`}
-                />
-              </div>
-
-              {/* Save Permanently Checkbox */}
-              <div className={`p-3 ${isOfficer ? 'bg-purple-50/60 border-purple-200/80' : 'bg-blue-50/60 border-blue-200/80'} border rounded-xl`}>
-                <label className="flex items-start gap-2.5 cursor-pointer text-xs">
-                  <input
-                    type="checkbox"
-                    checked={saveCategoryPermanently}
-                    onChange={(e) => setSaveCategoryPermanently(e.target.checked)}
-                    className={`mt-0.5 ${accentText} ${accentFocusRing} rounded w-4 h-4`}
-                  />
-                  <div>
-                    <p className="font-bold text-[#001A4D]">Save this category for future use?</p>
-                    <p className="text-gray-600 text-[11px] mt-0.5 leading-normal">
-                      If checked, this category will be permanently added under this Event Type in the Category registry.
-                    </p>
-                  </div>
-                </label>
-              </div>
-            </div>
-
-            <div className="flex gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setShowCustomCategoryModal(false)}
-                className="flex-1 py-2.5 border border-gray-300 text-gray-700 rounded-xl text-xs font-semibold hover:bg-gray-50 cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleCreateCustomCategory}
-                disabled={isSavingCategory || !customCategoryName.trim()}
-                className={`flex-1 py-2.5 ${accentBg} text-white rounded-xl text-xs font-bold hover:opacity-90 disabled:opacity-50 transition-colors cursor-pointer`}
-              >
-                {isSavingCategory ? 'Saving...' : 'Apply Category'}
               </button>
             </div>
           </div>

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import {
   ArrowLeft, X, Edit, Calendar, MapPin, Users, DollarSign, Shield,
   Receipt, FileText, History, Coins, Clock, CheckCircle2, AlertCircle,
@@ -10,7 +10,7 @@ import type { EventDocument } from '../types/event.types';
 import { useOfficerProfile } from '../../../auth/hooks/useOfficerProfile';
 import { useOrganizationStream } from '../../organizations/hooks/useOrganizationStream';
 import { useEventTypesStream, useVenuesStream } from '../hooks/useEventConfigStream';
-import { useDepartments } from '../../academic/hooks/useAcademicStream';
+import { useDepartments, useCourses, useSections } from '../../academic/hooks/useAcademicStream';
 import { EventPayablesQRControl } from '../../finance/components/EventPayablesQRControl';
 import { exportEventProposalPDF } from '../utils/event-proposal-pdf';
 import { canWithdrawProposal, canCancelEvent, isEventEditable, getEventTimingStatus } from '../utils/event-lifecycle.utils';
@@ -21,7 +21,7 @@ import { DeleteArchivedEventModal } from './DeleteArchivedEventModal';
 import { withdrawProposal } from '../services/event.service';
 import { toast } from 'sonner';
 import { formatCurrency } from '../../../utils/currency';
-import { formatAppDate, formatAppDateTime } from '../../../utils/date';
+import { formatAppDate, formatAppDateTime, format12HourTime } from '../../../utils/date';
 
 interface OfficerEventDetailViewProps {
   event: EventDocument;
@@ -66,7 +66,9 @@ export default function OfficerEventDetailView({
   const { data: orgs } = useOrganizationStream();
   const { eventTypes } = useEventTypesStream();
   const { venues } = useVenuesStream();
-  const { data: departments } = useDepartments();
+  const { data: departments = [] } = useDepartments();
+  const { data: courses = [] } = useCourses();
+  const { data: sections = [] } = useSections();
 
   const editCheck = isEventEditable(event, 'officer');
   const isEditable = editCheck.editable;
@@ -181,6 +183,24 @@ export default function OfficerEventDetailView({
       return match ? `${match.name} (${match.code})` : dId;
     })
     .filter(Boolean);
+
+  const targetCourseLabels = useMemo(() => {
+    const rawCourses = event.targetCourses || (event as any).allowedCourses || [];
+    if (!rawCourses || rawCourses.length === 0) return [];
+    return rawCourses.map((cId: string) => {
+      const match = courses.find((c) => c.id === cId || c.code.toLowerCase() === cId.toLowerCase());
+      return match ? `${match.code} - ${match.name}` : cId;
+    });
+  }, [event.targetCourses, (event as any).allowedCourses, courses]);
+
+  const targetSectionLabels = useMemo(() => {
+    const rawSections = event.targetSections || [];
+    if (!rawSections || rawSections.length === 0) return [];
+    return rawSections.map((sId: string) => {
+      const match = sections.find((s) => s.id === sId || s.name.toLowerCase() === sId.toLowerCase());
+      return match ? match.name : sId;
+    });
+  }, [event.targetSections, sections]);
 
   return (
     <div className="fixed inset-0 z-50 bg-white flex flex-col overflow-hidden animate-in fade-in duration-200">
@@ -647,22 +667,33 @@ export default function OfficerEventDetailView({
           >
             <SectionHeader
               title="2. Schedule & Multi-Session Breakdown"
-              subtitle="Academic calendar, venue assignment, and session time-in/out windows"
+              subtitle="Academic calendar, venue assignment, attendance thresholds, and session time windows"
             />
 
             <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-xs space-y-5">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="p-3.5 bg-gray-50 border border-gray-200 rounded-xl text-center">
-                  <span className="text-[11px] font-bold text-gray-400 uppercase">School Year</span>
-                  <p className="text-sm font-bold text-[#001A4D] mt-0.5">{event.schoolYear || 'SY 2025-2026'}</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 divide-y sm:divide-y-0 sm:divide-x divide-gray-100">
+                <div className="px-3 first:pl-0 text-left sm:text-center">
+                  <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider block mb-1">School Year & Term</span>
+                  <p className="text-sm font-bold text-[#001A4D]">
+                    {event.schoolYear || 'SY 2025-2026'}
+                    {event.semester ? ` • ${event.semester}` : ''}
+                  </p>
                 </div>
-                <div className="p-3.5 bg-gray-50 border border-gray-200 rounded-xl text-center">
-                  <span className="text-[11px] font-bold text-gray-400 uppercase">Academic Term</span>
-                  <p className="text-sm font-bold text-[#001A4D] mt-0.5">{event.semester || 'Active Semester'}</p>
+                <div className="px-3 text-left sm:text-center pt-3 sm:pt-0">
+                  <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Requested Venue</span>
+                  <p className="text-sm font-bold text-[#0E4EBD]">{venueName}</p>
                 </div>
-                <div className="p-3.5 bg-gray-50 border border-gray-200 rounded-xl text-center">
-                  <span className="text-[11px] font-bold text-gray-400 uppercase">Requested Venue</span>
-                  <p className="text-sm font-bold text-[#0E4EBD] mt-0.5">{venueName}</p>
+                <div className="px-3 text-left sm:text-center pt-3 sm:pt-0">
+                  <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Grace Period</span>
+                  <p className="text-sm font-bold text-emerald-700">
+                    {event.gracePeriodMinutes != null ? `${event.gracePeriodMinutes} mins` : '15 mins (Default)'}
+                  </p>
+                </div>
+                <div className="px-3 last:pr-0 text-left sm:text-center pt-3 sm:pt-0">
+                  <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Late Threshold</span>
+                  <p className="text-sm font-bold text-amber-700">
+                    {event.lateThresholdMinutes != null ? `${event.lateThresholdMinutes} mins` : '30 mins (Default)'}
+                  </p>
                 </div>
               </div>
 
@@ -672,41 +703,87 @@ export default function OfficerEventDetailView({
                   <h4 className="text-xs font-bold text-[#001A4D] uppercase tracking-wider">
                     Configured Sessions ({event.sessions?.length || 0})
                   </h4>
+                  {event.enableQRTickets !== false && (
+                    <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                      QR Ticket Scanning Enabled
+                    </span>
+                  )}
                 </div>
 
                 <div className="space-y-3">
                   {(event.sessions || []).map((session, idx) => (
                     <div
                       key={session.id || idx}
-                      className="border-l-4 border-[#0E4EBD] bg-gray-50/70 border border-gray-200 rounded-xl p-4 space-y-2 hover:bg-gray-50 transition-colors"
+                      className="border-l-4 border-[#0E4EBD] bg-white border border-gray-200 rounded-xl p-4 space-y-3 hover:bg-gray-50/50 transition-colors shadow-2xs"
                     >
-                      <div className="flex items-center justify-between">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 pb-2 border-b border-gray-100">
                         <div className="flex items-center gap-2">
-                          <span className="px-2 py-0.5 bg-[#001A4D] text-white text-[10px] font-bold rounded-md uppercase">
+                          <span className="px-2 py-0.5 bg-[#0E4EBD]/10 text-[#0E4EBD] font-black text-xs uppercase tracking-wider rounded-md">
                             Session {idx + 1}
                           </span>
                           <span className="font-bold text-sm text-[#001A4D]">{session.title}</span>
                         </div>
-                        <span className="text-xs font-medium text-gray-600 flex items-center gap-1.5">
-                          <Calendar className="w-3.5 h-3.5 text-gray-400" />
-                          {formatAppDate(session.date)}
-                        </span>
+                        <div className="flex items-center gap-1.5 text-xs text-gray-700 font-semibold bg-gray-50 px-2.5 py-1 rounded-lg border border-gray-200/80">
+                          <Calendar className="w-3.5 h-3.5 text-[#0E4EBD]" />
+                          <span>{formatAppDate(session.date)}</span>
+                          <span className="text-gray-300">•</span>
+                          <Clock className="w-3.5 h-3.5 text-gray-500" />
+                          <span>{format12HourTime(session.startTime)} – {format12HourTime(session.endTime)}</span>
+                        </div>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 text-xs border-t border-gray-200/80">
-                        <div>
-                          <span className="text-gray-500">Duration:</span>{' '}
-                          <strong className="text-gray-800">{session.startTime} - {session.endTime}</strong>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 text-xs">
+                        <div className="p-3 bg-emerald-50/70 border border-emerald-200/80 rounded-xl">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-[11px] font-bold text-emerald-900 uppercase tracking-wider flex items-center gap-1">
+                              <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                              Time-In Window
+                            </span>
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-md">
+                              Entry Scan
+                            </span>
+                          </div>
+                          <p className="text-sm font-black text-emerald-950">
+                            {session.timeInOpen && session.timeInClose
+                              ? `${format12HourTime(session.timeInOpen)} — ${format12HourTime(session.timeInClose)}`
+                              : session.startTime
+                              ? `Opens at ${format12HourTime(session.startTime)}`
+                              : 'Not configured'}
+                          </p>
+                          <p className="text-[11px] text-emerald-700 mt-0.5">
+                            Grace period allows scanning up to {event.gracePeriodMinutes ?? 15}m after session start.
+                          </p>
                         </div>
-                        <div>
-                          <span className="text-gray-500">Time-In Window:</span>{' '}
-                          <strong className="text-emerald-700">{session.timeInOpen || '—'} to {session.timeInClose || '—'}</strong>
-                        </div>
-                        <div>
-                          <span className="text-gray-500">Time-Out Window:</span>{' '}
-                          <strong className="text-indigo-700">
-                            {session.hasTimeOut ? `${session.timeOutOpen || '—'} to ${session.timeOutClose || '—'}` : 'Not Required'}
-                          </strong>
+
+                        <div className={`p-3 rounded-xl border ${
+                          session.hasTimeOut
+                            ? 'bg-blue-50/70 border-blue-200/80'
+                            : 'bg-gray-50 border-gray-200'
+                        }`}>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className={`text-[11px] font-bold uppercase tracking-wider flex items-center gap-1 ${
+                              session.hasTimeOut ? 'text-blue-900' : 'text-gray-500'
+                            }`}>
+                              <span className={`w-2 h-2 rounded-full ${session.hasTimeOut ? 'bg-blue-500' : 'bg-gray-400'}`} />
+                              Time-Out Window
+                            </span>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                              session.hasTimeOut ? 'text-blue-700 bg-blue-100/80' : 'text-gray-600 bg-gray-200'
+                            }`}>
+                              {session.hasTimeOut ? 'Exit Scan Required' : 'Not Required'}
+                            </span>
+                          </div>
+                          <p className={`text-sm font-black ${session.hasTimeOut ? 'text-blue-950' : 'text-gray-600'}`}>
+                            {session.hasTimeOut
+                              ? (session.timeOutOpen && session.timeOutClose ? `${format12HourTime(session.timeOutOpen)} — ${format12HourTime(session.timeOutClose)}` : `Around ${format12HourTime(session.endTime)}`)
+                              : 'No checkout scan required for this session'}
+                          </p>
+                          <p className={`text-[11px] mt-0.5 ${session.hasTimeOut ? 'text-blue-700' : 'text-gray-400'}`}>
+                            {session.hasTimeOut
+                              ? 'Attendees must scan out within this window to complete attendance record.'
+                              : 'Single check-in satisfies attendance criteria.'}
+                          </p>
                         </div>
                       </div>
                     </div>
@@ -726,7 +803,7 @@ export default function OfficerEventDetailView({
           >
             <SectionHeader
               title="3. Target Audience & Participant Policies"
-              subtitle="Target departments, year levels, expected count, and attendance fine rules"
+              subtitle="Target programs, year levels, sections, expected count, and attendance fine rules"
             />
 
             <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-xs space-y-5">
@@ -749,11 +826,40 @@ export default function OfficerEventDetailView({
                 </div>
               </div>
 
-              <div className="space-y-4 pt-2">
+              {/* Target Filtering Details */}
+              <div className="space-y-4 pt-2 border-t border-gray-100">
+                {/* Academic Level & Audience Scope */}
+                <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-gray-100 text-xs">
+                  <div>
+                    <span className="text-gray-400 font-bold uppercase tracking-wider block mb-1">Target Academic Track</span>
+                    <span className="px-3 py-1 bg-blue-50 text-[#001A4D] border border-blue-200/80 rounded-lg font-bold text-xs">
+                      {event.targetAcademicLevel === 'COLLEGE'
+                        ? 'College Division Only'
+                        : event.targetAcademicLevel === 'SHS'
+                        ? 'Senior High School (SHS) Only'
+                        : 'Both College & Senior High School (SHS)'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400 font-bold uppercase tracking-wider block mb-1">Audience Scope</span>
+                    <span className="px-3 py-1 bg-amber-50 text-amber-900 border border-amber-200/80 rounded-lg font-bold text-xs">
+                      {event.targetAudienceScope === 'members' ? 'Organization Members Only' : 'Campus-Wide (All Eligible Students)'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* 1. Target Year Levels */}
                 <div>
-                  <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">
-                    Target Year Levels
-                  </label>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider block">
+                      Target Year Levels
+                    </label>
+                    <span className="text-[11px] text-gray-400">
+                      {(event.targetYearLevels || []).length > 0
+                        ? `${event.targetYearLevels.length} Year Levels Selected`
+                        : 'All Years'}
+                    </span>
+                  </div>
                   <div className="flex flex-wrap gap-2">
                     {(event.targetYearLevels || []).map((year) => (
                       <span
@@ -764,29 +870,85 @@ export default function OfficerEventDetailView({
                       </span>
                     ))}
                     {(!event.targetYearLevels || event.targetYearLevels.length === 0) && (
-                      <span className="text-xs text-gray-500 italic">All Year Levels</span>
+                      <span className="text-xs text-gray-500 italic bg-gray-50 border border-gray-200 px-3 py-1 rounded-lg">
+                        All Year Levels Eligible (College & Senior High School)
+                      </span>
                     )}
                   </div>
                 </div>
 
-                <div>
-                  <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">
-                    Target Academic Departments
-                  </label>
+                {/* 2. Target Programs / Courses */}
+                <div className="pt-2 border-t border-gray-100">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider block">
+                      Target Academic Programs / Strands
+                    </label>
+                    <span className="text-[11px] text-gray-400">
+                      {targetCourseLabels.length > 0 ? `${targetCourseLabels.length} Programs Selected` : 'All Programs'}
+                    </span>
+                  </div>
                   <div className="flex flex-wrap gap-2">
-                    {targetDeptNames.map((dept, i) => (
+                    {targetCourseLabels.map((c, i) => (
                       <span
                         key={i}
-                        className="px-3 py-1 bg-purple-50 text-[#83358E] border border-purple-200 text-xs font-semibold rounded-lg"
+                        className="px-3 py-1 bg-indigo-50 text-indigo-800 border border-indigo-200/80 text-xs rounded-lg font-semibold"
                       >
-                        {dept}
+                        {c}
                       </span>
                     ))}
-                    {targetDeptNames.length === 0 && (
-                      <span className="text-xs text-gray-500 italic">All Campus Departments</span>
+                    {targetCourseLabels.length === 0 && (
+                      <span className="text-xs text-gray-500 italic bg-gray-50 border border-gray-200 px-3 py-1 rounded-lg">
+                        All Programs / Courses Eligible (No program restrictions)
+                      </span>
                     )}
                   </div>
                 </div>
+
+                {/* 3. Target Sections */}
+                <div className="pt-2 border-t border-gray-100">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider block">
+                      Target Sections
+                    </label>
+                    <span className="text-[11px] text-gray-400">
+                      {targetSectionLabels.length > 0 ? `${targetSectionLabels.length} Sections Selected` : 'All Sections'}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {targetSectionLabels.map((s, i) => (
+                      <span
+                        key={i}
+                        className="px-3 py-1 bg-purple-50 text-[#83358E] border border-purple-200/80 text-xs rounded-lg font-semibold"
+                      >
+                        {s}
+                      </span>
+                    ))}
+                    {targetSectionLabels.length === 0 && (
+                      <span className="text-xs text-gray-500 italic bg-gray-50 border border-gray-200 px-3 py-1 rounded-lg">
+                        All Sections Eligible (Open to all sections within selected programs)
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* 4. Target Academic Departments */}
+                {targetDeptNames.length > 0 && (
+                  <div className="pt-2 border-t border-gray-100">
+                    <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">
+                      Target Academic Departments
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {targetDeptNames.map((dept, i) => (
+                        <span
+                          key={i}
+                          className="px-3 py-1 bg-blue-50 text-[#0E4EBD] border border-blue-200 text-xs rounded-lg font-semibold"
+                        >
+                          {dept}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </section>

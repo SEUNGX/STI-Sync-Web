@@ -126,7 +126,17 @@ export function isEventEditable(
     };
   }
 
-  // 3. Completed Event Barrier: Completed events cannot be edited
+  // 3. Drafts are always fully editable
+  const isDraft = event.proposalStatus === 'draft' || event.status === 'draft' || !event.proposalStatus;
+  if (isDraft) {
+    return {
+      editable: true,
+      lockLevel: 'unlocked',
+      allowedFieldTypes: 'all',
+    };
+  }
+
+  // 4. Completed Event Barrier: Completed events cannot be edited
   const timing = getEventTimingStatus(event);
   if (
     timing === 'completed' ||
@@ -142,7 +152,7 @@ export function isEventEditable(
     };
   }
 
-  // 4. Ongoing Event Barrier: Live ongoing events cannot be edited
+  // 5. Ongoing Event Barrier: Live ongoing events cannot be edited
   if (
     timing === 'ongoing' ||
     event.status === 'ongoing' ||
@@ -156,7 +166,7 @@ export function isEventEditable(
     };
   }
 
-  // 5. Check Lifecycle Proposal Status
+  // 6. Check Lifecycle Proposal Status
   const status = event.proposalStatus || 'draft';
 
   switch (status) {

@@ -356,6 +356,9 @@ export function EventApprovals() {
   const archivedCount = events.filter((e) => e.isArchived === true && !e.isDeleted).length;
   const rejectedCount = events.filter((e) => e.proposalStatus === "rejected" && e.status !== "cancelled" && !e.isArchived && !e.isDeleted).length;
   const cancelledCount = events.filter((e) => (e.status === "cancelled" || e.proposalStatus === "cancelled") && !e.isArchived && !e.isDeleted).length;
+  const isSasOrg = (orgId?: string) => ['sas', 'sas_admin', 'sao', 'sao_admin'].includes(orgId || '');
+  const proposalsCount = events.filter((e) => !isSasOrg(e.hostingOrgId) && !e.isArchived && !e.isDeleted).length;
+  const saoMadeCount = events.filter((e) => isSasOrg(e.hostingOrgId) && !e.isArchived && !e.isDeleted).length;
   const draftsCount = filteredDrafts.length;
 
   // Active list & Pagination
@@ -517,30 +520,10 @@ export function EventApprovals() {
       {/* ── Header ── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
+          <h2 className="text-xl font-black text-[#001A4D] tracking-tight">Event Approvals & Registry</h2>
           <p className="text-gray-500 text-sm font-medium">
-            Review and approve event proposals from student organizations
+            Review and approve event proposals from student organizations, or author institutional SAO events
           </p>
-
-          {/* Metric Summary Badges */}
-          <div className="flex flex-wrap items-center gap-2.5 mt-3">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50/80 border border-amber-200 rounded-lg text-xs font-bold text-amber-800">
-              <span className="font-extrabold text-amber-900">{pendingCount}</span> Pending Review
-            </div>
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50/80 border border-emerald-200 rounded-lg text-xs font-bold text-emerald-800">
-              <span className="font-extrabold text-emerald-900">{approvedCount}</span> Approved
-            </div>
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50/80 border border-blue-200 rounded-lg text-xs font-bold text-blue-800">
-              <span className="font-extrabold text-blue-900">{completedCount}</span> Completed
-            </div>
-            {archivedCount > 0 && (
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 border border-slate-300 rounded-lg text-xs font-bold text-slate-700">
-                <span className="font-extrabold text-slate-900">{archivedCount}</span> Archived
-              </div>
-            )}
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-red-50/80 border border-red-200 rounded-lg text-xs font-bold text-red-800">
-              <span className="font-extrabold text-red-900">{rejectedCount}</span> Rejected
-            </div>
-          </div>
         </div>
 
         {/* Solid button without gradients */}
@@ -555,6 +538,145 @@ export function EventApprovals() {
           <Plus className="w-4 h-4 text-[#FFD41C]" />
           Create SAO Event
         </Button>
+      </div>
+
+      {/* ── Enlarge 5 Stat Metric Cards (Pending, Approved, Rejected, Proposals, SAO Made) ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+        {/* 1. Pending */}
+        <div
+          onClick={() => handleTabChange("pending")}
+          className={`p-4 rounded-2xl border transition-all cursor-pointer relative overflow-hidden group shadow-xs ${
+            activeTab === "pending"
+              ? "bg-gradient-to-br from-amber-500 to-amber-600 text-white border-amber-600 ring-2 ring-amber-400/30 shadow-md"
+              : "bg-white border-gray-200 hover:border-amber-300 hover:shadow-sm"
+          }`}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className={`text-xs font-bold uppercase tracking-wider ${activeTab === "pending" ? "text-amber-100" : "text-gray-500"}`}>
+              Pending Review
+            </span>
+            <div className={`p-2 rounded-xl ${activeTab === "pending" ? "bg-white/20 text-white" : "bg-amber-50 text-amber-600"}`}>
+              <Clock className="w-4 h-4" />
+            </div>
+          </div>
+          <div className={`text-2xl font-black mb-1 ${activeTab === "pending" ? "text-white" : "text-gray-900"}`}>
+            {eventsLoading ? "..." : pendingCount}
+          </div>
+          <div className="flex items-center justify-between">
+            <span className={`text-[11px] font-medium ${activeTab === "pending" ? "text-amber-100" : "text-amber-600"}`}>
+              {pendingCount === 1 ? "1 proposal awaiting" : `${pendingCount} proposals awaiting`}
+            </span>
+            {pendingCount > 0 && (
+              <span className={`w-2 h-2 rounded-full ${activeTab === "pending" ? "bg-white animate-ping" : "bg-amber-500"}`} />
+            )}
+          </div>
+        </div>
+
+        {/* 2. Approved */}
+        <div
+          onClick={() => handleTabChange("approved")}
+          className={`p-4 rounded-2xl border transition-all cursor-pointer relative overflow-hidden group shadow-xs ${
+            activeTab === "approved"
+              ? "bg-gradient-to-br from-emerald-600 to-emerald-700 text-white border-emerald-700 ring-2 ring-emerald-400/30 shadow-md"
+              : "bg-white border-gray-200 hover:border-emerald-300 hover:shadow-sm"
+          }`}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className={`text-xs font-bold uppercase tracking-wider ${activeTab === "approved" ? "text-emerald-100" : "text-gray-500"}`}>
+              Approved Events
+            </span>
+            <div className={`p-2 rounded-xl ${activeTab === "approved" ? "bg-white/20 text-white" : "bg-emerald-50 text-emerald-600"}`}>
+              <CheckCircle2 className="w-4 h-4" />
+            </div>
+          </div>
+          <div className={`text-2xl font-black mb-1 ${activeTab === "approved" ? "text-white" : "text-gray-900"}`}>
+            {eventsLoading ? "..." : approvedCount}
+          </div>
+          <div className="flex items-center justify-between">
+            <span className={`text-[11px] font-medium ${activeTab === "approved" ? "text-emerald-100" : "text-emerald-600"}`}>
+              Active & Scheduled
+            </span>
+          </div>
+        </div>
+
+        {/* 3. Rejected */}
+        <div
+          onClick={() => handleTabChange("rejected")}
+          className={`p-4 rounded-2xl border transition-all cursor-pointer relative overflow-hidden group shadow-xs ${
+            activeTab === "rejected"
+              ? "bg-gradient-to-br from-rose-600 to-red-700 text-white border-rose-700 ring-2 ring-rose-400/30 shadow-md"
+              : "bg-white border-gray-200 hover:border-rose-300 hover:shadow-sm"
+          }`}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className={`text-xs font-bold uppercase tracking-wider ${activeTab === "rejected" ? "text-rose-100" : "text-gray-500"}`}>
+              Rejected
+            </span>
+            <div className={`p-2 rounded-xl ${activeTab === "rejected" ? "bg-white/20 text-white" : "bg-rose-50 text-rose-600"}`}>
+              <XCircle className="w-4 h-4" />
+            </div>
+          </div>
+          <div className={`text-2xl font-black mb-1 ${activeTab === "rejected" ? "text-white" : "text-gray-900"}`}>
+            {eventsLoading ? "..." : rejectedCount}
+          </div>
+          <div className="flex items-center justify-between">
+            <span className={`text-[11px] font-medium ${activeTab === "rejected" ? "text-rose-100" : "text-rose-600"}`}>
+              Declined proposals
+            </span>
+          </div>
+        </div>
+
+        {/* 4. Club Proposals */}
+        <div
+          onClick={() => {
+            handleTabChange("all");
+            setFilterOrg("all");
+          }}
+          className={`p-4 rounded-2xl border transition-all cursor-pointer relative overflow-hidden group shadow-xs bg-white border-gray-200 hover:border-purple-300 hover:shadow-sm`}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-bold uppercase tracking-wider text-gray-500">
+              Club Proposals
+            </span>
+            <div className="p-2 rounded-xl bg-purple-50 text-purple-600">
+              <Calendar className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="text-2xl font-black mb-1 text-gray-900">
+            {eventsLoading ? "..." : proposalsCount}
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-medium text-purple-700">
+              Student Org Initiatives
+            </span>
+          </div>
+        </div>
+
+        {/* 5. SAO Made */}
+        <div
+          onClick={() => {
+            handleTabChange("all");
+            setFilterOrg("sas");
+          }}
+          className={`p-4 rounded-2xl border transition-all cursor-pointer relative overflow-hidden group shadow-xs bg-white border-gray-200 hover:border-blue-300 hover:shadow-sm`}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-bold uppercase tracking-wider text-gray-500">
+              SAO Made
+            </span>
+            <div className="p-2 rounded-xl bg-blue-50 text-[#001A4D]">
+              <FileEdit className="w-4 h-4 text-[#001A4D]" />
+            </div>
+          </div>
+          <div className="text-2xl font-black mb-1 text-gray-900">
+            {eventsLoading ? "..." : saoMadeCount}
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-medium text-blue-800">
+              Institutional Events
+            </span>
+          </div>
+        </div>
       </div>
 
       {/* ── Main Container: Filters + Fixed Table + Pagination ── */}

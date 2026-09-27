@@ -18,6 +18,7 @@ import {
 import { toast } from 'sonner';
 import { useEventPayablesStream } from '../hooks/usePayableStream';
 import { formatCurrency } from '../../../utils/currency';
+import { format12HourTime } from '../../../utils/date';
 import { generateDynamicEventFines } from '../services/payable.service';
 import type { SessionFineRule, FineViolationDetail } from '../types/payable.types';
 import type { EnrichedAttendanceRecord } from '../../attendance/types/attendance.types';
@@ -85,8 +86,8 @@ export function EventFinesGenerationModal({
         id: s.id || `session-${idx}`,
         title: s.title || s.label || `Session ${idx + 1}`,
         date: s.date || 'TBA',
-        timeStart: s.startTime || s.timeStart || '8:00 AM',
-        timeEnd: s.endTime || s.timeEnd || '5:00 PM',
+        timeStart: format12HourTime(s.startTime || s.timeStart) || '8:00 AM',
+        timeEnd: format12HourTime(s.endTime || s.timeEnd) || '5:00 PM',
         hasTimeOut: Boolean(s.hasTimeOut),
       }));
     }

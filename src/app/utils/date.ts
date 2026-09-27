@@ -128,14 +128,14 @@ export function formatAppDateTime(date: any, fallback = '—', separator = ' •
 }
 
 /**
- * Formats a 24-hour time string ("10:29" or "14:30") to 12-hour AM/PM format ("10:29AM" or "2:30PM")
+ * Formats a 24-hour time string ("10:29" or "14:30" or "08:00:00") to 12-hour AM/PM format ("10:29 AM" or "2:30 PM")
  */
 export function format12HourTime(timeStr: string | null | undefined): string {
   if (!timeStr) return '';
   const trimmed = timeStr.trim();
   if (!trimmed) return '';
 
-  const ampmMatch = trimmed.match(/^(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)?$/i);
+  const ampmMatch = trimmed.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM|am|pm)?$/i);
   if (!ampmMatch) return trimmed;
 
   let hours = parseInt(ampmMatch[1], 10);
@@ -143,18 +143,18 @@ export function format12HourTime(timeStr: string | null | undefined): string {
   const existingAmpm = ampmMatch[3];
 
   if (existingAmpm) {
-    return `${hours}:${minutes}${existingAmpm.toUpperCase()}`;
+    return `${hours}:${minutes} ${existingAmpm.toUpperCase()}`;
   }
 
   const ampm = hours >= 12 ? 'PM' : 'AM';
   hours = hours % 12;
   if (hours === 0) hours = 12;
 
-  return `${hours}:${minutes}${ampm}`;
+  return `${hours}:${minutes} ${ampm}`;
 }
 
 /**
- * Formats a session's date and start/end time into standard format: `Aug 25 2026 10:29AM - 12:00PM`
+ * Formats a session's date and start/end time into standard 12-hour format: `Aug 25 2026 • 10:29 AM – 12:00 PM`
  */
 export function formatSessionDateTime(dateInput: any, startTime?: string, endTime?: string): string {
   const dateFormatted = formatAppDate(dateInput, 'TBD');
@@ -162,9 +162,9 @@ export function formatSessionDateTime(dateInput: any, startTime?: string, endTim
   const endFormatted = format12HourTime(endTime);
 
   if (startFormatted && endFormatted) {
-    return `${dateFormatted} ${startFormatted} - ${endFormatted}`;
+    return `${dateFormatted} • ${startFormatted} – ${endFormatted}`;
   } else if (startFormatted) {
-    return `${dateFormatted} ${startFormatted}`;
+    return `${dateFormatted} • ${startFormatted}`;
   }
   return dateFormatted;
 }

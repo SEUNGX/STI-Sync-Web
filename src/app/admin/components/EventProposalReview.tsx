@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { toast } from 'sonner';
 import {
   ArrowLeft, Download, Clock, CheckCircle, CheckCircle2, XCircle, RotateCcw,
@@ -19,11 +19,11 @@ import {
 import { useAdviserProfile } from '../../modules/auth/hooks/useAdviserProfile';
 import { useOrganizationStream } from '../../modules/organizations/hooks/useOrganizationStream';
 import { useEventTypesStream, useVenuesStream } from '../../modules/events/hooks/useEventConfigStream';
-import { useDepartments } from '../../modules/academic/hooks/useAcademicStream';
+import { useDepartments, useCourses, useSections } from '../../modules/academic/hooks/useAcademicStream';
 import { EventPayablesQRControl } from '../../modules/finance/components/EventPayablesQRControl';
 import { exportEventProposalPDF } from '../../modules/events/utils/event-proposal-pdf';
 import { formatCurrency } from '../../utils/currency';
-import { formatAppDate, formatAppDateTime, formatSessionDateTime } from '../../utils/date';
+import { formatAppDate, formatAppDateTime, formatSessionDateTime, format12HourTime } from '../../utils/date';
 
 interface EventProposalReviewProps {
   event: EventDocument;
@@ -97,6 +97,8 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
   const { eventTypes } = useEventTypesStream();
   const { venues } = useVenuesStream();
   const { data: departments = [] } = useDepartments();
+  const { data: courses = [] } = useCourses();
+  const { data: sections = [] } = useSections();
   const { profile } = useAdviserProfile();
 
   const isCancelled = event.isCancelled || event.lifecycleStatus === 'cancelled' || event.status === 'cancelled' || event.proposalStatus === 'cancelled';
@@ -314,6 +316,24 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
       return match ? `${match.name} (${match.code})` : dId;
     })
     .filter(Boolean);
+
+  const targetCourseLabels = useMemo(() => {
+    const rawCourses = event.targetCourses || (event as any).allowedCourses || [];
+    if (!rawCourses || rawCourses.length === 0) return [];
+    return rawCourses.map((cId: string) => {
+      const match = courses.find((c) => c.id === cId || c.code.toLowerCase() === cId.toLowerCase());
+      return match ? `${match.code} - ${match.name}` : cId;
+    });
+  }, [event.targetCourses, (event as any).allowedCourses, courses]);
+
+  const targetSectionLabels = useMemo(() => {
+    const rawSections = event.targetSections || [];
+    if (!rawSections || rawSections.length === 0) return [];
+    return rawSections.map((sId: string) => {
+      const match = sections.find((s) => s.id === sId || s.name.toLowerCase() === sId.toLowerCase());
+      return match ? match.name : sId;
+    });
+  }, [event.targetSections, sections]);
 
   return (
     <div className="fixed inset-0 z-50 bg-white flex flex-col overflow-hidden animate-in fade-in duration-200">
@@ -700,57 +720,137 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
             onMouseEnter={() => { setActiveSection('schedule'); setVisitedSections(p => new Set([...p, 'schedule'])); }}
             className="space-y-4"
           >
-            <SectionHeader title="2. Schedule & Venue Logistics" subtitle="Academic context, session schedule, and venue logistics" />
+            <SectionHeader title="2. Schedule & Venue Logistics" subtitle="Academic context, session schedule, time windows, and venue logistics" />
             <div className="space-y-4">
+              {/* Context Summary Cards */}
               <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-xs">
-                <div className="grid grid-cols-2 divide-x divide-gray-200">
-                  {[
-                    { label: 'School Year', value: event.schoolYear || 'N/A' },
-                    { label: 'Submitted Date', value: createdDate },
-                  ].map(c => (
-                    <div key={c.label} className="px-5 first:pl-0 last:pr-0 text-center">
-                      <p className="text-xs uppercase text-gray-400 font-semibold mb-1">{c.label}</p>
-                      <p className="text-[#001A4D] font-bold text-base">{c.value}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Sessions */}
-              <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <p className="text-[#001A4D] font-bold text-sm">Event Sessions</p>
-                  <span className="px-2.5 py-0.5 bg-[#001A4D] text-[#FFD41C] text-xs rounded-full font-bold">{event.sessions?.length || 0} Sessions</span>
-                </div>
-                <div className="space-y-3">
-                  {(event.sessions || []).map((s, i) => (
-                    <div key={s.id || i} className="border-l-4 border-[#0E4EBD] bg-white border border-gray-200 rounded-xl p-4 shadow-xs">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-[#0E4EBD] font-black text-xs uppercase tracking-wider">Session {i + 1}</span>
-                        <span className="text-[#001A4D] font-extrabold text-base">{s.title || `Session ${i + 1}`}</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm text-gray-800 font-bold">
-                        <Calendar className="w-4 h-4 text-[#0E4EBD]" />
-                        <span>{formatSessionDateTime(s.date, s.startTime, s.endTime)}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Venue & Academic Period */}
-              <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-xs">
-                <div className="grid grid-cols-2 gap-6">
-                  <div>
-                    <p className="text-xs uppercase text-gray-400 font-bold mb-1">Requested Venue</p>
-                    <p className="text-[#001A4D] font-bold text-base">{venueName}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs uppercase text-gray-400 font-bold mb-1">Academic Period</p>
-                    <p className="text-[#0E4EBD] font-bold text-sm">
-                      {event.schoolYear || 'SY 2025–2026'} · {event.semester || 'Active Semester'}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 divide-y sm:divide-y-0 sm:divide-x divide-gray-100">
+                  <div className="px-3 first:pl-0 text-left sm:text-center">
+                    <p className="text-[11px] uppercase text-gray-400 font-bold tracking-wider mb-1">School Year & Term</p>
+                    <p className="text-[#001A4D] font-extrabold text-sm">
+                      {event.schoolYear || 'SY 2025–2026'}
+                      {event.semester ? ` • ${event.semester}` : ''}
                     </p>
                   </div>
+                  <div className="px-3 text-left sm:text-center pt-3 sm:pt-0">
+                    <p className="text-[11px] uppercase text-gray-400 font-bold tracking-wider mb-1">Requested Venue</p>
+                    <p className="text-[#0E4EBD] font-extrabold text-sm">{venueName}</p>
+                  </div>
+                  <div className="px-3 text-left sm:text-center pt-3 sm:pt-0">
+                    <p className="text-[11px] uppercase text-gray-400 font-bold tracking-wider mb-1">Attendance Grace Period</p>
+                    <p className="text-emerald-700 font-extrabold text-sm">
+                      {event.gracePeriodMinutes != null ? `${event.gracePeriodMinutes} mins` : '15 mins (Default)'}
+                    </p>
+                  </div>
+                  <div className="px-3 last:pr-0 text-left sm:text-center pt-3 sm:pt-0">
+                    <p className="text-[11px] uppercase text-gray-400 font-bold tracking-wider mb-1">Late Attendance Threshold</p>
+                    <p className="text-amber-700 font-extrabold text-sm">
+                      {event.lateThresholdMinutes != null ? `${event.lateThresholdMinutes} mins` : '30 mins (Default)'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Sessions with Detailed Time In and Time Out Windows */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <p className="text-[#001A4D] font-bold text-sm">Configured Event Sessions</p>
+                    <span className="px-2.5 py-0.5 bg-[#001A4D] text-[#FFD41C] text-xs rounded-full font-bold">
+                      {event.sessions?.length || 0} {event.sessions?.length === 1 ? 'Session' : 'Sessions'}
+                    </span>
+                  </div>
+                  {event.enableQRTickets !== false && (
+                    <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                      QR Ticket Scanning Enabled
+                    </span>
+                  )}
+                </div>
+
+                <div className="space-y-3">
+                  {(event.sessions || []).map((s, i) => (
+                    <div key={s.id || i} className="border-l-4 border-[#0E4EBD] bg-white border border-gray-200 rounded-xl p-4 shadow-xs space-y-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 pb-2 border-b border-gray-100">
+                        <div className="flex items-center gap-2">
+                          <span className="px-2 py-0.5 bg-[#0E4EBD]/10 text-[#0E4EBD] font-black text-xs uppercase tracking-wider rounded-md">
+                            Session {i + 1}
+                          </span>
+                          <span className="text-[#001A4D] font-extrabold text-base">{s.title || `Session ${i + 1}`}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-xs text-gray-700 font-semibold bg-gray-50 px-2.5 py-1 rounded-lg border border-gray-200/80">
+                          <Calendar className="w-3.5 h-3.5 text-[#0E4EBD]" />
+                          <span>{formatAppDate(s.date)}</span>
+                          <span className="text-gray-300">•</span>
+                          <Clock className="w-3.5 h-3.5 text-gray-500" />
+                          <span>{format12HourTime(s.startTime)} – {format12HourTime(s.endTime)}</span>
+                        </div>
+                      </div>
+
+                      {/* Time-In and Time-Out Windows */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                        {/* Time In Window */}
+                        <div className="p-3 bg-emerald-50/70 border border-emerald-200/80 rounded-xl">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-[11px] font-bold text-emerald-900 uppercase tracking-wider flex items-center gap-1">
+                              <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                              Time-In Window
+                            </span>
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-md">
+                              Entry Scan
+                            </span>
+                          </div>
+                          <p className="text-sm font-black text-emerald-950">
+                            {s.timeInOpen && s.timeInClose
+                              ? `${format12HourTime(s.timeInOpen)} — ${format12HourTime(s.timeInClose)}`
+                              : s.startTime
+                              ? `Opens at ${format12HourTime(s.startTime)}`
+                              : 'Not configured'}
+                          </p>
+                          <p className="text-[11px] text-emerald-700 mt-0.5">
+                            Grace period allows scanning up to {event.gracePeriodMinutes ?? 15}m after session start.
+                          </p>
+                        </div>
+
+                        {/* Time Out Window */}
+                        <div className={`p-3 rounded-xl border ${
+                          s.hasTimeOut
+                            ? 'bg-blue-50/70 border-blue-200/80'
+                            : 'bg-gray-50 border-gray-200'
+                        }`}>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className={`text-[11px] font-bold uppercase tracking-wider flex items-center gap-1 ${
+                              s.hasTimeOut ? 'text-blue-900' : 'text-gray-500'
+                            }`}>
+                              <span className={`w-2 h-2 rounded-full ${s.hasTimeOut ? 'bg-blue-500' : 'bg-gray-400'}`} />
+                              Time-Out Window
+                            </span>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                              s.hasTimeOut ? 'text-blue-700 bg-blue-100/80' : 'text-gray-600 bg-gray-200'
+                            }`}>
+                              {s.hasTimeOut ? 'Exit Scan Required' : 'Not Required'}
+                            </span>
+                          </div>
+                          <p className={`text-sm font-black ${s.hasTimeOut ? 'text-blue-950' : 'text-gray-600'}`}>
+                            {s.hasTimeOut
+                              ? (s.timeOutOpen && s.timeOutClose ? `${format12HourTime(s.timeOutOpen)} — ${format12HourTime(s.timeOutClose)}` : `Around ${format12HourTime(s.endTime)}`)
+                              : 'No checkout scan required for this session'}
+                          </p>
+                          <p className={`text-[11px] mt-0.5 ${s.hasTimeOut ? 'text-blue-700' : 'text-gray-400'}`}>
+                            {s.hasTimeOut
+                              ? 'Attendees must scan out within this window to complete attendance record.'
+                              : 'Single check-in satisfies attendance criteria.'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+                  {(!event.sessions || event.sessions.length === 0) && (
+                    <div className="bg-white border border-gray-200 rounded-xl p-6 text-center text-gray-500 text-xs">
+                      No sessions configured for this event.
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -762,40 +862,129 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
             onMouseEnter={() => { setActiveSection('participants'); setVisitedSections(p => new Set([...p, 'participants'])); }}
             className="space-y-4"
           >
-            <SectionHeader title="3. Target Audience & Attendance" subtitle="Target audience, reach estimate, and attendance configuration" />
+            <SectionHeader title="3. Target Audience & Attendance Policies" subtitle="Target programs, year levels, sections, reach estimate, and attendance configuration" />
             <div className="space-y-4">
+              {/* Metric Cards */}
               <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-xs">
-                <div className="grid grid-cols-2 divide-x divide-gray-200">
-                  {[
-                    { label: 'Expected Attendance', value: event.expectedParticipantCount || 0 },
-                    { label: 'Student Payables', value: event.studentPayablesEnabled ? `${formatCurrency(event.suggestedFeePerStudent || 0)} / student` : 'Disabled / Free' },
-                  ].map(c => (
-                    <div key={c.label} className="px-5 first:pl-0 last:pr-0 text-center">
-                      <p className="text-xs uppercase text-gray-400 font-semibold mb-1">{c.label}</p>
-                      <p className="text-[#001A4D] font-bold text-xl">{c.value}</p>
-                    </div>
-                  ))}
+                <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-gray-200">
+                  <div className="px-5 first:pl-0 text-center">
+                    <p className="text-xs uppercase text-gray-400 font-semibold mb-1">Expected Attendance</p>
+                    <p className="text-[#001A4D] font-black text-xl">{event.expectedParticipantCount || 0} students</p>
+                  </div>
+                  <div className="px-5 text-center pt-3 sm:pt-0">
+                    <p className="text-xs uppercase text-gray-400 font-semibold mb-1">Student Payables</p>
+                    <p className="text-[#0E4EBD] font-bold text-base">
+                      {event.studentPayablesEnabled
+                        ? `${formatCurrency(event.suggestedFeePerStudent || 0)} / student`
+                        : 'Disabled / Free Entry'}
+                    </p>
+                  </div>
+                  <div className="px-5 last:pr-0 text-center pt-3 sm:pt-0">
+                    <p className="text-xs uppercase text-gray-400 font-semibold mb-1">Attendance Fine Policy</p>
+                    <p className="text-red-600 font-bold text-base">
+                      {event.latePenaltyAmount ? `${formatCurrency(event.latePenaltyAmount)} / Absence` : 'None / Default'}
+                    </p>
+                  </div>
                 </div>
               </div>
-              <div className="bg-white border border-gray-200 rounded-2xl p-4 space-y-4 shadow-xs">
+
+              {/* Target Filtering Details */}
+              <div className="bg-white border border-gray-200 rounded-2xl p-5 space-y-5 shadow-xs">
+                {/* Academic Level & Audience Scope */}
+                <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-gray-100 text-xs">
+                  <div>
+                    <span className="text-gray-400 font-bold uppercase tracking-wider block mb-1">Target Academic Track</span>
+                    <span className="px-3 py-1 bg-blue-50 text-[#001A4D] border border-blue-200/80 rounded-lg font-bold text-xs">
+                      {event.targetAcademicLevel === 'COLLEGE'
+                        ? 'College Division Only'
+                        : event.targetAcademicLevel === 'SHS'
+                        ? 'Senior High School (SHS) Only'
+                        : 'Both College & Senior High School (SHS)'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400 font-bold uppercase tracking-wider block mb-1">Audience Scope</span>
+                    <span className="px-3 py-1 bg-amber-50 text-amber-900 border border-amber-200/80 rounded-lg font-bold text-xs">
+                      {event.targetAudienceScope === 'members' ? 'Organization Members Only' : 'Campus-Wide (All Eligible Students)'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* 1. Target Year Levels */}
                 <div>
-                  <p className="text-xs uppercase text-gray-400 font-semibold mb-2">Target Year Levels</p>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs uppercase text-gray-500 font-bold tracking-wider">Target Year Levels</p>
+                    <span className="text-[11px] text-gray-400">
+                      {(event.targetYearLevels || []).length > 0
+                        ? `${event.targetYearLevels.length} Year Levels Selected`
+                        : 'All Years'}
+                    </span>
+                  </div>
                   <div className="flex flex-wrap gap-2">
                     {(event.targetYearLevels || []).map(y => (
-                      <span key={y} className="px-3 py-1 bg-[#001A4D] text-[#FFD41C] text-xs rounded-full font-medium">{y}</span>
+                      <span key={y} className="px-3 py-1 bg-[#001A4D] text-[#FFD41C] text-xs rounded-lg font-bold shadow-2xs">
+                        {y}
+                      </span>
                     ))}
                     {(!event.targetYearLevels || event.targetYearLevels.length === 0) && (
-                      <span className="text-xs text-gray-500 italic">All year levels eligible</span>
+                      <span className="text-xs text-gray-500 italic bg-gray-50 border border-gray-200 px-3 py-1 rounded-lg">
+                        All Year Levels Eligible (College & Senior High School)
+                      </span>
                     )}
                   </div>
                 </div>
 
+                {/* 2. Target Programs / Courses */}
+                <div className="pt-3 border-t border-gray-100">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs uppercase text-gray-500 font-bold tracking-wider">Target Academic Programs / Strands</p>
+                    <span className="text-[11px] text-gray-400">
+                      {targetCourseLabels.length > 0 ? `${targetCourseLabels.length} Programs Selected` : 'All Programs'}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {targetCourseLabels.map((c, i) => (
+                      <span key={i} className="px-3 py-1 bg-indigo-50 text-indigo-800 border border-indigo-200/80 text-xs rounded-lg font-semibold">
+                        {c}
+                      </span>
+                    ))}
+                    {targetCourseLabels.length === 0 && (
+                      <span className="text-xs text-gray-500 italic bg-gray-50 border border-gray-200 px-3 py-1 rounded-lg">
+                        All Programs / Courses Eligible (No program restrictions)
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* 3. Target Sections */}
+                <div className="pt-3 border-t border-gray-100">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs uppercase text-gray-500 font-bold tracking-wider">Target Sections</p>
+                    <span className="text-[11px] text-gray-400">
+                      {targetSectionLabels.length > 0 ? `${targetSectionLabels.length} Sections Selected` : 'All Sections'}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {targetSectionLabels.map((s, i) => (
+                      <span key={i} className="px-3 py-1 bg-purple-50 text-[#83358E] border border-purple-200/80 text-xs rounded-lg font-semibold">
+                        {s}
+                      </span>
+                    ))}
+                    {targetSectionLabels.length === 0 && (
+                      <span className="text-xs text-gray-500 italic bg-gray-50 border border-gray-200 px-3 py-1 rounded-lg">
+                        All Sections Eligible (Open to all sections within selected programs)
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* 4. Target Academic Departments (Legacy if present) */}
                 {targetDeptNames.length > 0 && (
-                  <div className="pt-2 border-t border-gray-100">
-                    <p className="text-xs uppercase text-gray-400 font-semibold mb-2">Target Academic Departments</p>
+                  <div className="pt-3 border-t border-gray-100">
+                    <p className="text-xs uppercase text-gray-500 font-bold tracking-wider mb-2">Target Academic Departments</p>
                     <div className="flex flex-wrap gap-2">
                       {targetDeptNames.map((d, i) => (
-                        <span key={i} className="px-3 py-1 bg-blue-50 text-[#0E4EBD] border border-blue-200 text-xs rounded-full font-semibold">
+                        <span key={i} className="px-3 py-1 bg-blue-50 text-[#0E4EBD] border border-blue-200 text-xs rounded-lg font-semibold">
                           {d}
                         </span>
                       ))}

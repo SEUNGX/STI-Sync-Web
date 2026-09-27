@@ -198,7 +198,7 @@ export default function OfficerEventProposalModal({ isOpen, onClose, initialDraf
   const [formData, setFormData] = useState<EventFormData>(
     initialDraft
       ? { hostingOrgId: initialDraft.hostingOrgId || activeOrgId, ...initialDraft }
-      : { hostingOrgId: activeOrgId }
+      : { hostingOrgId: activeOrgId, enableQRTickets: false, enableQR: false }
   );
   const [activeDraftId, setActiveDraftId] = useState<string | undefined>(draftId);
   const [saving, setSaving] = useState(false);
@@ -217,7 +217,8 @@ export default function OfficerEventProposalModal({ isOpen, onClose, initialDraf
       } else {
         setFormData({
           hostingOrgId: activeOrgId,
-          enableQRTickets: true,
+          enableQRTickets: false,
+          enableQR: false,
           attendanceEnabled: true,
           sessions: [],
         });

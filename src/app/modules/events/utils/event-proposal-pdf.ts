@@ -2,7 +2,7 @@ import jsPDF from 'jspdf';
 import type { EventDocument } from '../types/event.types';
 import type { OrganizationDocument } from '../../organizations/types/organization.types';
 import { formatCurrency } from '../../../utils/currency';
-import { formatAppDate } from '../../../utils/date';
+import { formatAppDate, format12HourTime } from '../../../utils/date';
 
 interface EventProposalPDFOptions {
   org?: OrganizationDocument | null;
@@ -196,7 +196,10 @@ export async function exportEventProposalPDF(
 
       doc.text(String(s.title || `Session ${idx + 1}`).slice(0, 18), margin + 3, y + 4.2);
       doc.text(formatAppDate(s.date, 'TBD'), margin + 35, y + 4.2);
-      doc.text(`${s.startTime || 'TBD'} - ${s.endTime || 'TBD'}`, margin + 70, y + 4.2);
+      const startFmt = format12HourTime(s.startTime);
+      const endFmt = format12HourTime(s.endTime);
+      const timeStr = startFmt && endFmt ? `${startFmt} – ${endFmt}` : startFmt || endFmt || 'TBD';
+      doc.text(timeStr, margin + 70, y + 4.2);
       const vName = options.venueName || event.customVenueName || 'On-Campus Venue';
       doc.text(vName.slice(0, 22), margin + 115, y + 4.2);
       doc.text(`Grace: ${event.gracePeriodMinutes || 15}m / Late: ${event.lateThresholdMinutes || 60}m`, margin + 155, y + 4.2);
