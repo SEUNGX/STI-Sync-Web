@@ -188,8 +188,8 @@ export function Dashboard() {
       });
     });
 
-    // Sort newest pending items first
-    items.sort((a, b) => b.timestampMs - a.timestampMs);
+    // Sort FIFO: oldest pending items first (first in, first out)
+    items.sort((a, b) => a.timestampMs - b.timestampMs);
     return items;
   }, [pendingIncomingDocs, pendingEvents, pendingLiquidations, pendingStudents, orgMap]);
 
@@ -332,20 +332,25 @@ export function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* 1. Unified Approvals Queue (Fixed Height h-[420px], Rows Pushed Directly to Top) */}
         <Card className="lg:col-span-5 h-[420px] border-[#E0E0E0] shadow-sm rounded-2xl flex flex-col gap-0 overflow-hidden">
-          <CardHeader className="border-b border-gray-100 py-3.5 px-4 pb-3 flex-shrink-0">
+          <CardHeader className="border-b border-gray-100 py-3 px-4 flex-shrink-0">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <FileCheck className="w-5 h-5 text-[#0E4EBD]" />
-                <CardTitle className="text-[#001A4D] text-lg font-bold">Pending Approvals Queue</CardTitle>
+              <div>
+                <div className="flex items-center gap-2">
+                  <FileCheck className="w-5 h-5 text-[#0E4EBD]" />
+                  <CardTitle className="text-[#001A4D] text-lg font-bold">Pending Approvals Queue</CardTitle>
+                </div>
+                <p className="text-[11px] text-gray-500 mt-0.5">
+                  Showing 4 oldest pending submissions (FIFO)
+                </p>
               </div>
               <span className="px-2.5 py-0.5 bg-[#001A4D] text-white rounded-full text-xs font-mono font-bold">
                 {unifiedApprovalsQueue.length} Total
               </span>
             </div>
           </CardHeader>
-          <CardContent className="px-4 pt-3 pb-3 flex-1 flex flex-col justify-start overflow-hidden">
-            {/* Rows Pushed Directly to Top - Scrollable without visible scrollbar */}
-            <div className="space-y-2 flex-1 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden pt-0 mt-0">
+          <CardContent className="px-4 pt-3 pb-3 flex-1 flex flex-col justify-start">
+            {/* Rows Pushed Directly to Top - Non-scrollable FIFO queue limited to 4 items */}
+            <div className="space-y-2 flex-1 pt-0 mt-0">
               {unifiedApprovalsQueue.length === 0 ? (
                 <div className="py-10 text-center text-gray-500">
                   <CheckCircle2 className="w-10 h-10 text-green-500 mx-auto mb-2" />
@@ -355,17 +360,22 @@ export function Dashboard() {
                   </p>
                 </div>
               ) : (
-                unifiedApprovalsQueue.map((item) => (
+                unifiedApprovalsQueue.slice(0, 4).map((item) => (
                   <div
                     key={item.id}
                     className="flex items-center gap-3 p-2.5 hover:bg-gray-50/80 rounded-xl transition-colors border border-gray-100"
                   >
                     <div className={`w-2.5 h-2.5 rounded-full ${item.badgeColor} flex-shrink-0`} />
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center justify-between gap-1.5">
                         <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
                           {item.domainLabel}
                         </span>
+                        {item.dateFormatted && (
+                          <span className="text-[10px] text-gray-400 font-medium">
+                            Submitted: {item.dateFormatted}
+                          </span>
+                        )}
                       </div>
                       <div className="font-semibold text-[#001A4D] text-xs truncate">{item.title}</div>
                       <div className="text-[11px] text-gray-500 truncate mt-0.5">{item.subtitle}</div>
@@ -508,7 +518,7 @@ export function Dashboard() {
               className="w-full border-gray-300 text-[#001A4D] hover:bg-gray-50 justify-start font-semibold text-xs py-3.5 cursor-pointer"
             >
               <TrendingUp className="w-4 h-4 mr-2 text-green-600" />
-              Attendance Gate
+              Attendance
             </Button>
           </CardContent>
         </Card>

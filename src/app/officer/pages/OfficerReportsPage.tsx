@@ -146,9 +146,14 @@ export default function OfficerReportsPage() {
   // ── Open Official Reports ──────────────────────────────────────────────────
   const handleOpenReport = (id: OfficerReportId) => {
     if (!activeOrg) return;
-    const officerName = profile?.displayName || profile?.name || 'Officer';
+    const isAdviser = Boolean(
+      profile?.isAdviser ||
+      profile?.activeRoleId?.toLowerCase() === 'adviser' ||
+      profile?.activeRoleId?.toLowerCase().includes('adviser')
+    );
+    const officerName = profile?.studentName || (profile as any)?.displayName || (isAdviser ? 'Club Adviser' : 'Officer');
     const presidentName = activeOrg.presidentName || 'Club President';
-    const adviserName = activeOrg.adviserName || 'Faculty Adviser';
+    const adviserName = (activeOrg as any).adviser?.name || activeOrg.adviserName || (isAdviser ? (profile?.studentName || 'Faculty Adviser') : 'Faculty Adviser');
 
     let rep: GeneratedReportData;
     switch (id) {

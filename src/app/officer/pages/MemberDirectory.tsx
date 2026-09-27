@@ -27,6 +27,7 @@ import { useCourses, useDepartments } from '../../modules/academic/hooks/useAcad
 import {
   approveMemberApplication,
   rejectMemberApplication,
+  revokeOfficer,
 } from '../../modules/organizations/services/member.service';
 import { MemberProfilePanel } from '../components/MemberProfilePanel';
 import { AddMemberModal } from '../components/AddMemberModal';
@@ -178,10 +179,40 @@ export default function MemberDirectory() {
   const rawInactiveMembers = useMemo(() => members.filter((m) => m.status === 'inactive' || m.status === 'suspended'), [members]);
   const rawPendingMembers = useMemo(() => members.filter((m) => m.status === 'pending'), [members]);
 
-  // Check if current user has permission to appoint officers
+  // Check if current user is an Adviser or Executive Officer
+  const isAdviser = Boolean(
+    profile?.isAdviser ||
+    profile?.activeRoleId?.toLowerCase() === 'adviser' ||
+    profile?.activeRoleId?.toLowerCase().includes('adviser')
+  );
   const activeRoleDoc = roles.find((r) => r.id === profile?.activeRoleId);
-  const activeRoleName = activeRoleDoc?.name?.toLowerCase() || '';
-  const canAppointOfficers = ['president', 'vice president', 'secretary'].includes(activeRoleName);
+  const activeRoleName = isAdviser ? 'adviser' : (activeRoleDoc?.name?.toLowerCase() || '');
+  const canAppointOfficers = isAdviser || ['president', 'vice president', 'secretary'].includes(activeRoleName);
+  const canManageMembers = isAdviser || ['president', 'vice president', 'secretary'].includes(activeRoleName);
+  const [revokingOfficerId, setRevokingOfficerId] = useState<string | null>(null);
+
+  const handleRevokeOfficer = async (officer: any) => {
+    const { fullName } = getMemberDetails(officer);
+    const roleDoc = roles.find((r) => r.id === officer.roleId);
+    const roleName = roleDoc?.name || officer.roleName || 'Officer';
+
+    const confirmed = window.confirm(
+      `Are you sure you want to revoke officer privileges for ${fullName} (${roleName})?`
+    );
+    if (!confirmed) return;
+
+    setRevokingOfficerId(officer.id);
+    try {
+      await revokeOfficer(activeOrgId, officer.id, officer.studentId);
+      setActionFeedback(`Revoked officer privileges for ${fullName}.`);
+      setTimeout(() => setActionFeedback(null), 4000);
+    } catch (err: any) {
+      console.error(err);
+      alert(`Failed to revoke officer: ${err.message}`);
+    } finally {
+      setRevokingOfficerId(null);
+    }
+  };
 
   // ─── Generic Filter & Sort Pipeline (Applies to ALL Tabs) ──────────────────
   const filterAndSortList = (rawList: any[]) => {
@@ -774,8 +805,12 @@ export default function MemberDirectory() {
                           )}
                         </span>
                         {officer.isActive && canAppointOfficers && (
-                          <button className="text-xs font-medium text-red-600 hover:underline cursor-pointer">
-                            Revoke Access
+                          <button
+                            onClick={() => handleRevokeOfficer(officer)}
+                            disabled={revokingOfficerId === officer.id}
+                            className="text-xs font-semibold text-red-600 hover:text-red-700 hover:underline cursor-pointer disabled:opacity-50"
+                          >
+                            {revokingOfficerId === officer.id ? 'Revoking...' : 'Revoke Access'}
                           </button>
                         )}
                       </div>
@@ -890,10 +925,14 @@ export default function MemberDirectory() {
                 }
               : undefined
           }
-          onRemoveMember={() => {
-            setMemberToRemove(selectedMember);
-            setSelectedMember(null);
-          }}
+          onRemoveMember={
+            canManageMembers
+              ? () => {
+                  setMemberToRemove(selectedMember);
+                  setSelectedMember(null);
+                }
+              : undefined
+          }
         />
       )}
 

@@ -117,8 +117,14 @@ export function useActiveAcademicPeriods() {
   };
 
   /** Helper to evaluate if a student needs re-enrollment */
-  const isStudentPendingReEnrollment = (student: { academicLevel?: import('../types/academic.types').AcademicLevel; schoolYear?: string; semester?: string; term?: string }) => {
-    const activePeriod = getActivePeriodFor(student.academicLevel || (student.semester && String(student.semester).includes('Trimester') ? 'SHS' : 'COLLEGE'));
+  const isStudentPendingReEnrollment = (student: { academicLevel?: import('../types/academic.types').AcademicLevel; yearLevel?: string; schoolYear?: string; semester?: string; term?: string }) => {
+    const isShs =
+      student.academicLevel === 'SHS' ||
+      (student.semester && String(student.semester).includes('Trimester')) ||
+      student.yearLevel === 'Grade 11' ||
+      student.yearLevel === 'Grade 12' ||
+      (typeof student.yearLevel === 'string' && student.yearLevel.toLowerCase().includes('grade'));
+    const activePeriod = getActivePeriodFor(isShs ? 'SHS' : 'COLLEGE');
     if (!activePeriod) return false;
 
     const studentTerm = student.term || student.semester;

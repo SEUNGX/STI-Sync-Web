@@ -23,10 +23,15 @@ export default function OrganizationProfile({ embedded = false }: { embedded?: b
   const { officers, loading: officersLoading } = useOrgOfficers(activeOrgId);
 
   const activeOrg = orgs.find(o => o.id === activeOrgId);
+  const isAdviser = Boolean(
+    profile?.isAdviser ||
+    profile?.activeRoleId?.toLowerCase() === 'adviser' ||
+    profile?.activeRoleId?.toLowerCase().includes('adviser')
+  );
   const activeRoleDoc = roles.find(r => r.id === profile?.activeRoleId);
-  const activeRoleName = activeRoleDoc?.name?.toLowerCase() || '';
+  const activeRoleName = isAdviser ? 'adviser' : (activeRoleDoc?.name?.toLowerCase() || '');
 
-  const canEdit = ['president', 'vice president', 'secretary'].includes(activeRoleName);
+  const canEdit = isAdviser || ['president', 'vice president', 'secretary'].includes(activeRoleName);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [logoFile, setLogoFile] = useState<File | null>(null);

@@ -335,16 +335,68 @@ export const appointAsOfficer = async (
   studentId: string,
   studentName: string,
   email: string,
-  tempPassword?: string
+  tempPassword?: string,
+  roleName?: string,
+  studentDetails?: {
+    course?: string;
+    year?: string;
+    department?: string;
+    contactNumber?: string;
+  }
 ): Promise<void> => {
   const batch = writeBatch(db);
   
-  // 1. Update the member doc to reflect they are an officer
-  const memberRef = doc(db, COLLECTION, memberDocId);
-  batch.update(memberRef, {
-    isOfficer: true,
-    updatedAt: serverTimestamp(),
-  });
+  // 1. If memberDocId exists, update the member doc to reflect they are an officer.
+  // If not, automatically provision their member document in organization_members!
+  if (memberDocId && memberDocId.trim()) {
+    const memberRef = doc(db, COLLECTION, memberDocId);
+    batch.update(memberRef, {
+      isOfficer: true,
+      updatedAt: serverTimestamp(),
+    });
+  } else {
+    // Check if member already exists by studentId
+    const qExisting = query(
+      collection(db, COLLECTION),
+      where('organizationId', '==', organizationId),
+      where('studentId', '==', studentId)
+    );
+    const existingSnap = await getDocs(qExisting);
+    if (!existingSnap.empty) {
+      batch.update(existingSnap.docs[0].ref, {
+        isOfficer: true,
+        status: 'active',
+        updatedAt: serverTimestamp(),
+      });
+    } else {
+      const newMemberRef = doc(collection(db, COLLECTION));
+      batch.set(newMemberRef, {
+        id: newMemberRef.id,
+        organizationId,
+        studentId,
+        studentName,
+        email,
+        course: studentDetails?.course || 'N/A',
+        year: studentDetails?.year || 'N/A',
+        department: studentDetails?.department || 'N/A',
+        contactNumber: studentDetails?.contactNumber || '',
+        status: 'active',
+        paymentStatus: 'paid',
+        isOfficer: true,
+        dateJoined: serverTimestamp(),
+        applicationDate: serverTimestamp(),
+        addedBy: 'Officer Appointment',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      // Increment organization memberCount
+      const orgRef = doc(db, 'organizations', organizationId);
+      batch.update(orgRef, {
+        memberCount: increment(1),
+        updatedAt: serverTimestamp(),
+      });
+    }
+  }
   
   // 2. Create the officer doc in organization_officers
   const officersCollectionRef = collection(db, 'organization_officers');
@@ -354,6 +406,7 @@ export const appointAsOfficer = async (
     id: officerDocRef.id,
     organizationId,
     roleId,
+    roleName: roleName || '',
     studentId,
     studentName,
     email,
@@ -362,6 +415,15 @@ export const appointAsOfficer = async (
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
+
+  // 3. If role is President, keep organization doc presidentName in sync
+  if (roleName && roleName.trim().toLowerCase() === 'president') {
+    const orgRef = doc(db, 'organizations', organizationId);
+    batch.update(orgRef, {
+      presidentName: studentName,
+      updatedAt: serverTimestamp(),
+    });
+  }
   
   const commitPromise = batch.commit();
   const timeoutPromise = new Promise<never>((_, reject) => {
@@ -373,5 +435,46 @@ export const appointAsOfficer = async (
   } catch (error: any) {
     console.error("Appoint officer failed:", error);
     throw new Error(`Appoint officer failed: ${error.message}`);
+  }
+};
+
+export const revokeOfficer = async (
+  organizationId: string,
+  officerDocId: string,
+  studentId: string
+): Promise<void> => {
+  const batch = writeBatch(db);
+  const officerRef = doc(db, 'organization_officers', officerDocId);
+  batch.update(officerRef, {
+    isActive: false,
+    updatedAt: serverTimestamp(),
+  });
+
+  // Update member doc if found to unset isOfficer
+  if (studentId) {
+    const qMember = query(
+      collection(db, COLLECTION),
+      where('organizationId', '==', organizationId),
+      where('studentId', '==', studentId)
+    );
+    const memberSnap = await getDocs(qMember);
+    if (!memberSnap.empty) {
+      batch.update(memberSnap.docs[0].ref, {
+        isOfficer: false,
+        updatedAt: serverTimestamp(),
+      });
+    }
+  }
+
+  const commitPromise = batch.commit();
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(() => reject(new Error("Firestore batch write timed out.")), 15000);
+  });
+
+  try {
+    await Promise.race([commitPromise, timeoutPromise]);
+  } catch (error: any) {
+    console.error("Revoke officer failed:", error);
+    throw new Error(`Revoke officer failed: ${error.message}`);
   }
 };

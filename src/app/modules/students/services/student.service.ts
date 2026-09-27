@@ -340,12 +340,13 @@ export async function reEnrollStudent(
   id: string,
   targetAcademicYear: string,
   targetSemester: StudentSemester,
-  updates?: Partial<Pick<StudentDocument, 'yearLevel' | 'section' | 'courseId' | 'courseName' | 'courseCode' | 'departmentId' | 'departmentName'>>
+  updates?: Partial<Pick<StudentDocument, 'academicLevel' | 'yearLevel' | 'section' | 'courseId' | 'courseName' | 'courseCode' | 'departmentId' | 'departmentName'>>
 ): Promise<void> {
   const ref = doc(db, STUDENTS_COLLECTION, id);
   await updateDoc(ref, {
     schoolYear: targetAcademicYear,
     semester: targetSemester,
+    term: targetSemester,
     status: 'ACTIVE',
     ...(updates || {}),
     updatedAt: Timestamp.now(),
@@ -359,6 +360,7 @@ export async function bulkReEnrollStudents(
   targetAcademicYear: string,
   targetSemester: StudentSemester,
   promotions?: {
+    academicLevel?: AcademicLevel;
     targetYearLevel?: StudentYearLevel;
     targetSection?: string;
     courseId?: string;
@@ -370,6 +372,7 @@ export async function bulkReEnrollStudents(
 ): Promise<void> {
   const batch = (await import('firebase/firestore')).writeBatch(db);
   const extraUpdates: Record<string, any> = {};
+  if (promotions?.academicLevel) extraUpdates.academicLevel = promotions.academicLevel;
   if (promotions?.targetYearLevel) extraUpdates.yearLevel = promotions.targetYearLevel;
   if (promotions?.targetSection) extraUpdates.section = promotions.targetSection.trim();
   if (promotions?.courseId) extraUpdates.courseId = promotions.courseId;
@@ -383,6 +386,7 @@ export async function bulkReEnrollStudents(
     batch.update(ref, {
       schoolYear: targetAcademicYear,
       semester: targetSemester,
+      term: targetSemester,
       status: 'ACTIVE',
       ...extraUpdates,
       updatedAt: Timestamp.now(),
@@ -510,42 +514,59 @@ export async function validateStudentArchival(
 }
 
 /**
- * Archives a student.
- * Ensures pre-flight clearance, sets status to ARCHIVED, and deactivates any active officer positions.
+ * Archives a student account.
+ * Handles validation, updates status to ARCHIVED, deactivates active officer roles, and syncs org membership.
  */
 export async function archiveStudent(
-  studentDoc: StudentDocument,
-  reason: string,
-  adminUid: string
+  studentOrId: StudentDocument | string,
+  reason: string = 'Manual Archive',
+  adminUid: string = 'admin'
 ): Promise<void> {
-  const validation = await validateStudentArchival(studentDoc);
-  if (!validation.canArchive) {
-    throw new Error(validation.blockers.join(' '));
-  }
+  const studentId = typeof studentOrId === 'string' ? studentOrId : studentOrId.id;
 
   const { writeBatch } = await import('firebase/firestore');
   const batch = writeBatch(db);
 
   // 1. Update student document to ARCHIVED
-  const studentRef = doc(db, STUDENTS_COLLECTION, studentDoc.id);
+  const studentRef = doc(db, STUDENTS_COLLECTION, studentId);
   batch.update(studentRef, {
     status: 'ARCHIVED',
-    archiveReason: reason.trim(),
+    archiveReason: (reason || 'Manual Archive').trim(),
     archivedAt: Timestamp.now(),
-    archivedBy: adminUid,
+    archivedBy: adminUid || 'admin',
     updatedAt: Timestamp.now(),
   });
 
-  // 2. Deactivate any active officer positions
-  for (const role of validation.activeOfficerRoles) {
-    const officerRef = doc(db, 'organization_officers', role.id);
-    batch.update(officerRef, {
-      isActive: false,
-      updatedAt: Timestamp.now(),
-    });
+  // 2. Deactivate any active officer positions if studentDoc was provided
+  if (typeof studentOrId === 'object' && studentOrId) {
+    const validation = await validateStudentArchival(studentOrId);
+    if (!validation.canArchive) {
+      throw new Error(validation.blockers.join(' '));
+    }
+    for (const role of validation.activeOfficerRoles) {
+      const officerRef = doc(db, 'organization_officers', role.id);
+      batch.update(officerRef, {
+        isActive: false,
+        updatedAt: Timestamp.now(),
+      });
+    }
   }
 
   await batch.commit();
+
+  // Sync organization membership status automatically
+  await syncOrgMembersOnStudentStatusChange(studentId, 'ARCHIVED');
+}
+
+/**
+ * Bulk archives multiple student accounts.
+ */
+export async function bulkArchiveStudents(
+  studentIds: string[],
+  adminUid: string = 'admin',
+  reason: string = 'Bulk Inactive Archive'
+): Promise<void> {
+  await Promise.all(studentIds.map((id) => archiveStudent(id, reason, adminUid)));
 }
 
 /**

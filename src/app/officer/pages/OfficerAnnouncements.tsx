@@ -26,8 +26,13 @@ export default function OfficerAnnouncements() {
   const activeOrgName = activeOrg ? activeOrg.name : 'Student Organization';
   const activeOrgInitials = activeOrg ? (activeOrg.acronym || activeOrg.name.substring(0, 3).toUpperCase()) : 'ORG';
 
+  const isAdviser = Boolean(
+    profile?.isAdviser ||
+    profile?.activeRoleId?.toLowerCase() === 'adviser' ||
+    profile?.activeRoleId?.toLowerCase().includes('adviser')
+  );
   const activeRoleDoc = roles.find((r) => r.id === profile?.activeRoleId);
-  const activeRoleName = activeRoleDoc ? activeRoleDoc.name : 'Officer';
+  const activeRoleName = isAdviser ? 'Club Adviser' : (activeRoleDoc ? activeRoleDoc.name : 'Officer');
 
   // Events hosted by this org that can be linked
   const orgEvents = useMemo(() => {
@@ -317,7 +322,7 @@ export default function OfficerAnnouncements() {
           activeOrgId={activeOrgId}
           activeOrgName={activeOrgName}
           authorUid={profile?.studentId || ''}
-          authorName={profile?.displayName || 'Officer'}
+          authorName={profile?.studentName || (profile as any)?.displayName || (isAdviser ? 'Club Adviser' : 'Officer')}
           authorRole={activeRoleName}
           orgEvents={orgEvents}
         />

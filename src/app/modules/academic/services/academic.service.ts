@@ -336,7 +336,7 @@ export async function executeSemesterRollover(
   targetSemester: SemesterDocument,
   options?: { academicLevel?: AcademicLevel },
   adminUid?: string
-): Promise<{ success: boolean; closingLabel: string; targetLabel: string; eventsArchivedCount: number }> {
+): Promise<{ success: boolean; closingLabel: string; targetLabel: string; eventsArchivedCount: number; collegeGraduatesArchivedCount?: number }> {
   const { writeBatch, collection: firestoreCollection, query: firestoreQuery, where: firestoreWhere, getDocs: firestoreGetDocs } = await import('firebase/firestore');
   const batch = writeBatch(db);
 
@@ -390,6 +390,46 @@ export async function executeSemesterRollover(
     console.warn('[executeSemesterRollover] Failed to query events for rollover archiving:', eventErr);
   }
 
+  // 3b. Automatically archive completed 4th Year College graduates on 2nd Semester rollover
+  let collegeGraduatesArchivedCount = 0;
+  const isClosingCollege2ndSem =
+    academicLevel === 'COLLEGE' &&
+    (closingSemester.semester === '2nd Semester' || String(closingSemester.semester).toLowerCase().includes('2nd'));
+
+  if (isClosingCollege2ndSem) {
+    try {
+      const studentsCol = firestoreCollection(db, 'students');
+      const activeStudentsSnap = await firestoreGetDocs(
+        firestoreQuery(studentsCol, firestoreWhere('status', '==', 'ACTIVE'))
+      );
+      for (const sDoc of activeStudentsSnap.docs) {
+        const sData = sDoc.data();
+        const sIsShs =
+          sData.academicLevel === 'SHS' ||
+          (sData.semester && String(sData.semester).includes('Trimester')) ||
+          sData.yearLevel === 'Grade 11' ||
+          sData.yearLevel === 'Grade 12';
+        if (!sIsShs) {
+          const sIs4thYear = sData.yearLevel === '4th Year' || sData.yearLevel === 4;
+          const sCompSem = String(sData.semester || sData.term || '').toLowerCase();
+          const sIs2nd = sCompSem.includes('2nd sem') || sCompSem.includes('second sem') || sCompSem === '2nd semester';
+          if (sIs4thYear && sIs2nd) {
+            batch.update(sDoc.ref, {
+              status: 'ARCHIVED',
+              archiveReason: 'Graduated',
+              archivedAt: Timestamp.now(),
+              archivedBy: adminUid || 'admin',
+              updatedAt: Timestamp.now(),
+            });
+            collegeGraduatesArchivedCount++;
+          }
+        }
+      }
+    } catch (gradErr) {
+      console.warn('[executeSemesterRollover] Failed to query college graduates for archival:', gradErr);
+    }
+  }
+
   // 4. Write Audit Log
   const auditRef = doc(collection(db, 'audit_logs'));
   batch.set(auditRef, {
@@ -402,6 +442,7 @@ export async function executeSemesterRollover(
     targetSemesterId: targetSemester.id,
     targetSemesterLabel: targetSemester.label,
     eventsArchivedCount,
+    collegeGraduatesArchivedCount,
     options: options || {},
     timestamp: Timestamp.now(),
     createdAt: Timestamp.now(),
@@ -414,6 +455,7 @@ export async function executeSemesterRollover(
     closingLabel: closingSemester.label,
     targetLabel: targetSemester.label,
     eventsArchivedCount,
+    collegeGraduatesArchivedCount,
   };
 }
 

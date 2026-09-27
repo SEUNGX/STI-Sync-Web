@@ -14,6 +14,8 @@ import {
   ArrowRight,
   Sparkles,
   School,
+  GraduationCap,
+  BookOpen,
 } from 'lucide-react';
 import { useState, useMemo, useEffect } from 'react';
 import { StudentDocument, StudentYearLevel } from '../../../modules/students/types/student.types';
@@ -24,7 +26,10 @@ import {
   reEnrollStudent,
   bulkReEnrollStudents,
   inactivateOverdueStudents,
+  archiveStudent,
+  bulkArchiveStudents,
 } from '../../../modules/students/services/student.service';
+import { auth } from '../../../../services/firebase';
 import { useCourses, useSections, useDepartments, useActiveAcademicPeriods } from '../../../modules/academic/hooks/useAcademicStream';
 import { exportStudentsToCSV } from '../../../modules/students/utils/export.utils';
 import { TablePagination } from '../../../components/common/TablePagination';
@@ -134,6 +139,12 @@ export default function ReEnrollmentManagement({
         const yearNum = YEAR_NUM_MAP[rawYl] || (rawYl.includes('11') ? 11 : rawYl.includes('12') ? 12 : 1);
         const yearLabel = NUM_TO_YEAR_STR[yearNum] || rawYl || '1st Year';
 
+        const isCollege = !isShs;
+        const is4thYear = rawYl.includes('4') || yearNum === 4;
+        const compSem = String(student.semester || student.term || '').toLowerCase();
+        const is2ndSem = compSem.includes('2nd sem') || compSem.includes('second sem') || compSem === '2nd semester';
+        const isGraduatingCollege = isCollege && is4thYear && is2ndSem;
+
         return {
           ...student,
           academicLevel: isShs ? ('SHS' as const) : ('COLLEGE' as const),
@@ -141,6 +152,7 @@ export default function ReEnrollmentManagement({
           yearLevelLabel: yearLabel,
           reEnrollStatus: status,
           activePeriod,
+          isGraduatingCollege,
         };
       })
       // If student is still not re-enrolled while re-enrollment deadline has passed,
@@ -351,6 +363,7 @@ export default function ReEnrollmentManagement({
           activePeriod.academicYear,
           activePeriod.semester as any,
           {
+            academicLevel: (student.academicLevel as any) || cohortTrack,
             yearLevel: (targetYearLevel || student.yearLevel || '1st Year') as any,
             section: targetSectionName ? targetSectionName.trim() : student.section,
           }
@@ -386,6 +399,36 @@ export default function ReEnrollmentManagement({
     } catch (err: any) {
       console.error(err);
       alert(`Failed to inactivate students: ${err.message}`);
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  // Graduating College Seniors (4th Year 2nd Sem) among current selection
+  const selectedGraduatingCollegeStudents = useMemo(() => {
+    return filteredStudents.filter((s) => selectedIds.includes(s.id) && (s as any).isGraduatingCollege);
+  }, [filteredStudents, selectedIds]);
+
+  // Bulk Graduate & Archive Graduating Seniors
+  const handleBulkGraduate = async () => {
+    const ids = selectedGraduatingCollegeStudents.map((s) => s.id);
+    if (ids.length === 0) return;
+    if (
+      !confirm(
+        `Are you sure you want to mark ${ids.length} graduating 4th Year College student(s) as GRADUATED and archive their records? They will be moved to the Archived Graduates registry.`
+      )
+    ) {
+      return;
+    }
+    setProcessing(true);
+    try {
+      await bulkArchiveStudents(ids, auth.currentUser?.uid || 'admin', 'Graduated');
+      setActionFeedback(`Successfully graduated and archived ${ids.length} student(s)!`);
+      setSelectedIds((prev) => prev.filter((id) => !ids.includes(id)));
+      setTimeout(() => setActionFeedback(null), 4000);
+    } catch (err: any) {
+      console.error(err);
+      alert(`Failed to graduate students: ${err.message}`);
     } finally {
       setProcessing(false);
     }
@@ -788,6 +831,19 @@ export default function ReEnrollmentManagement({
                   Confirm Re-enrollment ({selectedIds.length})
                 </button>
 
+                {/* Bulk Graduate & Archive Action for College Seniors */}
+                {selectedGraduatingCollegeStudents.length > 0 && (
+                  <button
+                    onClick={handleBulkGraduate}
+                    disabled={processing}
+                    className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 transition-all shadow-xs cursor-pointer disabled:opacity-50"
+                    title="Mark selected 4th Year 2nd Sem students as Graduated and archive their records"
+                  >
+                    <GraduationCap className="w-3.5 h-3.5 text-[#FFD41C]" />
+                    Graduate Selected ({selectedGraduatingCollegeStudents.length})
+                  </button>
+                )}
+
                 {/* Bulk Inactivate Action */}
                 <button
                   onClick={handleBulkInactivate}
@@ -898,7 +954,14 @@ export default function ReEnrollmentManagement({
                     <td className="px-6 py-4 font-mono font-semibold text-gray-700">{student.studentId}</td>
                     <td className="px-6 py-4">
                       <span className="font-semibold text-gray-900">{student.courseCode || 'BSIT'}</span>
-                      <div className="text-xs text-gray-500 font-medium">{student.yearLevelLabel}</div>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className="text-xs text-gray-500 font-medium">{student.yearLevelLabel}</span>
+                        {(student as any).isGraduatingCollege && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                            Graduating
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4 font-semibold text-[#001A4D]">
                       {student.section ? (
@@ -934,14 +997,25 @@ export default function ReEnrollmentManagement({
                     </td>
                     <td className="px-6 py-4 text-center">
                       {student.reEnrollStatus !== 'confirmed' ? (
-                        <button
-                          onClick={() => setReEnrollTarget(student)}
-                          className="px-3 py-1.5 bg-[#001A4D] text-[#FFD41C] hover:bg-[#001A4D]/90 text-xs font-bold rounded-lg transition-all shadow-xs inline-flex items-center gap-1"
-                          title="Individual Re-enrollment & Shifting"
-                        >
-                          <UserCheck className="w-3.5 h-3.5" />
-                          Re-enroll
-                        </button>
+                        (student as any).isGraduatingCollege ? (
+                          <button
+                            onClick={() => setReEnrollTarget(student)}
+                            className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-lg transition-all shadow-xs inline-flex items-center gap-1.5 cursor-pointer"
+                            title="Graduate & Archive Student"
+                          >
+                            <GraduationCap className="w-3.5 h-3.5 text-[#FFD41C]" />
+                            Graduate & Archive
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => setReEnrollTarget(student)}
+                            className="px-3 py-1.5 bg-[#001A4D] text-[#FFD41C] hover:bg-[#001A4D]/90 text-xs font-bold rounded-lg transition-all shadow-xs inline-flex items-center gap-1 cursor-pointer"
+                            title="Individual Re-enrollment & Shifting"
+                          >
+                            <UserCheck className="w-3.5 h-3.5" />
+                            Re-enroll
+                          </button>
+                        )
                       ) : (
                         <span className="text-xs text-green-600 font-bold inline-flex items-center gap-1">
                           <Check className="w-3.5 h-3.5" /> Enrolled
@@ -983,14 +1057,17 @@ export default function ReEnrollmentManagement({
             fallbackSemester ||
             currentActivePeriod!
           }
+          activeCollegePeriod={activeCollegePeriod}
+          activeShsPeriod={activeShsPeriod}
           courses={activeCourses}
           sections={activeSections}
           departments={departments}
           onClose={() => setReEnrollTarget(null)}
-          onSuccess={() => {
+          onSuccess={(customMessage?: string) => {
             const reEnrolledStudent = reEnrollTarget;
             setReEnrollTarget(null);
             setActionFeedback(
+              customMessage ||
               `Successfully re-enrolled ${reEnrolledStudent.firstName} ${reEnrolledStudent.lastName}!`
             );
             setTimeout(() => setActionFeedback(null), 4000);
@@ -1005,29 +1082,163 @@ export default function ReEnrollmentManagement({
 interface IndividualReEnrollModalProps {
   student: StudentDocument;
   activeSemester: SemesterDocument;
+  activeCollegePeriod?: SemesterDocument;
+  activeShsPeriod?: SemesterDocument;
   courses: CourseDocument[];
   sections: SectionDocument[];
-  departments: Array<{ id: string; name: string }>;
+  departments: Array<{ id: string; name: string; code?: string; academicLevel?: string }>;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (customMessage?: string) => void;
 }
 
 function IndividualReEnrollModal({
   student,
   activeSemester,
+  activeCollegePeriod,
+  activeShsPeriod,
   courses,
   sections,
   departments,
   onClose,
   onSuccess,
 }: IndividualReEnrollModalProps) {
-  // Course shifting state
-  const initialCourse = courses.find((c) => c.id === student.courseId || c.code === student.courseCode) || courses[0];
-  const [selectedCourseId, setSelectedCourseId] = useState<string>(initialCourse?.id || '');
+  // Department lookup map
+  const deptMap = useMemo(() => {
+    const map = new Map<string, any>();
+    departments.forEach((d) => map.set(d.id, d));
+    return map;
+  }, [departments]);
 
-  // Year level state
-  const initialYearNum = YEAR_NUM_MAP[String(student.yearLevel)] || 1;
-  const [yearLevelNumber, setYearLevelNumber] = useState<number>(initialYearNum);
+  // Helper to determine if a course is a Senior High School strand
+  const isShsCourse = (c: CourseDocument) => {
+    const dept = deptMap.get(c.departmentId);
+    return (
+      c.academicLevel === 'SHS' ||
+      dept?.academicLevel === 'SHS' ||
+      c.yearLevels === 2 ||
+      /stem|abm|humss|gas|tvl|ict|arts/i.test(c.code) ||
+      /senior high/i.test(c.name) ||
+      dept?.code === 'SHS' ||
+      /senior high/i.test(dept?.name || '')
+    );
+  };
+
+  // Student current status detection
+  const isCurrentlyShs =
+    student.academicLevel === 'SHS' ||
+    (student.semester && String(student.semester).includes('Trimester')) ||
+    student.yearLevel === 'Grade 11' ||
+    student.yearLevel === 'Grade 12' ||
+    (typeof student.yearLevel === 'string' && student.yearLevel.toLowerCase().includes('grade'));
+
+  const isGrade12 =
+    student.yearLevel === 'Grade 12' ||
+    String(student.yearLevel).includes('12') ||
+    YEAR_NUM_MAP[String(student.yearLevel)] === 12 ||
+    YEAR_NUM_MAP[String(student.yearLevel)] === 2;
+
+  // Completed semester priority: use student.semester first. Never fall back to activeSemester (target term)!
+  const completedSem = String(student.semester || student.term || '').trim().toLowerCase();
+
+  // SHS is 3 terms (Trimesters). Completed term MUST be 3rd Trimester (not 1st or 2nd) to advance to college!
+  const isThirdTerm = completedSem.includes('3rd') || completedSem.includes('third');
+
+  // Specific rule: SHS student in Year Level 2 (Grade 12) finishing 3rd Term is eligible to advance to College
+  const canAdvanceToCollege = isCurrentlyShs && isGrade12 && isThirdTerm;
+
+  // College Graduation Rule: College student in 4th Year finishing 2nd Semester is eligible for graduation & archival
+  const isCollege = !isCurrentlyShs;
+  const isCollege4thYear =
+    student.yearLevel === '4th Year' ||
+    YEAR_NUM_MAP[String(student.yearLevel)] === 4 ||
+    String(student.yearLevel).includes('4');
+  const isSecondSemester =
+    completedSem.includes('2nd sem') ||
+    completedSem.includes('second sem') ||
+    completedSem === '2nd semester';
+
+  const isCollegeGraduate = isCollege && isCollege4thYear && isSecondSemester;
+  const [isManualReEnrollMode, setIsManualReEnrollMode] = useState(false);
+
+  // Track selection state:
+  // - College students are locked to 'COLLEGE'
+  // - SHS in Term 1/2 or Grade 11 are locked to 'SHS'
+  // - Graduating SHS in Grade 12 Term 3 defaults to 'COLLEGE' with toggle option
+  const [targetTrack, setTargetTrack] = useState<'COLLEGE' | 'SHS'>(() => {
+    if (canAdvanceToCollege) return 'COLLEGE';
+    return isCurrentlyShs ? 'SHS' : 'COLLEGE';
+  });
+
+  // Filter programs strictly by target track
+  const allowedCourses = useMemo(() => {
+    if (targetTrack === 'COLLEGE') {
+      // ONLY College programs (BSIT, BSCS, BSHM, etc.) - hide & disallow SHS strands
+      return courses.filter((c) => !isShsCourse(c));
+    } else {
+      // ONLY SHS strands (STEM, ABM, HUMSS, etc.) - hide & disallow College programs
+      return courses.filter((c) => isShsCourse(c));
+    }
+  }, [courses, targetTrack]);
+
+  // Selected course state
+  const [selectedCourseId, setSelectedCourseId] = useState<string>(() => {
+    const match = allowedCourses.find((c) => c.id === student.courseId || c.code === student.courseCode);
+    return match?.id || allowedCourses[0]?.id || '';
+  });
+
+  // Auto-correct course selection when track changes
+  useEffect(() => {
+    if (allowedCourses.length > 0 && !allowedCourses.some((c) => c.id === selectedCourseId)) {
+      setSelectedCourseId(allowedCourses[0].id);
+      setSectionName('');
+    }
+  }, [allowedCourses, selectedCourseId]);
+
+  // Year level state & options
+  const yearLevelOptions = useMemo(() => {
+    if (targetTrack === 'COLLEGE') {
+      if (canAdvanceToCollege) {
+        // Advancing to College begins at 1st Year
+        return [{ value: 1, label: '1st Year (College Freshman)' }];
+      }
+      return [
+        { value: 1, label: '1st Year' },
+        { value: 2, label: '2nd Year' },
+        { value: 3, label: '3rd Year' },
+        { value: 4, label: '4th Year' },
+      ];
+    } else {
+      return [
+        { value: 11, label: 'Grade 11' },
+        { value: 12, label: 'Grade 12' },
+      ];
+    }
+  }, [targetTrack, canAdvanceToCollege]);
+
+  const [yearLevelNumber, setYearLevelNumber] = useState<number>(() => {
+    if (targetTrack === 'COLLEGE') {
+      if (canAdvanceToCollege) return 1;
+      const parsed = YEAR_NUM_MAP[String(student.yearLevel)];
+      return parsed && parsed >= 1 && parsed <= 4 ? parsed : 1;
+    } else {
+      return isGrade12 ? 12 : 11;
+    }
+  });
+
+  // Keep yearLevelNumber in sync when track changes
+  useEffect(() => {
+    if (targetTrack === 'COLLEGE') {
+      if (canAdvanceToCollege) {
+        setYearLevelNumber(1);
+      } else {
+        const parsed = YEAR_NUM_MAP[String(student.yearLevel)];
+        setYearLevelNumber(parsed && parsed >= 1 && parsed <= 4 ? parsed : 1);
+      }
+    } else {
+      setYearLevelNumber(isGrade12 ? 12 : 11);
+    }
+    setSectionName('');
+  }, [targetTrack, canAdvanceToCollege, isGrade12, student.yearLevel]);
 
   // Section state
   const [sectionName, setSectionName] = useState<string>(student.section || '');
@@ -1042,18 +1253,45 @@ function IndividualReEnrollModal({
     });
   }, [sections, selectedCourseId, yearLevelNumber]);
 
+  // Target active period based on chosen track
+  const effectiveActiveSemester = targetTrack === 'COLLEGE'
+    ? (activeCollegePeriod || activeSemester)
+    : (activeShsPeriod || activeSemester);
+
+  const handleGraduateAndArchive = async () => {
+    setSaving(true);
+    try {
+      await archiveStudent(student.id, 'Graduated', auth.currentUser?.uid || 'admin');
+      onSuccess(
+        `Successfully graduated ${student.firstName} ${student.lastName}! Student has been archived under Graduated status.`
+      );
+    } catch (err: any) {
+      console.error('Failed to graduate and archive student:', err);
+      alert(`Failed to graduate and archive student: ${err.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleConfirm = async () => {
     setSaving(true);
     try {
       const course = courses.find((c) => c.id === selectedCourseId);
       const department = departments.find((d) => d.id === course?.departmentId);
-      const yearLabel = NUM_TO_YEAR_STR[yearLevelNumber] || '1st Year';
+
+      let yearLabel = '1st Year';
+      if (targetTrack === 'SHS') {
+        yearLabel = yearLevelNumber === 11 ? 'Grade 11' : 'Grade 12';
+      } else {
+        yearLabel = NUM_TO_YEAR_STR[yearLevelNumber] || '1st Year';
+      }
 
       await reEnrollStudent(
         student.id,
-        activeSemester.academicYear,
-        activeSemester.semester as any,
+        effectiveActiveSemester.academicYear,
+        effectiveActiveSemester.semester as any,
         {
+          academicLevel: targetTrack,
           yearLevel: yearLabel as any,
           section: sectionName ? sectionName.trim() : student.section,
           courseId: course?.id || student.courseId,
@@ -1074,7 +1312,7 @@ function IndividualReEnrollModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-[500px] overflow-hidden border border-[#E0E0E0]">
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-[540px] overflow-hidden border border-[#E0E0E0]">
         {/* Header */}
         <div className="bg-gradient-to-r from-[#001A4D] via-[#002B7F] to-[#0E4EBD] px-6 py-4 flex items-center justify-between text-white">
           <div className="flex items-center gap-2.5">
@@ -1087,114 +1325,263 @@ function IndividualReEnrollModal({
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-4">
-          <div className="p-4 bg-gray-50 rounded-xl border border-gray-200">
-            <p className="font-bold text-[#001A4D] text-base">
-              {student.firstName} {student.middleName ? `${student.middleName} ` : ''}{student.lastName}
+        <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+          {/* Student Profile Overview */}
+          <div className="p-4 bg-gray-50 rounded-xl border border-gray-200 space-y-1">
+            <div className="flex items-center justify-between">
+              <p className="font-bold text-[#001A4D] text-base">
+                {student.firstName} {student.middleName ? `${student.middleName} ` : ''}{student.lastName}
+              </p>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                isCurrentlyShs ? 'bg-amber-100 text-amber-900 border border-amber-300' : 'bg-blue-100 text-blue-900 border border-blue-300'
+              }`}>
+                {isCurrentlyShs ? 'Senior High (SHS)' : 'College Track'}
+              </span>
+            </div>
+            <p className="text-xs font-mono text-gray-500">Student ID: {student.studentId}</p>
+            <p className="text-xs text-gray-600">
+              Current Record: <strong className="text-gray-800">{student.courseCode} · {student.yearLevel || 'Year 1'} · {student.section || 'No Section'}</strong>
             </p>
-            <p className="text-xs font-mono text-gray-500 mt-0.5">Student ID: {student.studentId}</p>
-            <p className="text-xs text-gray-600 mt-1">
-              Current Enrollment: <strong className="text-gray-800">{student.courseCode} · {student.section}</strong>
-            </p>
-          </div>
-
-          <div className="p-3 bg-blue-50 rounded-xl border border-blue-200 text-xs text-[#0E4EBD] flex items-center justify-between">
-            <span>Enrolling for Active Term:</span>
-            <strong className="text-[#001A4D]">{activeSemester.label} ({activeSemester.semester})</strong>
-          </div>
-
-          {/* 1. Course Selector (Supports Program Shifting) */}
-          <div>
-            <label className="block text-xs font-bold text-gray-600 uppercase mb-1">
-              Program / Course (Allows Shifting)
-            </label>
-            <select
-              value={selectedCourseId}
-              onChange={(e) => {
-                setSelectedCourseId(e.target.value);
-                setSectionName(''); // clear section on course change
-              }}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] outline-none"
-            >
-              {courses.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.code} — {c.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* 2. Year Level */}
-          <div>
-            <label className="block text-xs font-bold text-gray-600 uppercase mb-1">
-              Year Level
-            </label>
-            <select
-              value={yearLevelNumber}
-              onChange={(e) => {
-                setYearLevelNumber(Number(e.target.value));
-                setSectionName(''); // clear section on year change
-              }}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] outline-none"
-            >
-              <option value={1}>1st Year</option>
-              <option value={2}>2nd Year</option>
-              <option value={3}>3rd Year</option>
-              <option value={4}>4th Year</option>
-            </select>
-          </div>
-
-          {/* 3. Section Selector (Bound to selected Course & Year Level) */}
-          <div>
-            <label className="block text-xs font-bold text-gray-600 uppercase mb-1">
-              Target Section
-            </label>
-            {availableSections.length > 0 ? (
-              <select
-                value={sectionName}
-                onChange={(e) => setSectionName(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] outline-none"
-              >
-                <option value="">Select Section</option>
-                {availableSections.map((s) => (
-                  <option key={s.id} value={s.name}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <input
-                type="text"
-                value={sectionName}
-                onChange={(e) => setSectionName(e.target.value)}
-                placeholder="e.g. BSIT 2101 (Manual input)"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] outline-none"
-              />
-            )}
-            {availableSections.length === 0 && (
-              <p className="text-[11px] text-amber-600 mt-1">
-                No configured sections found for this Course & Year Level in Settings. You may type one manually.
+            {student.semester && (
+              <p className="text-[11px] text-gray-500">
+                Completed Term: <span className="font-medium text-gray-700">{student.semester} (A.Y. {student.schoolYear || 'Current'})</span>
               </p>
             )}
           </div>
+
+          {/* Special Graduation Alert for College 4th Year 2nd Sem */}
+          {isCollegeGraduate ? (
+            <div className="p-4 bg-gradient-to-br from-emerald-50 to-teal-50 border-2 border-emerald-300 rounded-xl space-y-3">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center text-white flex-shrink-0 shadow-sm">
+                  <GraduationCap className="w-6 h-6" />
+                </div>
+                <div className="text-xs text-emerald-950 flex-1">
+                  <div className="flex items-center justify-between">
+                    <p className="font-bold text-sm text-emerald-900">🎓 College Degree Completed</p>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-200 text-emerald-800 uppercase">
+                      Graduating Senior
+                    </span>
+                  </div>
+                  <p className="mt-1 text-emerald-900/90 leading-relaxed text-xs">
+                    This student has finished <strong>4th Year, 2nd Semester</strong> and completed all degree requirements.
+                    Marking this student as <strong>Graduated</strong> will archive their record into the Graduate Archives and seal their enrollment.
+                  </p>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-emerald-200 flex items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsManualReEnrollMode(!isManualReEnrollMode)}
+                  className="text-xs text-emerald-800 hover:text-emerald-950 underline font-medium cursor-pointer"
+                >
+                  {isManualReEnrollMode ? '← Back to Graduation Action' : 'Need term extension / retake? Click to re-enroll instead'}
+                </button>
+              </div>
+            </div>
+          ) : canAdvanceToCollege ? (
+            <div className="p-4 bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-300 rounded-xl space-y-2.5">
+              <div className="flex items-start gap-2.5">
+                <GraduationCap className="w-5 h-5 text-amber-700 flex-shrink-0 mt-0.5" />
+                <div className="text-xs text-amber-950">
+                  <p className="font-bold text-amber-900">🎓 Senior High Completion (Grade 12, Term 3)</p>
+                  <p className="mt-0.5 text-amber-900/90 leading-relaxed">
+                    This student has finished Grade 12 3rd Trimester. You can now select a <strong>College Degree Program</strong> to advance them as a 1st Year College student.
+                  </p>
+                </div>
+              </div>
+
+              {/* Track Toggle */}
+              <div className="flex items-center gap-2 pt-1 border-t border-amber-200">
+                <span className="text-xs font-bold text-amber-900">Target Track:</span>
+                <div className="inline-flex p-0.5 bg-amber-200/60 rounded-lg text-xs font-semibold">
+                  <button
+                    type="button"
+                    onClick={() => setTargetTrack('COLLEGE')}
+                    className={`px-3 py-1 rounded-md transition-all cursor-pointer ${
+                      targetTrack === 'COLLEGE'
+                        ? 'bg-[#001A4D] text-white shadow-xs'
+                        : 'text-amber-900 hover:text-black'
+                    }`}
+                  >
+                    Promote to College (Freshman)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTargetTrack('SHS')}
+                    className={`px-3 py-1 rounded-md transition-all cursor-pointer ${
+                      targetTrack === 'SHS'
+                        ? 'bg-[#001A4D] text-white shadow-xs'
+                        : 'text-amber-900 hover:text-black'
+                    }`}
+                  >
+                    Retain in Senior High
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : isCurrentlyShs ? (
+            <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+              <span>
+                <strong>Senior High Track (Term 1/2 Progression):</strong> Only Senior High Strands are available. College degree programs are locked until Grade 12 completion.
+              </span>
+            </div>
+          ) : (
+            <div className="p-3 bg-blue-50/80 border border-blue-200 rounded-xl text-xs text-[#001A4D] flex items-center gap-2">
+              <BookOpen className="w-4 h-4 text-[#0E4EBD] flex-shrink-0" />
+              <span>
+                <strong>College Undergraduate Track:</strong> Only College Degree programs are available. Senior High strands are excluded.
+              </span>
+            </div>
+          )}
+
+          {isCollegeGraduate && !isManualReEnrollMode ? (
+            <div className="p-4 bg-emerald-50/60 rounded-xl border border-emerald-200 text-xs text-emerald-950 space-y-2">
+              <div className="flex items-center gap-2 font-bold text-emerald-900">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                Academic Completion Summary
+              </div>
+              <ul className="list-disc list-inside space-y-1 text-gray-700">
+                <li>Program: <strong className="text-gray-900">{student.courseName || student.courseCode}</strong></li>
+                <li>Completed Year Level: <strong className="text-gray-900">4th Year (Senior)</strong></li>
+                <li>Completed Term: <strong className="text-gray-900">{student.semester} (A.Y. {student.schoolYear || 'Current'})</strong></li>
+                <li>Section: <strong className="text-gray-900">{student.section || '—'}</strong></li>
+              </ul>
+              <p className="pt-2 text-[11px] text-gray-500 border-t border-emerald-200">
+                Upon confirming, the student's status will be set to <strong>ARCHIVED</strong> with reason <strong>"Graduated"</strong>. Their records will remain accessible in the <em>Archived / Graduates</em> tab.
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Active Term Notification */}
+              <div className="p-3 bg-blue-50 rounded-xl border border-blue-200 text-xs text-[#0E4EBD] flex items-center justify-between">
+                <span>Enrolling for Target Term:</span>
+                <strong className="text-[#001A4D]">{effectiveActiveSemester.label} ({effectiveActiveSemester.semester})</strong>
+              </div>
+
+              {/* 1. Course Selector (Strictly filtered by track) */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-bold text-gray-700 uppercase">
+                    {targetTrack === 'COLLEGE' ? 'College Program / Degree' : 'Senior High Strand / Track'} <span className="text-red-500">*</span>
+                  </label>
+                  <span className="text-[11px] text-gray-400 font-medium">
+                    {allowedCourses.length} available
+                  </span>
+                </div>
+                <select
+                  value={selectedCourseId}
+                  onChange={(e) => {
+                    setSelectedCourseId(e.target.value);
+                    setSectionName(''); // clear section on course change
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] outline-none bg-white"
+                >
+                  {allowedCourses.length === 0 ? (
+                    <option value="">No {targetTrack === 'COLLEGE' ? 'college courses' : 'SHS strands'} configured</option>
+                  ) : (
+                    allowedCourses.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.code} — {c.name}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
+
+              {/* 2. Year Level */}
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
+                  Target Year Level <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={yearLevelNumber}
+                  disabled={canAdvanceToCollege && targetTrack === 'COLLEGE'}
+                  onChange={(e) => {
+                    setYearLevelNumber(Number(e.target.value));
+                    setSectionName(''); // clear section on year change
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] outline-none bg-white disabled:bg-gray-100 disabled:text-gray-500"
+                >
+                  {yearLevelOptions.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+                {canAdvanceToCollege && targetTrack === 'COLLEGE' && (
+                  <p className="text-[11px] text-gray-400 mt-1">
+                    Entering College students automatically start at 1st Year.
+                  </p>
+                )}
+              </div>
+
+              {/* 3. Section Selector (Bound to selected Course & Year Level) */}
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
+                  Target Section
+                </label>
+                {availableSections.length > 0 ? (
+                  <select
+                    value={sectionName}
+                    onChange={(e) => setSectionName(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] outline-none bg-white"
+                  >
+                    <option value="">Select Section</option>
+                    {availableSections.map((s) => (
+                      <option key={s.id} value={s.name}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={sectionName}
+                    onChange={(e) => setSectionName(e.target.value)}
+                    placeholder={targetTrack === 'COLLEGE' ? 'e.g. BSIT 1101 (Manual input)' : 'e.g. STEM 1201 (Manual input)'}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] outline-none"
+                  />
+                )}
+                {availableSections.length === 0 && (
+                  <p className="text-[11px] text-amber-600 mt-1">
+                    No configured sections found for this Course & Year Level in Settings. You may enter one manually.
+                  </p>
+                )}
+              </div>
+            </>
+          )}
         </div>
 
         {/* Footer */}
         <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors"
+            className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors cursor-pointer"
           >
             Cancel
           </button>
-          <button
-            onClick={handleConfirm}
-            disabled={saving}
-            className="px-5 py-2.5 bg-[#001A4D] text-[#FFD41C] text-sm font-bold rounded-lg hover:bg-[#001A4D]/90 flex items-center gap-2 shadow-xs transition-all disabled:opacity-50"
-          >
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-            Confirm Re-enrollment
-          </button>
+          {isCollegeGraduate && !isManualReEnrollMode ? (
+            <button
+              onClick={handleGraduateAndArchive}
+              disabled={saving}
+              className="px-5 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-bold rounded-lg flex items-center gap-2 shadow-xs transition-all disabled:opacity-50 cursor-pointer"
+            >
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <GraduationCap className="w-4 h-4 text-[#FFD41C]" />}
+              Mark as Graduated & Archive
+            </button>
+          ) : (
+            <button
+              onClick={handleConfirm}
+              disabled={saving || allowedCourses.length === 0}
+              className="px-5 py-2.5 bg-[#001A4D] text-[#FFD41C] text-sm font-bold rounded-lg hover:bg-[#001A4D]/90 flex items-center gap-2 shadow-xs transition-all disabled:opacity-50 cursor-pointer"
+            >
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+              Confirm Re-enrollment
+            </button>
+          )}
         </div>
       </div>
     </div>

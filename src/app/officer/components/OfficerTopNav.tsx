@@ -83,7 +83,9 @@ export function OfficerTopNav({ title }: OfficerTopNavProps) {
               <div className="absolute right-0 top-full mt-2 w-56 bg-white border border-[#E0E0E0] rounded-xl shadow-lg z-20 overflow-hidden">
                 <div className="p-3 border-b border-[#E0E0E0]">
                   <p className="text-sm font-bold text-[#001A4D]">{profile?.studentName || 'Officer'}</p>
-                  <p className="text-xs text-[#888780]">Organization Officer</p>
+                  <p className="text-xs text-[#888780]">
+                    {profile?.isAdviser ? 'Club Adviser' : 'Organization Officer'}
+                  </p>
                 </div>
                 <div className="py-2">
                   <button

@@ -86,8 +86,13 @@ export default function OfficerSettings({ defaultTab = 'account' }: OfficerSetti
     s => s.studentId === profile?.studentId || (profile?.email && s.email?.toLowerCase() === profile.email.toLowerCase())
   );
 
+  const isAdviser = Boolean(
+    profile?.isAdviser ||
+    profile?.activeRoleId?.toLowerCase() === 'adviser' ||
+    profile?.activeRoleId?.toLowerCase().includes('adviser')
+  );
   const activeRoleDoc = roles.find(r => r.id === profile?.activeRoleId);
-  const activeRoleName = activeRoleDoc?.name || profile?.activeRoleId || 'Officer';
+  const activeRoleName = isAdviser ? 'Club Adviser' : (activeRoleDoc?.name || profile?.activeRoleId || 'Officer');
 
   // Form State
   const [fullName, setFullName] = useState('');
@@ -122,6 +127,10 @@ export default function OfficerSettings({ defaultTab = 'account' }: OfficerSetti
   }, [currentStudent, profile]);
 
   const handleSaveAccount = async () => {
+    if (isAdviser) {
+      toast.success('Adviser profile settings updated.');
+      return;
+    }
     if (!currentStudent?.id) {
       toast.error('Student record not found in system.');
       return;
@@ -326,7 +335,9 @@ export default function OfficerSettings({ defaultTab = 'account' }: OfficerSetti
                       </div>
 
                       <div>
-                        <label className="block text-[13px] font-medium text-gray-500 mb-1.5">Student ID</label>
+                        <label className="block text-[13px] font-medium text-gray-500 mb-1.5">
+                          {isAdviser ? 'Faculty / Employee ID' : 'Student ID'}
+                        </label>
                         <input
                           type="text"
                           value={profile?.studentId || currentStudent?.studentId || 'N/A'}
@@ -336,17 +347,21 @@ export default function OfficerSettings({ defaultTab = 'account' }: OfficerSetti
                       </div>
 
                       <div>
-                        <label className="block text-[13px] font-medium text-gray-500 mb-1.5">Course & Year</label>
+                        <label className="block text-[13px] font-medium text-gray-500 mb-1.5">
+                          {isAdviser ? 'Designation' : 'Course & Year'}
+                        </label>
                         <input
                           type="text"
-                          value={courseYearLabel}
+                          value={isAdviser ? 'Club Adviser / Faculty' : courseYearLabel}
                           readOnly
                           className={readOnlyClass}
                         />
                       </div>
 
                       <div>
-                        <label className="block text-[13px] font-medium text-gray-500 mb-1.5">Officer Role</label>
+                        <label className="block text-[13px] font-medium text-gray-500 mb-1.5">
+                          {isAdviser ? 'Portal Role' : 'Officer Role'}
+                        </label>
                         <input
                           type="text"
                           value={activeRoleName}
