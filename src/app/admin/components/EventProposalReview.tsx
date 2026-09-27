@@ -104,15 +104,41 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
   const isCancelled = event.isCancelled || event.lifecycleStatus === 'cancelled' || event.status === 'cancelled' || event.proposalStatus === 'cancelled';
   const cancelCheck = canCancelEvent(event, 'admin');
 
+  const isDirectSasEvent =
+    !event.hostingOrgId ||
+    event.hostingOrgId.toLowerCase() === 'sas' ||
+    event.hostingOrgId.toLowerCase() === 'sas_admin' ||
+    event.hostingOrgId.toLowerCase() === 'sao' ||
+    event.hostingOrgId.toLowerCase() === 'sao_admin' ||
+    event.isOfficerProposal === false ||
+    (event as any).isDirectPublished === true;
+
+  const isCompleted =
+    event.status === 'Completed' ||
+    event.status === 'completed' ||
+    event.lifecycleStatus === 'completed' ||
+    event.lifecycleStatus === 'concluded' ||
+    event.proposalStatus === 'completed' ||
+    (event as any).isConcluded === true ||
+    (event as any).isArchived === true;
+
   const isApproved =
+    isDirectSasEvent ||
+    isCompleted ||
     event.proposalStatus === 'approved' ||
     event.status === 'approved' ||
-    event.lifecycleStatus === 'approved';
+    event.status === 'Ongoing' ||
+    event.status === 'ongoing' ||
+    event.status === 'Upcoming' ||
+    event.status === 'upcoming' ||
+    event.lifecycleStatus === 'approved' ||
+    event.lifecycleStatus === 'published';
 
   const isDecided =
-    event.proposalStatus !== 'pending_review' &&
-    event.proposalStatus !== 'pending' &&
-    event.proposalStatus !== 'draft';
+    isApproved ||
+    (event.proposalStatus !== 'pending_review' &&
+      event.proposalStatus !== 'pending' &&
+      event.proposalStatus !== 'draft');
 
   const initialDecision: Decision =
     isApproved ? 'approved' :
@@ -573,11 +599,12 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
                 </div>
               </div>
             </div>
-          ) : isDecided && !isApproved ? (
-            <div className={`p-4 rounded-xl border-l-4 ${decision === 'rejected' ? 'bg-red-50 border-red-500' : 'bg-amber-50 border-amber-500'}`}>
+          ) : !isDirectSasEvent && !isCompleted && !isApproved && (event.proposalStatus === 'rejected' || event.proposalStatus === 'returned') ? (
+            <div className={`p-4 rounded-xl border-l-4 ${event.proposalStatus === 'rejected' ? 'bg-red-50 border-red-500' : 'bg-amber-50 border-amber-500'}`}>
               <p className="text-sm font-bold text-gray-800">
-                {decision === 'rejected' ? `This proposal was Rejected on ${formatAppDate(event.rejectedAt, 'N/A')}. Reason: ${event.rejectionReason}` :
-                 `This proposal was Returned on ${formatAppDate(event.returnedAt, 'N/A')}.`}
+                {event.proposalStatus === 'rejected'
+                  ? `This proposal was Rejected on ${formatAppDate(event.rejectedAt, 'N/A')}. Reason: ${event.rejectionReason || 'No reason specified'}`
+                  : `This proposal was Returned on ${formatAppDate(event.returnedAt, 'N/A')}.`}
               </p>
             </div>
           ) : null}
@@ -1122,8 +1149,8 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
             </div>
           </section>
 
-          {/* SECTION 7 — PAYABLES & QR ACCESS CONTROL (For Approved/Cancelled Events) */}
-          {(isApproved || isCancelled) && (
+          {/* SECTION 7 — PAYABLES & QR ACCESS CONTROL (For Approved/Completed/Cancelled Events) */}
+          {(isApproved || isCompleted || isCancelled) && (
             <section
               ref={el => { sectionRefs.current['payables'] = el; }}
               onMouseEnter={() => { setActiveSection('payables'); setVisitedSections(p => new Set([...p, 'payables'])); }}
@@ -1134,6 +1161,8 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
                 subtitle={
                   isCancelled
                     ? "Event cancelled — Collections closed, fees auto-waived, and gate passes revoked"
+                    : isCompleted
+                    ? "Event completed — Full attendee records, payment collection, and ticket status"
                     : "Participant fees, collection status, and gate pass lock controls"
                 }
               />
@@ -1145,12 +1174,13 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
                   recordedByUid={profile?.uid || 'admin'}
                   isOfficer={false}
                   isClubEvent={
-                    event.isOfficerProposal === true ||
-                    (!!event.hostingOrgId &&
-                      event.hostingOrgId !== 'sas' &&
-                      event.hostingOrgId !== 'sas_admin' &&
-                      event.hostingOrgId !== 'sao' &&
-                      event.hostingOrgId !== 'sao_admin')
+                    !isDirectSasEvent &&
+                    (event.isOfficerProposal === true ||
+                      (!!event.hostingOrgId &&
+                        event.hostingOrgId !== 'sas' &&
+                        event.hostingOrgId !== 'sas_admin' &&
+                        event.hostingOrgId !== 'sao' &&
+                        event.hostingOrgId !== 'sao_admin'))
                   }
                   hostingOrgName={orgName}
                   isCancelled={isCancelled}
@@ -1295,26 +1325,34 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
                 Close & Back to Event Approvals
               </button>
             </div>
-          ) : isApproved ? (
-            /* APPROVED EVENT STATE — Clean look with adviser decision controls completely removed */
+          ) : isApproved || isDirectSasEvent || isCompleted ? (
+            /* APPROVED / COMPLETED / SAS DIRECT EVENT STATE — Clean look with adviser decision controls completely removed */
             <div className="space-y-4">
               <div className="flex items-center gap-2 mb-1">
                 <CheckCircle2 className="w-5 h-5 text-emerald-600" />
                 <div>
-                  <p className="text-[#001A4D] font-bold text-base">Approved Event</p>
-                  <p className="text-gray-500 text-xs">Event proposal is active and published.</p>
+                  <p className="text-[#001A4D] font-bold text-base">
+                    {isCompleted ? 'Completed Event' : isDirectSasEvent ? 'SAS Institutional Event' : 'Approved Event'}
+                  </p>
+                  <p className="text-gray-500 text-xs">
+                    {isCompleted ? 'Event is completed and recorded.' : isDirectSasEvent ? 'Direct event created by SAS Administrator.' : 'Event proposal is active and published.'}
+                  </p>
                 </div>
               </div>
 
-              {/* Emerald Approved Banner */}
-              <div className="bg-gradient-to-br from-emerald-600 to-teal-700 rounded-2xl p-5 text-white shadow-xs space-y-3">
+              {/* Status Banner */}
+              <div className="bg-gradient-to-br from-[#001A4D] via-[#002B7F] to-[#0E4EBD] rounded-2xl p-5 text-white shadow-xs space-y-3">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
-                    <CheckCircle2 className="w-6 h-6 text-white" />
+                    <CheckCircle2 className="w-6 h-6 text-[#FFD41C]" />
                   </div>
                   <div>
-                    <h4 className="font-extrabold text-base text-white">Event Approved & Active</h4>
-                    <p className="text-xs text-emerald-100">Official SAO Approval</p>
+                    <h4 className="font-extrabold text-base text-white">
+                      {isCompleted ? 'Event Completed' : isDirectSasEvent ? 'SAS Institutional Event' : 'Event Approved & Active'}
+                    </h4>
+                    <p className="text-xs text-blue-100">
+                      {isDirectSasEvent ? 'Published directly by SAS' : 'Official SAS Record'}
+                    </p>
                   </div>
                 </div>
                 {event.approvedAt && (

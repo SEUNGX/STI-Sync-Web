@@ -14,6 +14,11 @@ import { useStudents } from "../../modules/students/hooks/useStudentStream";
 import { useDepartments, useCourses, useSections } from "../../modules/academic/hooks/useAcademicStream";
 import { useOrganizationStream } from "../../modules/organizations/hooks/useOrganizationStream";
 import { recordEventFinePayables } from "../../modules/finance/services/payable.service";
+import {
+  isSessionCheckInPassed,
+  isStudentTargetedForEvent,
+  syncEventAbsenteeRecords,
+} from "../../modules/attendance/services/attendance.service";
 import { format12HourTime } from "../../utils/date";
 
 import { AttendanceFilterToolbar } from "../../modules/attendance/components/AttendanceFilterToolbar";
@@ -508,67 +513,123 @@ export function AttendanceMonitoring() {
     if (eventsToUse.length === 0) return [];
 
     return eventsToUse.map(evt => {
-      const evtAttendance = dbAttendance.filter(a => a.eventId === evt.id || a.event === evt.title);
+      const evtAttendance = dbAttendance.filter(a => a.eventId === evt.id || (a.event && evt.title && String(a.event).toLowerCase() === String(evt.title).toLowerCase()));
       
-      const registered = evt.expectedParticipantCount || evtAttendance.length || 0;
-      const checkedIn = evtAttendance.filter(a => a.status === "Checked In" || a.status === "Complete" || a.status === "Late").length;
-      const absent = evtAttendance.filter(a => a.status === "Absent").length;
-      const flagged = evtAttendance.filter(a => a.status === "Flagged").length;
+      // Determine targeted cohort of students for this event
+      const targetedStudents = (students || []).filter(s => isStudentTargetedForEvent(s, evt, rawOrganizations));
 
-      const enrichedRecords: EnrichedAttendanceRecord[] = evtAttendance.map((rec) => {
-        const matchedStudent = studentMap.get((rec.studentId || '').trim().toLowerCase());
-        const deptObj = (departments || []).find(d => d.id === matchedStudent?.departmentId || d.code === matchedStudent?.departmentId);
-        const courseObj = (courses || []).find(c => c.id === matchedStudent?.courseId || c.code === matchedStudent?.courseCode);
-        const sessionObj = evt.sessions?.find(s => s.id === rec.sessionId);
+      const rawSessions = (evt.sessions && evt.sessions.length > 0) ? evt.sessions : [
+        {
+          id: `${evt.id}-main`,
+          title: 'Main Session',
+          date: (evt as any).date || 'TBA',
+          startTime: (evt as any).startTime || '08:00',
+          endTime: (evt as any).endTime || '17:00',
+        }
+      ];
 
-        const studentAuthUid = matchedStudent?.authUid || matchedStudent?.id || (rec as any).studentAuthUid || (rec as any).authUid || rec.studentId || 'N/A';
-        const studentSchoolId = matchedStudent?.studentId || (rec as any).studentSchoolId || rec.studentId || 'N/A';
-
-        return {
-          ...rec,
-          id: rec.id,
-          studentAuthUid,
-          studentSchoolId,
-          studentId: studentSchoolId,
-          name: rec.name || (matchedStudent ? `${matchedStudent.firstName} ${matchedStudent.lastName}` : 'Unknown Student'),
-          departmentId: matchedStudent?.departmentId,
-          departmentName: matchedStudent?.departmentName || deptObj?.name || 'N/A',
-          departmentCode: deptObj?.code || matchedStudent?.departmentId || 'N/A',
-          courseId: matchedStudent?.courseId,
-          courseCode: matchedStudent?.courseCode || courseObj?.code || 'N/A',
-          courseName: matchedStudent?.courseName || courseObj?.name || 'N/A',
-          section: matchedStudent?.section || 'N/A',
-          yearLevel: matchedStudent?.yearLevel || 'N/A',
-          sessionTitle: sessionObj?.title || 'Main Session',
-          sessionId: rec.sessionId || (evt.sessions?.[0]?.id || `${evt.id}-main`),
-          checkIn: rec.checkIn === '—' ? '' : rec.checkIn,
-          checkOut: rec.checkOut === '—' ? '' : rec.checkOut,
-          duration: rec.checkIn && rec.checkOut && rec.checkIn !== '—' && rec.checkOut !== '—' ? 'Active' : null,
-          status: rec.status as any,
-          flaggedReason: rec.flaggedReason,
-        };
-      });
-
-      const sessions: EventSession[] = (evt.sessions && evt.sessions.length > 0) ? evt.sessions.map((s, i) => {
+      const sessions: EventSession[] = rawSessions.map((s, i) => {
         const sId = s.id || `session-${i}`;
+        const sessionPassed = isSessionCheckInPassed(s, evt.gracePeriodMinutes, evt.lateThresholdMinutes) || evt.proposalStatus === 'completed' || (evt as any).status === 'Completed';
+
+        // 1. Existing scanned attendance records for this session
+        const sessionScans = evtAttendance.filter(r => r.sessionId === sId || (!r.sessionId && i === 0));
+        
+        const mappedScans: EnrichedAttendanceRecord[] = sessionScans.map((rec) => {
+          const matchedStudent = studentMap.get((rec.studentId || '').trim().toLowerCase()) ||
+            (rec.name ? (students || []).find(st => `${st.firstName} ${st.lastName}`.trim().toLowerCase() === rec.name.trim().toLowerCase()) : undefined);
+          const deptObj = (departments || []).find(d => d.id === matchedStudent?.departmentId || d.code === matchedStudent?.departmentId);
+          const courseObj = (courses || []).find(c => c.id === matchedStudent?.courseId || c.code === matchedStudent?.courseCode);
+          const sessionObj = evt.sessions?.find(sess => sess.id === rec.sessionId) || s;
+
+          const studentAuthUid = matchedStudent?.authUid || matchedStudent?.id || (rec as any).studentAuthUid || (rec as any).authUid || rec.studentId || 'N/A';
+          const studentSchoolId = matchedStudent?.studentId || (rec as any).studentSchoolId || rec.studentId || 'N/A';
+
+          return {
+            ...rec,
+            id: rec.id,
+            studentAuthUid,
+            studentSchoolId,
+            studentId: studentSchoolId,
+            name: rec.name || (matchedStudent ? `${matchedStudent.firstName} ${matchedStudent.lastName}` : 'Unknown Student'),
+            departmentId: matchedStudent?.departmentId,
+            departmentName: matchedStudent?.departmentName || deptObj?.name || 'N/A',
+            departmentCode: deptObj?.code || matchedStudent?.departmentId || 'N/A',
+            courseId: matchedStudent?.courseId,
+            courseCode: matchedStudent?.courseCode || courseObj?.code || 'N/A',
+            courseName: matchedStudent?.courseName || courseObj?.name || 'N/A',
+            section: matchedStudent?.section || 'N/A',
+            yearLevel: matchedStudent?.yearLevel || 'N/A',
+            sessionTitle: sessionObj?.title || s.title || `Session ${i + 1}`,
+            sessionId: sId,
+            checkIn: rec.checkIn === '—' ? '' : rec.checkIn,
+            checkOut: rec.checkOut === '—' ? '' : rec.checkOut,
+            duration: rec.checkIn && rec.checkOut && rec.checkIn !== '—' && rec.checkOut !== '—' ? 'Active' : null,
+            status: rec.status as any,
+            flaggedReason: rec.flaggedReason,
+          };
+        });
+
+        // 2. Synthesize Absent records for missing targeted students if session check-in has passed
+        const syntheticAbsentRecords: EnrichedAttendanceRecord[] = [];
+        if (sessionPassed) {
+          targetedStudents.forEach((student) => {
+            const studentSchoolId = (student.studentId || '').trim().toLowerCase();
+            const studentAuthUid = (student.authUid || student.id || '').trim().toLowerCase();
+
+            const alreadyLogged = mappedScans.some((scan) => {
+              const scanId = (scan.studentId || scan.studentSchoolId || '').trim().toLowerCase();
+              const scanUid = (scan.studentAuthUid || '').trim().toLowerCase();
+              return (studentSchoolId && scanId === studentSchoolId) || (studentAuthUid && (scanUid === studentAuthUid || scanId === studentAuthUid));
+            });
+
+            if (!alreadyLogged) {
+              const deptObj = (departments || []).find(d => d.id === student?.departmentId || d.code === student?.departmentId);
+              const courseObj = (courses || []).find(c => c.id === student?.courseId || c.code === student?.courseCode);
+
+              syntheticAbsentRecords.push({
+                id: `synthetic-absent-${evt.id}-${sId}-${student.studentId || student.id}`,
+                studentAuthUid: student.authUid || student.id,
+                studentSchoolId: student.studentId || student.id,
+                studentId: student.studentId || student.id,
+                name: `${student.firstName} ${student.lastName}`.trim(),
+                departmentId: student.departmentId,
+                departmentName: student.departmentName || deptObj?.name || 'N/A',
+                departmentCode: deptObj?.code || student.departmentId || 'N/A',
+                courseId: student.courseId,
+                courseCode: student.courseCode || courseObj?.code || 'N/A',
+                courseName: student.courseName || courseObj?.name || 'N/A',
+                section: student.section || 'N/A',
+                yearLevel: student.yearLevel || 'N/A',
+                sessionTitle: s.title || `Session ${i + 1}`,
+                sessionId: sId,
+                checkIn: '—',
+                checkOut: '—',
+                duration: null,
+                status: 'Absent',
+                org: evt.hostingOrgName || evt.hostingOrgId || 'Organization',
+                event: evt.title || evt.name || 'Event',
+                eventId: evt.id,
+              });
+            }
+          });
+        }
+
         return {
           id: sId,
           label: s.title || `Session ${i + 1}`,
           date: s.date || "TBA",
           timeStart: format12HourTime(s.startTime) || "8:00 AM",
           timeEnd: format12HourTime(s.endTime) || "5:00 PM",
-          records: enrichedRecords.filter(r => r.sessionId === sId || (!r.sessionId && i === 0)),
+          records: [...mappedScans, ...syntheticAbsentRecords],
         };
-      }) : [
-        {
-          id: `${evt.id}-main`,
-          label: "Main Session",
-          date: "TBA",
-          timeStart: "TBA",
-          timeEnd: "TBA",
-          records: enrichedRecords,
-        }
-      ];
+      });
+
+      const allEventRecords = sessions.flatMap(s => s.records);
+      const registered = Math.max(targetedStudents.length, evt.expectedParticipantCount || 0, allEventRecords.length);
+      const checkedIn = allEventRecords.filter(a => a.status === "Checked In" || a.status === "Complete" || a.status === "Late").length;
+      const absent = allEventRecords.filter(a => a.status === "Absent").length;
+      const flagged = allEventRecords.filter(a => a.status === "Flagged").length;
 
       const eventDate = evt.sessions?.[0]?.date || "Date TBA";
       
@@ -608,10 +669,23 @@ export function AttendanceMonitoring() {
         flagged,
         status: eventStatus,
         sessions,
-        records: enrichedRecords,
+        records: allEventRecords,
       };
     });
-  }, [dbEvents, dbAttendance, venues, dbCategories, studentMap, departments, courses, rawOrganizations]);
+  }, [dbEvents, dbAttendance, venues, dbCategories, studentMap, departments, courses, rawOrganizations, students]);
+
+  // Automatically sync missing absent records to Firestore in the background
+  useMemo(() => {
+    if (!dbEvents || dbEvents.length === 0 || !students || students.length === 0) return;
+    dbEvents.forEach((evt) => {
+      const targeted = students.filter(s => isStudentTargetedForEvent(s, evt, rawOrganizations));
+      if (targeted.length > 0) {
+        syncEventAbsenteeRecords(evt, targeted).catch(err => {
+          console.warn('[AttendanceMonitoring] Auto-sync absentee error for evt:', evt.id, err);
+        });
+      }
+    });
+  }, [dbEvents, students, rawOrganizations]);
 
   // Unique options for event filter dropdowns
   const availableOrgs = useMemo(() => {

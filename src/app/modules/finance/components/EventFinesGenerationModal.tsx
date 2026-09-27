@@ -71,13 +71,15 @@ export function EventFinesGenerationModal({
   const defaultPenalty = Number(event.latePenaltyAmount) || 10;
 
   const { data: existingPayables } = useEventPayablesStream(event.id);
+  const [allowReassessment, setAllowReassessment] = useState(false);
+
   const hasAssessedFines = useMemo(() => {
     if (isReadOnly) return true;
     const targetType = isOfficer ? 'org_fine' : 'admin_fine';
     return (existingPayables || []).some((p) => p.type === targetType);
   }, [existingPayables, isOfficer, isReadOnly]);
 
-  const effectiveReadOnly = Boolean(isReadOnly || hasAssessedFines);
+  const effectiveReadOnly = Boolean(isReadOnly || (hasAssessedFines && !allowReassessment));
 
   // Normalized sessions
   const sessions = useMemo(() => {
@@ -230,15 +232,57 @@ export function EventFinesGenerationModal({
     const rulesMap = new Map<string, SessionFineRule>();
     rules.forEach((r) => rulesMap.set(r.sessionId, r));
 
-    // Group attendance records by student
+    // Group attendance records by student, and include assigned cohort from existingPayables
     const studentRecordsMap = new Map<string, EnrichedAttendanceRecord[]>();
-    attendanceRecords.forEach((rec) => {
-      const sId = (rec.studentId || '').trim();
-      if (!sId) return;
-      if (!studentRecordsMap.has(sId)) {
-        studentRecordsMap.set(sId, []);
+    const studentInfoMap = new Map<string, {
+      studentId: string;
+      studentSchoolId?: string;
+      studentAuthUid?: string;
+      studentName: string;
+      departmentName?: string;
+      courseCode?: string;
+      section?: string;
+    }>();
+
+    // 1. Add students from existing payables (assigned event participants)
+    (existingPayables || []).forEach((p) => {
+      const key = (p.studentSchoolId || p.studentId || '').trim();
+      if (!key) return;
+      if (!studentRecordsMap.has(key)) {
+        studentRecordsMap.set(key, []);
       }
-      studentRecordsMap.get(sId)!.push(rec);
+      if (!studentInfoMap.has(key)) {
+        studentInfoMap.set(key, {
+          studentId: p.studentId,
+          studentSchoolId: p.studentSchoolId || p.studentId,
+          studentAuthUid: p.studentAuthUid || p.studentId,
+          studentName: p.studentName || 'Student',
+          departmentName: p.departmentName,
+          courseCode: p.courseCode,
+          section: p.section,
+        });
+      }
+    });
+
+    // 2. Add and match students from attendance records
+    attendanceRecords.forEach((rec) => {
+      const key = (rec.studentSchoolId || rec.studentId || '').trim();
+      if (!key) return;
+      if (!studentRecordsMap.has(key)) {
+        studentRecordsMap.set(key, []);
+      }
+      studentRecordsMap.get(key)!.push(rec);
+
+      const existingInfo = studentInfoMap.get(key);
+      studentInfoMap.set(key, {
+        studentId: (rec as any).studentAuthUid || (rec as any).authUid || rec.studentId || existingInfo?.studentId || key,
+        studentSchoolId: (rec as any).studentSchoolId || rec.studentId || existingInfo?.studentSchoolId || key,
+        studentAuthUid: (rec as any).studentAuthUid || (rec as any).authUid || existingInfo?.studentAuthUid || rec.studentId,
+        studentName: rec.name || existingInfo?.studentName || 'Student',
+        departmentName: rec.departmentCode || rec.departmentName || existingInfo?.departmentName,
+        courseCode: rec.courseCode || existingInfo?.courseCode,
+        section: rec.section || existingInfo?.section,
+      });
     });
 
     let countAbsent = 0;
@@ -246,14 +290,15 @@ export function EventFinesGenerationModal({
     let countMissedTimeOut = 0;
     let totalFineSum = 0;
 
-    studentRecordsMap.forEach((records, studentId) => {
+    studentRecordsMap.forEach((records, studentKey) => {
+      const studentInfo = studentInfoMap.get(studentKey);
       const firstRec = records[0];
-      const studentName = firstRec?.name || 'Student';
-      const studentAuthUid = (firstRec as any)?.studentAuthUid || (firstRec as any)?.authUid || studentId;
-      const studentSchoolId = (firstRec as any)?.studentSchoolId || (firstRec as any)?.studentId || studentId;
-      const departmentName = firstRec?.departmentCode || firstRec?.departmentName;
-      const courseCode = firstRec?.courseCode;
-      const section = firstRec?.section;
+      const studentName = firstRec?.name || studentInfo?.studentName || 'Student';
+      const studentAuthUid = (firstRec as any)?.studentAuthUid || (firstRec as any)?.authUid || studentInfo?.studentAuthUid || studentKey;
+      const studentSchoolId = (firstRec as any)?.studentSchoolId || (firstRec as any)?.studentId || studentInfo?.studentSchoolId || studentKey;
+      const departmentName = firstRec?.departmentCode || firstRec?.departmentName || studentInfo?.departmentName;
+      const courseCode = firstRec?.courseCode || studentInfo?.courseCode;
+      const section = firstRec?.section || studentInfo?.section;
       const violations: FineViolationDetail[] = [];
       let studentFineSum = 0;
 
@@ -315,7 +360,7 @@ export function EventFinesGenerationModal({
 
       if (violations.length > 0 && studentFineSum > 0) {
         totalFineSum += studentFineSum;
-        studentViolationsMap.set(studentId, {
+        studentViolationsMap.set(studentKey, {
           studentId: studentAuthUid,
           studentSchoolId,
           studentName,
@@ -849,14 +894,26 @@ export function EventFinesGenerationModal({
               {effectiveReadOnly ? 'Close' : 'Cancel'}
             </button>
             {effectiveReadOnly ? (
-              <button
-                type="button"
-                disabled={true}
-                className="px-5 py-2 bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-lg text-xs font-bold flex items-center gap-2 cursor-not-allowed shadow-none select-none"
-              >
-                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                Fines Already Assessed ({formatCurrency(simulation.totalFineSum)})
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={true}
+                  className="px-4 py-2 bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-lg text-xs font-bold flex items-center gap-2 cursor-not-allowed shadow-none select-none"
+                >
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  Fines Assessed ({formatCurrency(simulation.totalFineSum)})
+                </button>
+                {!isReadOnly && (
+                  <button
+                    type="button"
+                    onClick={() => setAllowReassessment(true)}
+                    className="px-4 py-2 bg-[#001A4D] text-white rounded-lg text-xs font-bold hover:bg-[#0E4EBD] transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm"
+                  >
+                    <Coins className="w-3.5 h-3.5 text-[#FFD41C]" />
+                    Re-assess / Add Missing Fines
+                  </button>
+                )}
+              </div>
             ) : (
               <button
                 type="button"
