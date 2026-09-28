@@ -44,7 +44,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useSemesters } from "../../modules/academic/hooks/useAcademicStream";
-import { useSaoLedger } from "../../modules/finance/hooks/useFinanceStream";
+import { useSaoLedger, parseTimestampMillis } from "../../modules/finance/hooks/useFinanceStream";
 import { useAllEventPayablesStream } from "../../modules/finance/hooks/usePayableStream";
 import { useAllEvents } from "../../modules/events/hooks/useEventStream";
 import { addLedgerTransaction } from "../../modules/finance/services/finance.service";
@@ -66,38 +66,42 @@ import { uploadToCloudinary } from "../../../services/cloudinary";
 import { AddAdminPayableModal } from "../components/settings/AddAdminPayableModal";
 import { TablePagination } from "../../components/common/TablePagination";
 
-// ─── Helper to extract numeric timestamp for latest-first sorting ───────────────
+// ─── Date & Timestamp Helpers ───────────────────────────────────────────────────
+function getTransactionDate(dateStr: string): Date {
+  if (!dateStr) return new Date();
+  const parts = dateStr.split("-").map(Number);
+  if (parts.length !== 3) return new Date();
+  const [year, month, day] = parts;
+  const now = new Date();
+  if (
+    year === now.getFullYear() &&
+    month === now.getMonth() + 1 &&
+    day === now.getDate()
+  ) {
+    return now;
+  }
+  return new Date(year, month - 1, day, 12, 0, 0);
+}
+
 function getTxTimestamp(tx: SaoLedgerDocument): number {
-  if (tx.date) {
-    if (typeof (tx.date as any).toDate === "function") return (tx.date as any).toDate().getTime();
-    if (typeof (tx.date as any).seconds === "number") return (tx.date as any).seconds * 1000;
-    const d = new Date(tx.date as any);
-    if (!isNaN(d.getTime())) return d.getTime();
-  }
-  if (tx.createdAt) {
-    if (typeof (tx.createdAt as any).toDate === "function") return (tx.createdAt as any).toDate().getTime();
-    if (typeof (tx.createdAt as any).seconds === "number") return (tx.createdAt as any).seconds * 1000;
-    const d = new Date(tx.createdAt as any);
-    if (!isNaN(d.getTime())) return d.getTime();
-  }
-  return 0;
+  const d = parseTimestampMillis(tx.date);
+  const c = parseTimestampMillis(tx.createdAt);
+  return d || c || 0;
 }
 
 // ─── Add School Budget Allocation Modal ───────────────────────────────────────
-function AddBudgetModal({ currentBalance, onClose, onSave }: {
+function AddBudgetModal({ currentBalance: _currentBalance, onClose, onSave }: {
   currentBalance: number;
   onClose: () => void;
-  onSave: (tx: Omit<SaoLedgerDocument, "id" | "createdAt">) => void;
+  onSave: (tx: Omit<SaoLedgerDocument, "id" | "createdAt">) => Promise<void> | void;
 }) {
   const { data: semesters } = useSemesters();
-  const availableSemesters = semesters.filter(s => s.status === 'ACTIVE' || s.status === 'UPCOMING');
+  const activeSemester = semesters.find(s => s.status === 'ACTIVE');
 
-  const [carryOver, setCarryOver] = useState(false);
-  const [form, setForm] = useState({ semesterId: "", amount: "", notes: "", receiptNumber: "" });
+  const [form, setForm] = useState({ amount: "", notes: "", receiptNumber: "" });
   const [receiptUrl, setReceiptUrl] = useState<string>("");
   const [isUploading, setIsUploading] = useState(false);
-
-  const selectedSemester = availableSemesters.find(s => s.id === form.semesterId);
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleFileUpload = async (file: File) => {
     if (!file) return;
@@ -114,27 +118,38 @@ function AddBudgetModal({ currentBalance, onClose, onSave }: {
     }
   };
 
-  const handleSave = () => {
-    if (!selectedSemester || !form.amount) return;
+  const handleSave = async () => {
+    if (isUploading) {
+      toast.warning("Please wait for the proof photo to finish uploading.");
+      return;
+    }
     const amt = parseFloat(form.amount);
-    
-    // If carry over is checked and there's a positive balance, add it to this allocation
-    const finalAmount = carryOver ? amt + currentBalance : amt;
+    if (!form.amount || isNaN(amt) || amt <= 0) {
+      toast.error("Please enter a valid allocation amount greater than ₱0.");
+      return;
+    }
 
-    onSave({
-      semesterId: selectedSemester.id,
-      date: Timestamp.fromDate(new Date()),
-      description: `SAO Institutional Fund – ${selectedSemester.label}${form.notes ? ` (${form.notes})` : ""}`,
-      eventId: null,
-      type: "income",
-      source: "allocation",
-      amount: finalAmount,
-      addedBy: "Admin SAO",
-      receiptUrl: receiptUrl || undefined,
-      proofUrl: receiptUrl || undefined,
-      receiptNumber: form.receiptNumber?.trim() || undefined,
-    });
-    onClose();
+    setIsSaving(true);
+    try {
+      await onSave({
+        semesterId: activeSemester?.id || null,
+        date: Timestamp.fromDate(new Date()),
+        description: form.notes?.trim() || `SAO Institutional Fund${activeSemester ? ` – ${activeSemester.label}` : ""}`,
+        eventId: null,
+        type: "income",
+        source: "allocation",
+        amount: amt,
+        addedBy: "Admin SAO",
+        receiptUrl: receiptUrl || null,
+        proofUrl: receiptUrl || null,
+        receiptNumber: form.receiptNumber?.trim() || null,
+      });
+      onClose();
+    } catch (e: any) {
+      console.error(e);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -154,33 +169,7 @@ function AddBudgetModal({ currentBalance, onClose, onSave }: {
         <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Semester <span className="text-red-500">*</span>
-            </label>
-            <select
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
-              value={form.semesterId}
-              onChange={(e) => setForm({ ...form, semesterId: e.target.value })}
-            >
-              <option value="">Select semester...</option>
-              {availableSemesters.map(sem => (
-                <option key={sem.id} value={sem.id}>{sem.label}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">School Year</label>
-            <input
-              type="text"
-              value={selectedSemester?.academicYear || ""}
-              readOnly
-              className="w-full px-4 py-2.5 border border-gray-200 bg-gray-50 rounded-lg text-gray-500 cursor-not-allowed"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Total School Budget for This Semester (₱) <span className="text-red-500">*</span>
+              Allocation Amount (₱) <span className="text-red-500">*</span>
             </label>
             <div className="relative">
               <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-medium">₱</span>
@@ -192,14 +181,14 @@ function AddBudgetModal({ currentBalance, onClose, onSave }: {
                 onChange={(e) => setForm({ ...form, amount: e.target.value })}
               />
             </div>
-            <p className="text-xs text-gray-500 mt-1">This is the total SAS fund available for student organization activities this semester.</p>
+            <p className="text-xs text-gray-500 mt-1">This adds institutional funds directly to the SAO school budget ledger.</p>
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">Notes / Source of Funds</label>
             <textarea
               rows={2}
-              placeholder="e.g. Annual institutional allocation from school administration"
+              placeholder="e.g. Annual institutional allocation from school administration, Initial school budget"
               className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] resize-none"
               value={form.notes}
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
@@ -279,25 +268,6 @@ function AddBudgetModal({ currentBalance, onClose, onSave }: {
             />
           </div>
 
-          <div className={`flex items-start gap-3 p-4 border rounded-lg ${currentBalance > 0 ? "bg-gray-50 border-gray-200" : "bg-gray-50/50 border-gray-100 opacity-60"}`}>
-            <div className="flex-1">
-              <p className="text-sm font-medium text-gray-900">Carry Over Unspent Balance from Previous Semester</p>
-              <p className="text-xs text-gray-500 mt-0.5">Unspent from previous semester: {formatCurrency(currentBalance)}</p>
-              {carryOver && currentBalance > 0 && (
-                <p className="text-xs text-[#0E4EBD] font-medium mt-1">
-                  Total Effective Budget = {formatCurrency(parseFloat(form.amount || "0") + currentBalance)}
-                </p>
-              )}
-            </div>
-            <button
-              disabled={currentBalance <= 0}
-              onClick={() => setCarryOver(!carryOver)}
-              className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 cursor-pointer ${currentBalance <= 0 ? "bg-gray-200 cursor-not-allowed" : carryOver ? "bg-[#0E4EBD]" : "bg-gray-300"}`}
-            >
-              <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform shadow ${carryOver && currentBalance > 0 ? "translate-x-6" : ""}`} />
-            </button>
-          </div>
-
           <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
             <div className="flex items-start gap-2">
               <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
@@ -309,13 +279,23 @@ function AddBudgetModal({ currentBalance, onClose, onSave }: {
         </div>
 
         <div className="px-5 py-4 border-t border-gray-200 flex items-center justify-between">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 transition-colors cursor-pointer">Cancel</button>
+          <button onClick={onClose} disabled={isSaving} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 transition-colors cursor-pointer disabled:opacity-50">Cancel</button>
           <button
             onClick={handleSave}
-            className="px-5 py-2.5 bg-[#001A4D] hover:bg-[#002D72] text-white rounded-lg text-sm font-medium flex items-center gap-2 transition-colors cursor-pointer"
+            disabled={isSaving || isUploading}
+            className="px-5 py-2.5 bg-[#001A4D] hover:bg-[#002D72] text-white rounded-lg text-sm font-medium flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50"
           >
-            <Save className="w-4 h-4" />
-            Save Budget Allocation
+            {isSaving ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save className="w-4 h-4" />
+                Save Budget Allocation
+              </>
+            )}
           </button>
         </div>
       </div>
@@ -1164,11 +1144,12 @@ function AddExpenseModal({ activeSemesterId, events, onClose, onSave }: {
   activeSemesterId: string | null;
   events: any[];
   onClose: () => void;
-  onSave: (tx: Omit<SaoLedgerDocument, "id" | "createdAt">) => void;
+  onSave: (tx: Omit<SaoLedgerDocument, "id" | "createdAt">) => Promise<void> | void;
 }) {
   const [form, setForm] = useState({ description: "", event: "", amount: "", date: new Date().toISOString().split("T")[0], receiptNumber: "" });
   const [receiptUrl, setReceiptUrl] = useState<string>("");
   const [isUploading, setIsUploading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleFileUpload = async (file: File) => {
     if (!file) return;
@@ -1185,22 +1166,46 @@ function AddExpenseModal({ activeSemesterId, events, onClose, onSave }: {
     }
   };
 
-  const handleSave = () => {
-    if (!form.description || !form.amount || !form.date) return;
-    onSave({
-      semesterId: activeSemesterId,
-      date: Timestamp.fromDate(new Date(form.date)),
-      description: form.description,
-      eventId: form.event || null,
-      type: "expense",
-      source: "manual_expense",
-      amount: parseFloat(form.amount),
-      addedBy: "Admin SAO",
-      receiptUrl: receiptUrl || undefined,
-      proofUrl: receiptUrl || undefined,
-      receiptNumber: form.receiptNumber?.trim() || undefined,
-    });
-    onClose();
+  const handleSave = async () => {
+    if (isUploading) {
+      toast.warning("Please wait for the receipt photo to finish uploading.");
+      return;
+    }
+    if (!form.description?.trim()) {
+      toast.error("Please enter an expense description.");
+      return;
+    }
+    const parsedAmount = parseFloat(form.amount);
+    if (!form.amount || isNaN(parsedAmount) || parsedAmount <= 0) {
+      toast.error("Please enter a valid expense amount greater than ₱0.");
+      return;
+    }
+    if (!form.date) {
+      toast.error("Please select an expense date.");
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await onSave({
+        semesterId: activeSemesterId,
+        date: Timestamp.fromDate(getTransactionDate(form.date)),
+        description: form.description.trim(),
+        eventId: form.event || null,
+        type: "expense",
+        source: "manual_expense",
+        amount: parsedAmount,
+        addedBy: "Admin SAO",
+        receiptUrl: receiptUrl || null,
+        proofUrl: receiptUrl || null,
+        receiptNumber: form.receiptNumber?.trim() || null,
+      });
+      onClose();
+    } catch (err: any) {
+      console.error(err);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -1325,13 +1330,23 @@ function AddExpenseModal({ activeSemesterId, events, onClose, onSave }: {
         </div>
 
         <div className="px-5 py-4 border-t border-gray-200 flex justify-between flex-shrink-0">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 cursor-pointer">Cancel</button>
+          <button onClick={onClose} disabled={isSaving} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 cursor-pointer disabled:opacity-50">Cancel</button>
           <button
             onClick={handleSave}
-            className="px-5 py-2.5 bg-[#001A4D] hover:bg-[#002D72] text-white rounded-lg text-sm font-medium flex items-center gap-2 transition-colors cursor-pointer"
+            disabled={isSaving || isUploading}
+            className="px-5 py-2.5 bg-[#001A4D] hover:bg-[#002D72] text-white rounded-lg text-sm font-medium flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50"
           >
-            <Save className="w-4 h-4" />
-            Save Expense
+            {isSaving ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save className="w-4 h-4" />
+                Save Expense
+              </>
+            )}
           </button>
         </div>
       </div>
@@ -1410,6 +1425,17 @@ export function BudgetFundSettings() {
   const { data: semesters } = useSemesters();
   const activeSemester = semesters.find(s => s.status === 'ACTIVE') || null;
   const { resolveUserName } = useUserNameResolver();
+
+  const sasEvents = useMemo(() => {
+    return (dbEvents || []).filter((evt: any) => {
+      const isOfficer = evt.isOfficerProposal === true;
+      const isInst = evt.isInstitutional === true;
+      const orgId = (evt.hostingOrgId || '').toLowerCase();
+      const isSasOrg = ['sas', 'sao', 'sas_admin', 'sao_admin'].includes(orgId);
+      const isNotSoftDeleted = evt.status !== 'deleted' && evt.status !== 'cancelled';
+      return isNotSoftDeleted && (!isOfficer || isInst || isSasOrg);
+    });
+  }, [dbEvents]);
   
   const [showAddBudget, setShowAddBudget] = useState(false);
   const [showAddExpense, setShowAddExpense] = useState(false);
@@ -1473,7 +1499,25 @@ export function BudgetFundSettings() {
 
         return passType && passSource && passSem && passSearch;
       })
-      .sort((a, b) => getTxTimestamp(b) - getTxTimestamp(a));
+      .sort((a, b) => {
+        const aDate = parseTimestampMillis(a.date);
+        const bDate = parseTimestampMillis(b.date);
+        const aCreated = parseTimestampMillis(a.createdAt);
+        const bCreated = parseTimestampMillis(b.createdAt);
+
+        const aDay = aDate ? new Date(aDate).toDateString() : '';
+        const bDay = bDate ? new Date(bDate).toDateString() : '';
+        if (aDay !== bDay && aDate && bDate) {
+          return bDate - aDate;
+        }
+        if (bCreated && aCreated && bCreated !== aCreated) {
+          return bCreated - aCreated;
+        }
+        if (bDate !== aDate) {
+          return bDate - aDate;
+        }
+        return (bCreated || 0) - (aCreated || 0);
+      });
   }, [transactions, txFilter, sourceFilter, semesterFilter, searchQuery, eventMap]);
 
   // Pagination for Budget Tracker (8 per page)
@@ -2484,7 +2528,7 @@ export function BudgetFundSettings() {
       {showAddExpense && (
         <AddExpenseModal
           activeSemesterId={activeSemester?.id || null}
-          events={dbEvents}
+          events={sasEvents}
           onClose={() => setShowAddExpense(false)}
           onSave={handleSaveTransaction}
         />

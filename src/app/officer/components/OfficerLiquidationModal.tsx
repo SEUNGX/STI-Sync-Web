@@ -15,9 +15,12 @@ import {
   Eye,
   Paperclip,
   ExternalLink,
+  Lock,
 } from 'lucide-react';
 import { uploadToCloudinary } from '../../../services/cloudinary';
 import { useAllEvents } from '../../modules/events/hooks/useEventStream';
+import { useAllLiquidations } from '../../modules/finance/hooks/useLiquidationStream';
+import { getEventTimingStatus } from '../../modules/events/utils/event-lifecycle.utils';
 import {
   createLiquidationReport,
   updateLiquidationReport,
@@ -30,6 +33,7 @@ import type {
 } from '../../modules/finance/types/liquidation.types';
 import { formatCurrency, formatVariance } from '../../utils/currency';
 import ReceiptLightboxModal from '../../modules/finance/components/ReceiptLightboxModal';
+import { toast } from 'sonner';
 
 interface OfficerLiquidationModalProps {
   isOpen: boolean;
@@ -40,6 +44,7 @@ interface OfficerLiquidationModalProps {
   userName: string;
   userRole: 'admin' | 'officer';
   editingReport?: LiquidationDocument | null;
+  existingLiquidations?: LiquidationDocument[];
 }
 
 const EXPENSE_CATEGORIES = [
@@ -109,15 +114,33 @@ export default function OfficerLiquidationModal({
   userName,
   userRole,
   editingReport,
+  existingLiquidations,
 }: OfficerLiquidationModalProps) {
   const { events: allEvents } = useAllEvents();
+  const { liquidations: allLiquidations } = useAllLiquidations();
+
+  const liquidationsList = existingLiquidations || allLiquidations || [];
+
+  // Set of eventIds that already have an active liquidation
+  const liquidatedEventIds = useMemo(() => {
+    const set = new Set<string>();
+    liquidationsList.forEach((l) => {
+      // Exclude voided or cancelled liquidations from blocking an event
+      if (l.eventId && l.status !== 'voided' && (l.status as any) !== 'cancelled') {
+        set.add(l.eventId);
+      }
+    });
+    return set;
+  }, [liquidationsList]);
 
   // Helper to calculate total budget from any budget property or budgetItems array
   const calculateEventBudget = (e: any): number => {
     if (typeof e.totalApprovedBudget === 'number' && e.totalApprovedBudget > 0) return e.totalApprovedBudget;
+    if (typeof e.allocatedBudget === 'number' && e.allocatedBudget > 0) return e.allocatedBudget;
     if (typeof e.adminFeeOverride === 'number' && e.adminFeeOverride > 0) return e.adminFeeOverride;
     if (typeof e.totalExpectedCollection === 'number' && e.totalExpectedCollection > 0) return e.totalExpectedCollection;
     if (typeof e.suggestedFeePerStudent === 'number' && e.suggestedFeePerStudent > 0) return e.suggestedFeePerStudent;
+    if (typeof e.totalBudget === 'number' && e.totalBudget > 0) return e.totalBudget;
     if (Array.isArray(e.budgetItems) && e.budgetItems.length > 0) {
       const sum = e.budgetItems.reduce((acc: number, item: any) => {
         const itemCost = Number(item.approvedAmount || item.totalCost || (Number(item.quantity || 1) * Number(item.unitCost || 0)) || 0);
@@ -129,51 +152,114 @@ export default function OfficerLiquidationModal({
   };
 
   // Filter events eligible for liquidation:
+  // 1. Only events belonging to role/org (Admin = institutional/SAO only; Officer = their club only)
+  // 2. Only completed events (status/proposalStatus/lifecycleStatus === 'completed' or timing completed)
+  // 3. Exclude if event already has a liquidation (unless editing that existing report)
   const eligibleEvents = useMemo(() => {
     if (allEvents.length === 0) return [];
 
-    const nonDrafts = allEvents.filter((e: any) => {
+    return allEvents.filter((e: any) => {
+      if (!e || e.isDeleted === true) return false;
+
+      // When editing an existing report, always preserve the event currently linked to it
+      if (editingReport && editingReport.eventId === e.id) return true;
+
+      const isEditingThisEvent = editingReport && editingReport.eventId === e.id;
+
+      // Basic validity & non-cancellation / non-draft / non-rejected check
       const pStatus = (e.proposalStatus || '').toString().toLowerCase();
       const eStatus = (e.status || '').toString().toLowerCase();
       const lStatus = (e.lifecycleStatus || '').toString().toLowerCase();
       const isCancelled = e.isCancelled === true || pStatus === 'cancelled' || eStatus === 'cancelled' || lStatus === 'cancelled';
       const isDraft = pStatus === 'draft';
-      return !isDraft && !isCancelled;
-    });
+      const isRejected = pStatus === 'rejected' || eStatus === 'rejected';
 
-    if (userRole === 'admin') {
-      return nonDrafts.filter((e: any) => {
+      if (isCancelled || isDraft || isRejected) return false;
+
+      // Completion check: Only completed events can be liquidated
+      const timingStatus = getEventTimingStatus(e);
+      const isCompleted =
+        eStatus === 'completed' ||
+        pStatus === 'completed' ||
+        lStatus === 'completed' ||
+        lStatus === 'concluded' ||
+        (e as any).isConcluded === true ||
+        timingStatus === 'completed';
+
+      if (!isCompleted) return false;
+
+      // Role & Organization ownership scoping
+      if (userRole === 'admin') {
+        // Admin events only: must not be an officer proposal, must be institutional/SAO
         if (e.isOfficerProposal === true || e.submittedByOfficer === true) return false;
 
-        // Exclude events that went through proposal approval workflow (have approvedBy or submitted history)
-        const hasApprovedBy = Boolean(e.approvedBy);
+        const isInstitutional =
+          e.isOfficerProposal === false ||
+          (e as any).isInstitutional === true ||
+          (e as any).isDirectPublished === true ||
+          e.createdByRole === 'admin' ||
+          !e.hostingOrgId ||
+          ['sas', 'sao', 'sas_admin', 'sao_admin', 'student affairs office', 'student affairs services'].includes(
+            (e.hostingOrgId || '').toString().trim().toLowerCase()
+          );
+
+        if (!isInstitutional) return false;
+
+        // Exclude events that originated from student club proposals
         const hasSubmittedHistory =
           Array.isArray(e.proposalHistory) &&
           e.proposalHistory.some((h: any) => h?.action === 'submitted' || h?.action === 'resubmitted');
+        if (hasSubmittedHistory && e.isOfficerProposal !== false) return false;
+      } else {
+        // Officer events only: must belong to the officer's organization
+        const cleanOrgId = (orgId || '').trim().toLowerCase();
+        const cleanOrgName = (orgName || '').trim().toLowerCase();
 
-        if (hasApprovedBy || hasSubmittedHistory) return false;
+        // Must not be an institutional / admin event
+        const isInstitutional =
+          e.isOfficerProposal === false ||
+          (e as any).isInstitutional === true ||
+          ['sas', 'sao', 'sas_admin', 'sao_admin', 'student affairs office', 'student affairs services'].includes(
+            (e.hostingOrgId || '').toString().trim().toLowerCase()
+          );
+        if (isInstitutional) return false;
 
-        return true;
-      });
-    }
+        // Must match officer's organization ID or Name
+        const eventOrgIds = [
+          e.hostingOrgId,
+          e.organizationId,
+          e.createdByOrgId,
+          e.orgId,
+          e.org,
+          e.organization,
+        ].filter(Boolean).map((v) => String(v).trim().toLowerCase());
 
-    const cleanOrgId = (orgId || '').trim().toLowerCase();
-    if (!cleanOrgId) return nonDrafts;
+        const eventOrgNames = [
+          e.hostingOrgName,
+          e.orgName,
+        ].filter(Boolean).map((v) => String(v).trim().toLowerCase());
 
-    return nonDrafts.filter((e: any) => {
-      const orgFields = [
-        e.hostingOrgId,
-        e.organizationId,
-        e.createdByOrgId,
-        e.orgId,
-        e.org,
-        e.organization,
-        e.hostingOrgName,
-        e.orgName,
-      ];
-      return orgFields.some((f) => f && String(f).trim().toLowerCase().includes(cleanOrgId));
+        const matchesOrg =
+          (cleanOrgId && eventOrgIds.includes(cleanOrgId)) ||
+          (cleanOrgName && eventOrgNames.includes(cleanOrgName));
+
+        if (!matchesOrg) return false;
+      }
+
+      // Liquidation exclusivity check: if already liquidated or has a liquidation, exclude
+      const hasLiquidation =
+        liquidatedEventIds.has(e.id) ||
+        (e as any).isLiquidated === true ||
+        (e as any).liquidationStatus === 'approved' ||
+        (e as any).hasLiquidation === true;
+
+      if (hasLiquidation && !isEditingThisEvent) {
+        return false;
+      }
+
+      return true;
     });
-  }, [allEvents, orgId, userRole]);
+  }, [allEvents, orgId, orgName, userRole, liquidatedEventIds, editingReport]);
 
   const [selectedEventId, setSelectedEventId] = useState<string>('');
   const [allocatedBudget, setAllocatedBudget] = useState<number>(0);
@@ -220,9 +306,9 @@ export default function OfficerLiquidationModal({
   // Update budget & auto-fetch budgetItems when event is selected
   const handleEventSelect = (eventId: string) => {
     setSelectedEventId(eventId);
-    const event = eligibleEvents.find((e) => e.id === eventId);
+    const event = eligibleEvents.find((e) => e.id === eventId) || allEvents.find((e) => e.id === eventId);
     if (event) {
-      const budget = calculateEventBudget(event) || 10000;
+      const budget = calculateEventBudget(event);
       setAllocatedBudget(budget);
 
       // Auto-fetch budgetItems from the event proposal if not editing existing report
@@ -363,20 +449,41 @@ export default function OfficerLiquidationModal({
       return;
     }
 
-    if (lineItems.some((item) => !item.description.trim() || item.totalCost <= 0)) {
-      setError('Please fill out all line item descriptions and valid costs.');
-      return;
+    // Strict validation ONLY on final submission; save-as-draft is completely functional & flexible
+    if (shouldSubmit) {
+      if (lineItems.length === 0) {
+        setError('Please add at least one expense line item before submitting.');
+        return;
+      }
+      if (lineItems.some((item) => !item.description.trim())) {
+        setError('Please provide a description for all expense line items before submitting.');
+        return;
+      }
+      if (lineItems.some((item) => item.totalCost <= 0 || item.unitCost <= 0 || item.quantity <= 0)) {
+        setError('All expense line items must have valid quantity, unit cost, and total cost greater than 0.');
+        return;
+      }
+      const missingReceipts = lineItems.some(
+        (item) =>
+          (!item.receiptFiles || item.receiptFiles.length === 0) &&
+          (!item.receiptUrls || item.receiptUrls.length === 0) &&
+          !item.receiptUrl
+      );
+      if (missingReceipts) {
+        setError('Please attach at least one valid receipt or proof document for every expense line item before submitting.');
+        return;
+      }
     }
 
     setIsSubmitting(true);
     setError(null);
 
     try {
-      const selectedEvent = eligibleEvents.find((e) => e.id === selectedEventId);
+      const selectedEvent = eligibleEvents.find((e) => e.id === selectedEventId) || allEvents.find((e) => e.id === selectedEventId);
       const eventTitle = selectedEvent ? selectedEvent.title : editingReport?.eventTitle || 'Event Liquidation';
 
       const isAdmin = userRole === 'admin';
-      const nextStatus = isAdmin ? 'approved' : shouldSubmit ? 'pending' : 'draft';
+      const nextStatus = shouldSubmit ? (isAdmin ? 'approved' : 'pending') : 'draft';
 
       const payload: Omit<LiquidationDocument, 'id' | 'createdAt' | 'updatedAt'> = {
         eventId: selectedEventId,
@@ -399,8 +506,18 @@ export default function OfficerLiquidationModal({
           status: nextStatus,
           ...(shouldSubmit ? { submittedAt: new Date() } : {}),
         });
+        toast.success(
+          shouldSubmit
+            ? (isAdmin ? 'Liquidation report approved and posted to ledger.' : 'Liquidation report submitted successfully for review.')
+            : 'Draft liquidation report updated successfully.'
+        );
       } else {
         await createLiquidationReport(payload);
+        toast.success(
+          shouldSubmit
+            ? (isAdmin ? 'Liquidation report approved and posted to ledger.' : 'Liquidation report submitted successfully for review.')
+            : 'Draft liquidation report saved successfully.'
+        );
       }
 
       onClose();
@@ -454,6 +571,21 @@ export default function OfficerLiquidationModal({
             </div>
           )}
 
+          {/* Empty State Warning Alert */}
+          {eligibleEvents.length === 0 && !editingReport && (
+            <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-2.5">
+              <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <span className="font-bold">No eligible completed events found</span>
+                <p className="text-amber-800 mt-0.5">
+                  {userRole === 'admin'
+                    ? 'Only concluded institutional / SAO events that have not yet been liquidated are available for administrative liquidation.'
+                    : 'Only concluded events belonging to your organization that have not yet been liquidated are available for liquidation submission.'}
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Event Selection & Allocated Budget */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -463,32 +595,47 @@ export default function OfficerLiquidationModal({
               <select
                 value={selectedEventId}
                 onChange={(e) => handleEventSelect(e.target.value)}
-                disabled={!!editingReport}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] disabled:bg-gray-100"
+                disabled={!!editingReport || eligibleEvents.length === 0}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] disabled:bg-gray-100 disabled:text-gray-500"
               >
-                <option value="">Select an approved event...</option>
-                {eligibleEvents.map((evt) => (
-                  <option key={evt.id} value={evt.id}>
-                    {evt.title} ({evt.eventFormat || 'Campus'})
-                  </option>
-                ))}
+                {eligibleEvents.length === 0 ? (
+                  <option value="">No completed, unliquidated events available</option>
+                ) : (
+                  <>
+                    <option value="">Select a completed event ({eligibleEvents.length} available)...</option>
+                    {eligibleEvents.map((evt) => (
+                      <option key={evt.id} value={evt.id}>
+                        {evt.title} ({evt.eventFormat || 'Campus'})
+                      </option>
+                    ))}
+                  </>
+                )}
               </select>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Approved Budget Ceiling (Allocated)
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-sm font-medium text-gray-700">
+                  Approved Budget Ceiling (Allocated)
+                </label>
+                <span className="text-[11px] font-semibold text-gray-500 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded-md flex items-center gap-1">
+                  <Lock className="w-3 h-3 text-gray-400" /> Read-only
+                </span>
+              </div>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-bold">₱</span>
                 <input
                   type="number"
                   value={allocatedBudget}
-                  onChange={(e) => setAllocatedBudget(Number(e.target.value))}
-                  className="w-full pl-8 pr-4 py-2 border border-gray-300 rounded-lg text-sm font-bold text-gray-900 focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
+                  readOnly
+                  disabled
+                  className="w-full pl-8 pr-4 py-2 border border-gray-300 rounded-lg text-sm font-bold text-gray-700 bg-gray-100/90 cursor-not-allowed select-none focus:outline-none"
                   placeholder="0.00"
                 />
               </div>
+              <p className="text-[11px] text-gray-500 mt-1">
+                Locked to the official approved budget ceiling for the linked event.
+              </p>
             </div>
           </div>
 

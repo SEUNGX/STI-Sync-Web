@@ -449,3 +449,90 @@ export async function sendStudentWelcomeCredentialsEmail(params: {
   });
 }
 
+/**
+ * Helper: Send Officer Password Reset & Temporary Credentials Email
+ */
+export async function sendOfficerPasswordResetCredentialsEmail(params: {
+  to: string;
+  officerName: string;
+  temporaryPassword: string;
+  studentId?: string;
+  orgName?: string;
+  roleName?: string;
+  loginUrl?: string;
+}): Promise<ResendResponse> {
+  const loginUrl = params.loginUrl || `${window.location.origin}/welcome`;
+  const tempPass = params.temporaryPassword;
+
+  const html = `
+    <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 12px; overflow: hidden; background-color: #ffffff;">
+      <div style="background-color: #001A4D; padding: 24px; text-align: center;">
+        <h1 style="color: #FFD41C; margin: 0; font-size: 24px; font-weight: 800; letter-spacing: 0.5px;">STI SYNC</h1>
+        <p style="color: #ffffff; margin: 4px 0 0 0; font-size: 13px;">Student Affairs & Services — Officer Credentials Management</p>
+      </div>
+      <div style="padding: 32px;">
+        <h2 style="color: #001A4D; margin-top: 0; font-size: 20px;">Password Reset Notice</h2>
+        <p style="color: #333333; font-size: 15px; line-height: 1.6;">Dear <strong>${params.officerName}</strong>,</p>
+        <p style="color: #333333; font-size: 15px; line-height: 1.6;">
+          Your login credentials for the <strong>STI Sync Officer Portal</strong> have been reset by the SAO Administrator.
+        </p>
+
+        <div style="background-color: #f4f6fb; border: 1.5px solid #d0d7e8; padding: 20px; margin: 24px 0; border-radius: 8px;">
+          <h3 style="margin: 0 0 12px 0; color: #001A4D; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px;">Your New Login Credentials</h3>
+          <p style="margin: 4px 0; font-size: 14px; color: #333333;"><strong>Portal:</strong> Officer & Adviser Web Portal</p>
+          <p style="margin: 4px 0; font-size: 14px; color: #333333;"><strong>Login Email:</strong> <code style="background-color: #e8ecf4; padding: 2px 6px; border-radius: 4px; color: #0E4EBD;">${params.to}</code></p>
+          ${params.studentId ? `<p style="margin: 4px 0; font-size: 14px; color: #333333;"><strong>Student ID:</strong> ${params.studentId}</p>` : ''}
+          ${params.orgName ? `<p style="margin: 4px 0; font-size: 14px; color: #333333;"><strong>Organization:</strong> ${params.orgName}${params.roleName ? ` (${params.roleName})` : ''}</p>` : ''}
+          <p style="margin: 8px 0 4px 0; font-size: 14px; color: #333333;"><strong>Temporary Password:</strong> <code style="background-color: #fff3cd; color: #856404; padding: 4px 10px; border-radius: 4px; font-weight: bold; font-size: 16px; font-family: monospace;">${tempPass}</code></p>
+        </div>
+
+        <div style="background-color: #fff8e1; border-left: 4px solid #FFC107; padding: 12px 16px; margin-bottom: 24px; border-radius: 4px;">
+          <p style="margin: 0; color: #856404; font-size: 13px; line-height: 1.5;">
+            <strong>Security Notice:</strong> You will be prompted to change this temporary password to your own private password upon signing in.
+          </p>
+        </div>
+
+        <div style="text-align: center; margin: 28px 0 16px 0;">
+          <a href="${loginUrl}" style="background-color: #001A4D; color: #ffffff; padding: 12px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 14px; display: inline-block;">
+            Sign In to Officer Portal &rarr;
+          </a>
+        </div>
+
+        <p style="color: #666666; font-size: 13px; line-height: 1.5; margin-top: 24px;">
+          If you did not request or expect this password reset, please contact the Student Affairs Office immediately.
+        </p>
+      </div>
+      <div style="background-color: #f9fafb; padding: 16px; text-align: center; border-top: 1px solid #e0e0e0; font-size: 12px; color: #888888;">
+        © STI Sync — Campus Event & Student Affairs Management System
+      </div>
+    </div>
+  `;
+
+  return sendEmail({
+    to: params.to,
+    subject: `[STI Sync] Password Reset — Your Temporary Officer Credentials`,
+    recipientName: params.officerName,
+    html,
+    text: `Dear ${params.officerName},\n\nYour STI Sync Officer Portal password has been reset by the SAO Administrator.\n\nLogin Identifier: ${params.to}\nStudent ID: ${params.studentId || 'N/A'}\nTemporary Password: ${tempPass}\n\nPlease sign in and set your new password at: ${loginUrl}`,
+    templateParams: {
+      to_email: params.to,
+      email: params.to,
+      to_name: params.officerName,
+      name: params.officerName,
+      officer_name: params.officerName,
+      student_name: params.officerName,
+      student_id: params.studentId || '',
+      org_name: params.orgName || '',
+      organization_name: params.orgName || '',
+      role_name: params.roleName || '',
+      temp_password: tempPass,
+      temporary_password: tempPass,
+      password: tempPass,
+      login_url: loginUrl,
+      link: loginUrl,
+      message: `Your STI Sync Officer Portal password has been reset. Your Login Email is ${params.to} and your new Temporary Password is: ${tempPass}. Please log in and change your password.`,
+    },
+  });
+}
+
+

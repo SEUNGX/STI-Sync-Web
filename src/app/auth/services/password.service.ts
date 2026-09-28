@@ -25,22 +25,28 @@ export async function changeOfficerOrAdviserPassword(
 
   // ── 1. Re-authenticate / Ensure Firebase Auth User is signed in ──
   let user = auth.currentUser;
-  if (!user || user.email?.toLowerCase() !== email) {
-    const cred = await signInWithEmailAndPassword(auth, email, currentPassword);
-    user = cred.user;
-  } else {
-    try {
-      const cred = EmailAuthProvider.credential(email, currentPassword);
-      await reauthenticateWithCredential(user, cred);
-    } catch (reauthErr: any) {
-      console.warn('[passwordService] Reauth failed, trying fresh signIn:', reauthErr);
+  try {
+    if (!user || user.email?.toLowerCase() !== email) {
       const cred = await signInWithEmailAndPassword(auth, email, currentPassword);
       user = cred.user;
+    } else {
+      try {
+        const cred = EmailAuthProvider.credential(email, currentPassword);
+        await reauthenticateWithCredential(user, cred);
+      } catch (reauthErr: any) {
+        console.warn('[passwordService] Reauth failed, trying fresh signIn:', reauthErr);
+        const cred = await signInWithEmailAndPassword(auth, email, currentPassword);
+        user = cred.user;
+      }
     }
-  }
 
-  // ── 2. Update Password in Firebase Auth ──
-  await updatePassword(user, newPassword);
+    // ── 2. Update Password in Firebase Auth ──
+    if (user) {
+      await updatePassword(user, newPassword);
+    }
+  } catch (authErr) {
+    console.warn('[passwordService] Firebase Auth update note (proceeding to sync Firestore):', authErr);
+  }
 
   // ── 3. Update Firestore Records ──
   try {

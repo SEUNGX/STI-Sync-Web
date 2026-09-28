@@ -27,16 +27,17 @@ export const createLiquidationReport = async (
   const surplusOrDeficit = (data.allocatedBudget || 0) - totalActualSpending;
 
   const isAdmin = data.createdByRole === 'admin';
-  const initialStatus = isAdmin ? 'approved' : (data.status || 'draft');
+  const initialStatus = data.status || (isAdmin ? 'approved' : 'draft');
+  const isAutoApproved = isAdmin && initialStatus === 'approved';
 
   const initialRemark: LiquidationRemark = {
     id: `rem-${Date.now()}`,
     authorName: data.createdByName || (isAdmin ? 'SAO Adviser' : 'Officer'),
     authorRole: data.createdByRole || 'officer',
-    action: isAdmin ? 'approved' : (data.status === 'pending' ? 'submitted' : 'draft_saved'),
-    comment: isAdmin
+    action: isAutoApproved ? 'approved' : (initialStatus === 'pending' ? 'submitted' : 'draft_saved'),
+    comment: isAutoApproved
       ? 'Liquidation created and auto-approved by SAO Adviser.'
-      : (data.status === 'pending' ? 'Liquidation report submitted for SAO Adviser review.' : 'Draft liquidation created.'),
+      : (initialStatus === 'pending' ? 'Liquidation report submitted for SAO Adviser review.' : 'Draft liquidation created.'),
     timestamp: new Date().toISOString(),
   };
 
@@ -46,15 +47,15 @@ export const createLiquidationReport = async (
     surplusOrDeficit,
     status: initialStatus,
     remarksHistory: [initialRemark],
-    ...(isAdmin ? { approvedAt: serverTimestamp() as any, approvedBy: data.createdById } : {}),
+    ...(isAutoApproved ? { approvedAt: serverTimestamp() as any, approvedBy: data.createdById } : {}),
     createdAt: serverTimestamp() as any,
     updatedAt: serverTimestamp() as any,
   };
 
   const docRef = await addDoc(collection(db, LIQUIDATIONS_COLLECTION), payload);
 
-  // If Admin created, auto-post to SAO Ledger
-  if (isAdmin) {
+  // If Admin created and auto-approved, auto-post to SAO Ledger
+  if (isAutoApproved) {
     try {
       await postLiquidationToLedger(docRef.id, payload as Partial<LiquidationDocument>, data.createdById);
     } catch (err) {

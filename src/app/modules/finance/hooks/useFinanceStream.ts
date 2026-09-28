@@ -6,6 +6,7 @@ import type { SaoLedgerDocument, OrgLedgerDocument } from '../types/finance.type
 export function parseTimestampMillis(date: any): number {
   if (!date) return 0;
   if (typeof date.toMillis === 'function') return date.toMillis();
+  if (typeof date.toDate === 'function') return date.toDate().getTime();
   if (typeof date.seconds === 'number') return date.seconds * 1000;
   if (date instanceof Date) return date.getTime();
   if (typeof date === 'string') {
@@ -32,9 +33,20 @@ export function useSaoLedger() {
         })) as SaoLedgerDocument[];
 
         docs.sort((a, b) => {
-          const aTime = parseTimestampMillis(a.date) || parseTimestampMillis(a.createdAt);
-          const bTime = parseTimestampMillis(b.date) || parseTimestampMillis(b.createdAt);
-          return aTime - bTime;
+          const aDate = parseTimestampMillis(a.date);
+          const bDate = parseTimestampMillis(b.date);
+          const aCreated = parseTimestampMillis(a.createdAt);
+          const bCreated = parseTimestampMillis(b.createdAt);
+
+          const aDay = aDate ? new Date(aDate).toDateString() : '';
+          const bDay = bDate ? new Date(bDate).toDateString() : '';
+          if (aDay !== bDay && aDate && bDate) {
+            return aDate - bDate;
+          }
+          if (aCreated && bCreated && aCreated !== bCreated) {
+            return aCreated - bCreated;
+          }
+          return (aDate || aCreated) - (bDate || bCreated);
         });
 
         setData(docs);
@@ -79,9 +91,20 @@ export function useOrgLedger(organizationId: string | null) {
         
         // Sort locally by date ascending
         docs.sort((a, b) => {
-          const aTime = parseTimestampMillis(a.date) || parseTimestampMillis(a.createdAt);
-          const bTime = parseTimestampMillis(b.date) || parseTimestampMillis(b.createdAt);
-          return aTime - bTime;
+          const aDate = parseTimestampMillis(a.date);
+          const bDate = parseTimestampMillis(b.date);
+          const aCreated = parseTimestampMillis(a.createdAt);
+          const bCreated = parseTimestampMillis(b.createdAt);
+
+          const aDay = aDate ? new Date(aDate).toDateString() : '';
+          const bDay = bDate ? new Date(bDate).toDateString() : '';
+          if (aDay !== bDay && aDate && bDate) {
+            return aDate - bDate;
+          }
+          if (aCreated && bCreated && aCreated !== bCreated) {
+            return aCreated - bCreated;
+          }
+          return (aDate || aCreated) - (bDate || bCreated);
         });
 
         setData(docs);

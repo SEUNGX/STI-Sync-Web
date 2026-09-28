@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { useOrgLedger, parseTimestampMillis } from '../../modules/finance/hooks/useFinanceStream';
 import { addOrgLedgerTransaction } from '../../modules/finance/services/finance.service';
 import { useSemesters } from '../../modules/academic/hooks/useAcademicStream';
+import { useOrgEvents } from '../../modules/events/hooks/useEventStream';
 import { useOrgPayables, useOrgCollectionsStream } from '../../modules/finance/hooks/usePayableStream';
 import { transferCollectionGroupToLedger } from '../../modules/finance/services/payable.service';
 import { ProcessRefundModal } from '../../modules/finance/components/ProcessRefundModal';
@@ -63,6 +64,7 @@ import {
   Loader2,
   Layers,
   Banknote,
+  Save,
 } from "lucide-react";
 
 type FinanceTab = "budget" | "collections";
@@ -150,6 +152,22 @@ function MetricsRow({
 
 // ─── Budget Tracker Tab ────────────────────────────────────────────────────────
 
+function getTransactionDate(dateStr: string): Date {
+  if (!dateStr) return new Date();
+  const parts = dateStr.split("-").map(Number);
+  if (parts.length !== 3) return new Date();
+  const [year, month, day] = parts;
+  const now = new Date();
+  if (
+    year === now.getFullYear() &&
+    month === now.getMonth() + 1 &&
+    day === now.getDate()
+  ) {
+    return now;
+  }
+  return new Date(year, month - 1, day, 12, 0, 0);
+}
+
 function AddOrgIncomeModal({
   organizationId,
   organizationName,
@@ -164,13 +182,11 @@ function AddOrgIncomeModal({
   onSuccess: () => void;
 }) {
   const { data: semesters } = useSemesters();
-  const availableSemesters = semesters.filter((s) => s.status === 'ACTIVE' || s.status === 'UPCOMING');
   const activeSemester = semesters.find((s) => s.status === 'ACTIVE');
-  const [form, setForm] = useState({ amount: "", notes: "", semesterId: activeSemester?.id || "", receiptNumber: "" });
+  const [form, setForm] = useState({ amount: "", notes: "", receiptNumber: "" });
   const [receiptUrl, setReceiptUrl] = useState<string>("");
   const [isUploading, setIsUploading] = useState(false);
-  const [carryOver, setCarryOver] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleFileUpload = async (file: File) => {
     if (!file) return;
@@ -188,79 +204,81 @@ function AddOrgIncomeModal({
   };
 
   const handleSave = async () => {
-    if (!form.amount || isNaN(Number(form.amount))) return;
-    setLoading(true);
+    if (isUploading) {
+      toast.warning("Please wait for the proof photo to finish uploading.");
+      return;
+    }
+    const amt = parseFloat(form.amount);
+    if (!form.amount || isNaN(amt) || amt <= 0) {
+      toast.error("Please enter a valid allocation amount greater than ₱0.");
+      return;
+    }
+
+    setIsSaving(true);
     try {
       await addOrgLedgerTransaction({
         organizationId,
-        semesterId: form.semesterId || null,
-        date: Timestamp.now(),
-        description: carryOver ? "Carry-over from previous semester" : (form.notes || "Budget Allocation/Income"),
+        semesterId: activeSemester?.id || null,
+        date: Timestamp.fromDate(new Date()),
+        description: form.notes?.trim() || `Club Budget Allocation – ${organizationName}`,
         eventId: null,
         type: "income",
-        source: carryOver ? "carry_over" : "allocation",
-        amount: parseFloat(form.amount),
+        source: "allocation",
+        amount: amt,
         addedBy: officerStudentId,
-        receiptUrl: receiptUrl || undefined,
-        proofUrl: receiptUrl || undefined,
-        receiptNumber: form.receiptNumber?.trim() || undefined,
+        receiptUrl: receiptUrl || null,
+        proofUrl: receiptUrl || null,
+        receiptNumber: form.receiptNumber?.trim() || null,
       });
       toast.success("Income transaction recorded successfully.");
       onSuccess();
     } catch (e: any) {
       console.error(e);
       toast.error(e?.message || "Failed to record income.");
-      setLoading(false);
+    } finally {
+      setIsSaving(false);
     }
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-[520px] overflow-hidden max-h-[90vh] flex flex-col">
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-[560px] overflow-hidden max-h-[90vh] flex flex-col">
         <div className="bg-[#001A4D] px-6 py-4 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3">
-            <Plus className="w-5 h-5 text-[#FFD41C]" />
-            <h3 className="text-white font-bold text-base">Add Club Income / Allocation</h3>
+            <Building2 className="w-5 h-5 text-[#FFD41C]" />
+            <h3 className="text-white font-bold text-base">Add Club Budget Allocation</h3>
             <span className="px-2.5 py-0.5 bg-[#FFD41C] text-[#001A4D] text-xs font-bold rounded-full">{organizationName}</span>
           </div>
           <button onClick={onClose} className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10 cursor-pointer">
             <X className="w-5 h-5" />
           </button>
         </div>
+
         <div className="p-5 space-y-4 overflow-y-auto flex-1">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Academic Semester <span className="text-red-500">*</span></label>
-            <select
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD] focus:border-transparent"
-              value={form.semesterId}
-              onChange={(e) => setForm({ ...form, semesterId: e.target.value })}
-            >
-              <option value="">Select semester...</option>
-              {availableSemesters.map((sem) => (
-                <option key={sem.id} value={sem.id}>{sem.label}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Amount (₱) <span className="text-red-500">*</span></label>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              Allocation Amount (₱) <span className="text-red-500">*</span>
+            </label>
             <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">₱</span>
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-medium">₱</span>
               <input
                 type="number"
                 placeholder="0.00"
-                className="w-full pl-8 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD] focus:border-transparent"
+                className="w-full pl-8 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
                 value={form.amount}
                 onChange={(e) => setForm({ ...form, amount: e.target.value })}
               />
             </div>
+            <p className="text-xs text-gray-500 mt-1">This adds funds directly into your student organization's treasury ledger.</p>
           </div>
+
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Notes / Justification</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Notes / Source of Funds</label>
             <textarea
               rows={2}
-              placeholder="Why is this income added? (e.g. Sponsorship, Allocation)"
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD] focus:border-transparent resize-none"
+              placeholder="e.g. Initial club fund, Sponsorship, Club budget allocation, SAS Subsidy"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD] resize-none"
               value={form.notes}
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
             />
@@ -271,7 +289,7 @@ function AddOrgIncomeModal({
             <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center justify-between">
               <span className="flex items-center gap-1.5">
                 <Receipt className="w-4 h-4 text-[#001A4D]" />
-                Proof of Income / Receipt Evidence <span className="text-xs text-gray-400 font-normal">(Optional)</span>
+                Proof of Allocation / Receipt Evidence <span className="text-xs text-gray-400 font-normal">(Optional)</span>
               </span>
             </label>
 
@@ -329,7 +347,7 @@ function AddOrgIncomeModal({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Official Receipt (OR) / Ref # (optional)</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Official Receipt (OR) / Check / Ref # (optional)</label>
             <input
               type="text"
               placeholder="e.g. OR-2026-0042 or Check #12345"
@@ -339,19 +357,32 @@ function AddOrgIncomeModal({
             />
           </div>
 
-          <div className="flex items-center gap-3 p-4 bg-gray-50 border border-gray-200 rounded-lg">
-            <input type="checkbox" id="carryOver" checked={carryOver} onChange={(e) => setCarryOver(e.target.checked)} className="w-4 h-4 text-[#0E4EBD] rounded focus:ring-[#0E4EBD]" />
-            <label htmlFor="carryOver" className="text-sm text-gray-700 font-medium">Mark as carry-over from previous semester</label>
+          <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl flex items-start gap-2">
+            <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+            <p className="text-blue-800 text-xs">
+              This records an income transaction directly to {organizationName}'s organizational ledger.
+            </p>
           </div>
         </div>
+
         <div className="px-5 py-4 border-t border-gray-200 flex justify-between flex-shrink-0">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 transition-colors cursor-pointer">Cancel</button>
+          <button onClick={onClose} disabled={isSaving} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 transition-colors cursor-pointer disabled:opacity-50">Cancel</button>
           <button
             onClick={handleSave}
-            disabled={loading || isUploading}
-            className="px-5 py-2.5 bg-[#001A4D] hover:bg-[#002D72] text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 cursor-pointer"
+            disabled={isSaving || isUploading}
+            className="px-5 py-2.5 bg-[#001A4D] hover:bg-[#002D72] text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 cursor-pointer flex items-center gap-2"
           >
-            {loading ? "Saving..." : "Save Income"}
+            {isSaving ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save className="w-4 h-4" />
+                Save Budget Allocation
+              </>
+            )}
           </button>
         </div>
       </div>
@@ -361,21 +392,34 @@ function AddOrgIncomeModal({
 
 function AddOrgExpenseModal({
   organizationId,
+  organizationName,
   officerStudentId,
   onClose,
   onSuccess,
 }: {
   organizationId: string;
+  organizationName?: string;
   officerStudentId: string;
   onClose: () => void;
   onSuccess: () => void;
 }) {
   const { data: semesters } = useSemesters();
   const activeSemester = semesters.find((s) => s.status === 'ACTIVE');
-  const [form, setForm] = useState({ amount: "", notes: "", eventId: "", receiptNumber: "" });
+  const { events: rawOrgEvents } = useOrgEvents(organizationId);
+  const orgEvents = useMemo(() => {
+    return (rawOrgEvents || []).filter((e: any) => e.status !== 'deleted' && e.status !== 'cancelled');
+  }, [rawOrgEvents]);
+
+  const [form, setForm] = useState({
+    description: "",
+    eventId: "",
+    amount: "",
+    date: new Date().toISOString().split("T")[0],
+    receiptNumber: ""
+  });
   const [receiptUrl, setReceiptUrl] = useState<string>("");
   const [isUploading, setIsUploading] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleFileUpload = async (file: File) => {
     if (!file) return;
@@ -393,29 +437,47 @@ function AddOrgExpenseModal({
   };
 
   const handleSave = async () => {
-    if (!form.amount || isNaN(Number(form.amount))) return;
-    setLoading(true);
+    if (isUploading) {
+      toast.warning("Please wait for the receipt photo to finish uploading.");
+      return;
+    }
+    if (!form.description?.trim()) {
+      toast.error("Please enter an expense description.");
+      return;
+    }
+    const parsedAmount = parseFloat(form.amount);
+    if (!form.amount || isNaN(parsedAmount) || parsedAmount <= 0) {
+      toast.error("Please enter a valid expense amount greater than ₱0.");
+      return;
+    }
+    if (!form.date) {
+      toast.error("Please select an expense date.");
+      return;
+    }
+
+    setIsSaving(true);
     try {
       await addOrgLedgerTransaction({
         organizationId,
         semesterId: activeSemester?.id || null,
-        date: Timestamp.now(),
-        description: form.notes || "Manual Expense",
+        date: Timestamp.fromDate(getTransactionDate(form.date)),
+        description: form.description.trim(),
         eventId: form.eventId || null,
         type: "expense",
         source: "manual_expense",
-        amount: parseFloat(form.amount),
+        amount: parsedAmount,
         addedBy: officerStudentId,
-        receiptUrl: receiptUrl || undefined,
-        proofUrl: receiptUrl || undefined,
-        receiptNumber: form.receiptNumber?.trim() || undefined,
+        receiptUrl: receiptUrl || null,
+        proofUrl: receiptUrl || null,
+        receiptNumber: form.receiptNumber?.trim() || null,
       });
       toast.success("Expense recorded successfully.");
       onSuccess();
     } catch (e: any) {
       console.error(e);
       toast.error(e?.message || "Failed to record expense.");
-      setLoading(false);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -425,36 +487,66 @@ function AddOrgExpenseModal({
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-[520px] overflow-hidden max-h-[90vh] flex flex-col">
         <div className="bg-[#001A4D] px-6 py-4 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3">
-            <Minus className="w-5 h-5 text-white" />
-            <h3 className="text-white font-bold text-base">Record Manual Expense</h3>
+            <ArrowUpRight className="w-5 h-5 text-[#FFD41C]" />
+            <h3 className="text-white font-bold text-base">Add Club Expense</h3>
+            {organizationName && (
+              <span className="px-2.5 py-0.5 bg-red-100 text-red-800 text-xs font-bold rounded-full">{organizationName}</span>
+            )}
           </div>
           <button onClick={onClose} className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10 cursor-pointer">
             <X className="w-5 h-5" />
           </button>
         </div>
+
         <div className="p-5 space-y-4 overflow-y-auto flex-1">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Amount (₱) <span className="text-red-500">*</span></label>
-            <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">₱</span>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Date <span className="text-red-500">*</span></label>
               <input
-                type="number"
-                placeholder="0.00"
-                className="w-full pl-8 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#001A4D]/20 focus:border-[#001A4D]"
-                value={form.amount}
-                onChange={(e) => setForm({ ...form, amount: e.target.value })}
+                type="date"
+                value={form.date}
+                onChange={(e) => setForm({ ...form, date: e.target.value })}
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
               />
             </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Amount (₱) <span className="text-red-500">*</span></label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">₱</span>
+                <input
+                  type="number"
+                  placeholder="0.00"
+                  className="w-full pl-8 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
+                  value={form.amount}
+                  onChange={(e) => setForm({ ...form, amount: e.target.value })}
+                />
+              </div>
+            </div>
           </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">Description <span className="text-red-500">*</span></label>
             <input
               type="text"
-              placeholder="e.g. Purchased supplies for event"
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#001A4D]/20 focus:border-[#001A4D]"
-              value={form.notes}
-              onChange={(e) => setForm({ ...form, notes: e.target.value })}
+              placeholder="e.g. Purchased supplies for workshop"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
+              value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
             />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Related Event (optional)</label>
+            <select
+              value={form.eventId}
+              onChange={(e) => setForm({ ...form, eventId: e.target.value })}
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
+            >
+              <option value="">— No specific event —</option>
+              {orgEvents.map((evt) => (
+                <option key={evt.id} value={evt.id}>{evt.title}</option>
+              ))}
+            </select>
           </div>
 
           {/* ── Proof of Expense / Receipt Photo Upload ── */}
@@ -537,14 +629,25 @@ function AddOrgExpenseModal({
             </p>
           </div>
         </div>
+
         <div className="px-5 py-4 border-t border-gray-200 flex justify-between flex-shrink-0">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 transition-colors cursor-pointer">Cancel</button>
+          <button onClick={onClose} disabled={isSaving} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 transition-colors cursor-pointer disabled:opacity-50">Cancel</button>
           <button
             onClick={handleSave}
-            disabled={loading || isUploading}
-            className="px-5 py-2.5 bg-[#001A4D] hover:bg-[#002D72] text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 cursor-pointer"
+            disabled={isSaving || isUploading}
+            className="px-5 py-2.5 bg-[#001A4D] hover:bg-[#002D72] text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 cursor-pointer flex items-center gap-2"
           >
-            {loading ? "Saving..." : "Record Expense"}
+            {isSaving ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save className="w-4 h-4" />
+                Save Expense
+              </>
+            )}
           </button>
         </div>
       </div>
@@ -586,9 +689,20 @@ function BudgetTrackerTab({
   // Sort chronological (oldest first) to compute running balance accurately
   const chronological = useMemo(() => {
     return [...currentSemTransactions].sort((a, b) => {
-      const aTime = parseTimestampMillis(a.date) || parseTimestampMillis(a.createdAt) || 0;
-      const bTime = parseTimestampMillis(b.date) || parseTimestampMillis(b.createdAt) || 0;
-      return aTime - bTime;
+      const aDate = parseTimestampMillis(a.date);
+      const bDate = parseTimestampMillis(b.date);
+      const aCreated = parseTimestampMillis(a.createdAt);
+      const bCreated = parseTimestampMillis(b.createdAt);
+
+      const aDay = aDate ? new Date(aDate).toDateString() : '';
+      const bDay = bDate ? new Date(bDate).toDateString() : '';
+      if (aDay !== bDay && aDate && bDate) {
+        return aDate - bDate;
+      }
+      if (aCreated && bCreated && aCreated !== bCreated) {
+        return aCreated - bCreated;
+      }
+      return (aDate || aCreated) - (bDate || bCreated);
     });
   }, [currentSemTransactions]);
 
@@ -601,7 +715,27 @@ function BudgetTrackerTab({
       else running -= amt;
       return { ...t, amount: amt, runningBalance: running };
     });
-    return withBalances.reverse(); // Newest first for table view
+
+    // Newest transaction on top
+    return withBalances.sort((a, b) => {
+      const aDate = parseTimestampMillis(a.date);
+      const bDate = parseTimestampMillis(b.date);
+      const aCreated = parseTimestampMillis(a.createdAt);
+      const bCreated = parseTimestampMillis(b.createdAt);
+
+      const aDay = aDate ? new Date(aDate).toDateString() : '';
+      const bDay = bDate ? new Date(bDate).toDateString() : '';
+      if (aDay !== bDay && aDate && bDate) {
+        return bDate - aDate;
+      }
+      if (bCreated && aCreated && bCreated !== aCreated) {
+        return bCreated - aCreated;
+      }
+      if (bDate !== aDate) {
+        return bDate - aDate;
+      }
+      return (bCreated || 0) - (aCreated || 0);
+    });
   }, [chronological]);
 
   const filteredRows = useMemo(() => {
@@ -862,6 +996,7 @@ function BudgetTrackerTab({
       {showAddExpense && (
         <AddOrgExpenseModal
           organizationId={organizationId}
+          organizationName={organizationName}
           officerStudentId={officerStudentId}
           onClose={() => setShowAddExpense(false)}
           onSuccess={() => setShowAddExpense(false)}

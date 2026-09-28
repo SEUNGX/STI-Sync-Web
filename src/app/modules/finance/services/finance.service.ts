@@ -14,11 +14,24 @@ export const SAO_LEDGER_COLLECTION = 'sao_ledger';
 export const ORG_LEDGER_COLLECTION = 'organization_ledger';
 
 /**
+ * Helper to strip undefined values so Firestore addDoc never throws Unsupported field value: undefined
+ */
+function cleanUndefined<T extends Record<string, any>>(obj: T): Record<string, any> {
+  const result: Record<string, any> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
+/**
  * Adds a new transaction to the SAO school budget ledger.
  */
 export async function addLedgerTransaction(data: Omit<SaoLedgerDocument, 'id' | 'createdAt'>): Promise<string> {
   const docRef = await addDoc(collection(db, 'sao_ledger'), {
-    ...data,
+    ...cleanUndefined(data),
     createdAt: serverTimestamp()
   });
   return docRef.id;
@@ -29,7 +42,7 @@ export async function addLedgerTransaction(data: Omit<SaoLedgerDocument, 'id' | 
  */
 export async function addOrgLedgerTransaction(data: Omit<OrgLedgerDocument, 'id' | 'createdAt'>): Promise<string> {
   const docRef = await addDoc(collection(db, 'organization_ledger'), {
-    ...data,
+    ...cleanUndefined(data),
     createdAt: serverTimestamp()
   });
   return docRef.id;

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 import { db, auth } from '../../../services/firebase';
 
 const SESSION_KEY = 'sti_sync_officer_session';
@@ -185,27 +185,13 @@ export function useOfficerAuth() {
           const errCode = authErr?.code;
           console.warn('[useOfficerAuth] Firebase Auth attempt error:', errCode, authErr?.message);
 
-          if (errCode === 'auth/user-not-found' || errCode === 'auth/invalid-credential') {
-            // If user does not exist in Firebase Auth yet, but matches temporaryPassword in Firestore,
-            // provision their real Firebase Auth user account now!
-            if (matchedDoc.temporaryPassword && matchedDoc.temporaryPassword === trimmedPass) {
-              try {
-                await createUserWithEmailAndPassword(auth, targetEmail, trimmedPass);
-                authenticated = true;
-              } catch (createErr: any) {
-                if (createErr?.code === 'auth/email-already-in-use') {
-                  setError('Incorrect password. Please enter your valid account password.');
-                  return false;
-                }
-                console.warn('[useOfficerAuth] On-the-fly Auth user creation error:', createErr);
-                authenticated = true;
-              }
-            } else {
-              setError('Incorrect password. Please enter your valid account password.');
-              return false;
-            }
-          } else if (errCode === 'auth/wrong-password') {
-            setError('Incorrect password. Please enter your valid account password.');
+          if (matchedDoc.temporaryPassword && matchedDoc.temporaryPassword === trimmedPass) {
+            authenticated = true;
+          } else if (errCode === 'auth/wrong-password' || errCode === 'auth/invalid-credential') {
+            setError('Incorrect password. Please enter your valid STI Sync account password.');
+            return false;
+          } else if (errCode === 'auth/user-not-found') {
+            setError('No registered Firebase user found for this email address.');
             return false;
           } else {
             setError(authErr?.message || 'Authentication failed. Please try again.');

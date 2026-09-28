@@ -1,23 +1,15 @@
-import { Search, AlertTriangle, X } from "lucide-react";
+import { Search } from "lucide-react";
 import { useState, useEffect } from 'react';
 import SettingsNavigation from '../components/settings/SettingsNavigation';
 import AdviserProfile from '../components/settings/AdviserProfile';
 import SecurityPassword from '../components/settings/SecurityPassword';
-import LoginActivity from '../components/settings/LoginActivity';
 import AcademicCalendar from '../components/settings/AcademicCalendar';
 import CourseDepartment from '../components/settings/CourseDepartment';
 import OrganizationSettings from '../components/settings/OrganizationSettings';
-import RolesPermissions from '../components/settings/RolesPermissions';
 import OfficerManagement from '../components/settings/OfficerManagement';
 import EventConfiguration from '../components/settings/EventConfiguration';
-import AttendanceQRSettings from '../components/settings/AttendanceQRSettings';
-import CertificateSettings from '../components/settings/CertificateSettings';
-import LiquidationSettings from '../components/settings/LiquidationSettings';
-import FinePenaltyRules from '../components/settings/FinePenaltyRules';
 import PayableCategorySettings from '../components/settings/PayableCategorySettings';
 import DocumentManagementSettings from '../components/settings/DocumentManagementSettings';
-import DataManagement from '../components/settings/DataManagement';
-import AuditVisibility from '../components/settings/AuditVisibility';
 import ArchiveCenter from '../components/settings/ArchiveCenter';
 import { useSearchParams } from 'react-router';
 
@@ -26,7 +18,6 @@ export function SystemSettings() {
   const initialSection = searchParams.get('section') || 'adviser-profile';
   const [activeSection, setActiveSection] = useState(initialSection);
   const [searchQuery, setSearchQuery] = useState('');
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   useEffect(() => {
     const sec = searchParams.get('section');
@@ -36,15 +27,10 @@ export function SystemSettings() {
   }, [searchParams]);
 
   const handleUnsavedChange = () => {
-    setHasUnsavedChanges(true);
+    // No-op: unsaved changes indicator removed per user request
   };
 
   const handleSectionChange = (section: string) => {
-    if (hasUnsavedChanges) {
-      const confirmed = confirm('You have unsaved changes. Are you sure you want to leave this section?');
-      if (!confirmed) return;
-      setHasUnsavedChanges(false);
-    }
     setActiveSection(section);
     setSearchParams({ section });
   };
@@ -55,8 +41,6 @@ export function SystemSettings() {
         return <AdviserProfile onUnsavedChange={handleUnsavedChange} />;
       case 'security-password':
         return <SecurityPassword onUnsavedChange={handleUnsavedChange} />;
-      case 'login-activity':
-        return <LoginActivity onUnsavedChange={handleUnsavedChange} />;
       case 'academic-calendar':
         return <AcademicCalendar onUnsavedChange={handleUnsavedChange} />;
       case 'course-department':
@@ -64,27 +48,15 @@ export function SystemSettings() {
       case 'organization-settings':
         return <OrganizationSettings onUnsavedChange={handleUnsavedChange} />;
       case 'roles-permissions':
-        return <RolesPermissions onUnsavedChange={handleUnsavedChange} />;
+        return <OrganizationSettings onUnsavedChange={handleUnsavedChange} initialSubTab="roles" />;
       case 'officer-management':
         return <OfficerManagement onUnsavedChange={handleUnsavedChange} />;
       case 'event-configuration':
         return <EventConfiguration onUnsavedChange={handleUnsavedChange} />;
-      case 'attendance-qr':
-        return <AttendanceQRSettings onUnsavedChange={handleUnsavedChange} />;
-      case 'certificate-settings':
-        return <CertificateSettings onUnsavedChange={handleUnsavedChange} />;
       case 'payable-categories':
         return <PayableCategorySettings onUnsavedChange={handleUnsavedChange} />;
-      case 'liquidation-settings':
-        return <LiquidationSettings onUnsavedChange={handleUnsavedChange} />;
-      case 'fine-penalty':
-        return <FinePenaltyRules onUnsavedChange={handleUnsavedChange} />;
       case 'document-management':
         return <DocumentManagementSettings />;
-      case 'data-management':
-        return <DataManagement onUnsavedChange={handleUnsavedChange} />;
-      case 'audit-visibility':
-        return <AuditVisibility onUnsavedChange={handleUnsavedChange} />;
       case 'archive-center':
         return <ArchiveCenter onUnsavedChange={handleUnsavedChange} />;
       default:
@@ -116,29 +88,13 @@ export function SystemSettings() {
             activeSection={activeSection}
             onSectionChange={handleSectionChange}
             searchQuery={searchQuery}
-            hasUnsavedChanges={hasUnsavedChanges}
+            hasUnsavedChanges={false}
           />
         </div>
       </div>
 
       {/* Right Content Area */}
       <div className="flex-1 bg-white border border-[#E0E0E0] rounded-xl overflow-hidden">
-        {/* Unsaved Changes Banner */}
-        {hasUnsavedChanges && (
-          <div className="bg-amber-50 border-b border-amber-200 px-6 py-3 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <AlertTriangle className="w-5 h-5 text-amber-600" />
-              <span className="text-sm font-medium text-amber-900">You have unsaved changes</span>
-            </div>
-            <button
-              onClick={() => setHasUnsavedChanges(false)}
-              className="text-amber-600 hover:text-amber-800"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-        )}
-
         {/* Content */}
         <div className="overflow-y-auto h-full p-8">
           {renderSection()}

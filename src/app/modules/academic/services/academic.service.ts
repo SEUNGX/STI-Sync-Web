@@ -1,4 +1,4 @@
-import { doc, collection, setDoc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
+import { doc, collection, setDoc, updateDoc, deleteDoc, Timestamp, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../../../services/firebase';
 import type {
   DepartmentDocument,
@@ -20,10 +20,34 @@ export const SEMESTERS_COLLECTION   = 'semesters';
 // ─── DEPARTMENTS ─────────────────────────────────────────────────────────────
 
 export async function createDepartment(data: Pick<DepartmentDocument, 'name' | 'code'> & { academicLevel?: AcademicLevel }): Promise<void> {
+  const cleanCode = data.code.trim().toUpperCase();
+  const cleanName = data.name.trim();
+
+  // Check for existing active department with same code or name
+  const snap = await getDocs(query(collection(db, DEPARTMENTS_COLLECTION), where('archived', '==', false)));
+  const duplicate = snap.docs.find(d => {
+    const dData = d.data();
+    return (
+      (dData.code && dData.code.trim().toUpperCase() === cleanCode) ||
+      (dData.name && dData.name.trim().toLowerCase() === cleanName.toLowerCase())
+    );
+  });
+
+  if (duplicate) {
+    const dData = duplicate.data();
+    if (dData.code && dData.code.trim().toUpperCase() === cleanCode) {
+      throw new Error(`A department with code "${cleanCode}" already exists.`);
+    } else {
+      throw new Error(`A department named "${cleanName}" already exists.`);
+    }
+  }
+
   const newRef = doc(collection(db, DEPARTMENTS_COLLECTION));
   await setDoc(newRef, {
     id: newRef.id,
     ...data,
+    code: cleanCode,
+    name: cleanName,
     academicLevel: data.academicLevel || 'COLLEGE',
     archived: false,
     createdAt: Timestamp.now(),
@@ -32,9 +56,35 @@ export async function createDepartment(data: Pick<DepartmentDocument, 'name' | '
 }
 
 export async function updateDepartment(id: string, data: Partial<Pick<DepartmentDocument, 'name' | 'code' | 'academicLevel' | 'archived'>>): Promise<void> {
+  const cleanCode = data.code ? data.code.trim().toUpperCase() : undefined;
+  const cleanName = data.name ? data.name.trim() : undefined;
+
+  if (cleanCode || cleanName) {
+    const snap = await getDocs(query(collection(db, DEPARTMENTS_COLLECTION), where('archived', '==', false)));
+    const duplicate = snap.docs.find(d => {
+      if (d.id === id) return false;
+      const dData = d.data();
+      return (
+        (cleanCode && dData.code && dData.code.trim().toUpperCase() === cleanCode) ||
+        (cleanName && dData.name && dData.name.trim().toLowerCase() === cleanName.toLowerCase())
+      );
+    });
+
+    if (duplicate) {
+      const dData = duplicate.data();
+      if (cleanCode && dData.code && dData.code.trim().toUpperCase() === cleanCode) {
+        throw new Error(`A department with code "${cleanCode}" already exists.`);
+      } else {
+        throw new Error(`A department named "${cleanName}" already exists.`);
+      }
+    }
+  }
+
   const ref = doc(db, DEPARTMENTS_COLLECTION, id);
   await updateDoc(ref, {
     ...data,
+    ...(cleanCode ? { code: cleanCode } : {}),
+    ...(cleanName ? { name: cleanName } : {}),
     updatedAt: Timestamp.now(),
   });
 }
@@ -47,10 +97,34 @@ export async function deleteDepartment(id: string): Promise<void> {
 // ─── COURSES ─────────────────────────────────────────────────────────────────
 
 export async function createCourse(data: Pick<CourseDocument, 'name' | 'code' | 'departmentId' | 'yearLevels'> & { academicLevel?: AcademicLevel }): Promise<void> {
+  const cleanCode = data.code.trim().toUpperCase();
+  const cleanName = data.name.trim();
+
+  // Check for existing active course with same code or name
+  const snap = await getDocs(query(collection(db, COURSES_COLLECTION), where('archived', '==', false)));
+  const duplicate = snap.docs.find(d => {
+    const dData = d.data();
+    return (
+      (dData.code && dData.code.trim().toUpperCase() === cleanCode) ||
+      (dData.name && dData.name.trim().toLowerCase() === cleanName.toLowerCase())
+    );
+  });
+
+  if (duplicate) {
+    const dData = duplicate.data();
+    if (dData.code && dData.code.trim().toUpperCase() === cleanCode) {
+      throw new Error(`A program / strand with code "${cleanCode}" already exists.`);
+    } else {
+      throw new Error(`A program / strand named "${cleanName}" already exists.`);
+    }
+  }
+
   const newRef = doc(collection(db, COURSES_COLLECTION));
   await setDoc(newRef, {
     id: newRef.id,
     ...data,
+    code: cleanCode,
+    name: cleanName,
     academicLevel: data.academicLevel || 'COLLEGE',
     archived: false,
     createdAt: Timestamp.now(),
@@ -59,9 +133,35 @@ export async function createCourse(data: Pick<CourseDocument, 'name' | 'code' | 
 }
 
 export async function updateCourse(id: string, data: Partial<Pick<CourseDocument, 'name' | 'code' | 'departmentId' | 'yearLevels' | 'academicLevel' | 'archived'>>): Promise<void> {
+  const cleanCode = data.code ? data.code.trim().toUpperCase() : undefined;
+  const cleanName = data.name ? data.name.trim() : undefined;
+
+  if (cleanCode || cleanName) {
+    const snap = await getDocs(query(collection(db, COURSES_COLLECTION), where('archived', '==', false)));
+    const duplicate = snap.docs.find(d => {
+      if (d.id === id) return false;
+      const dData = d.data();
+      return (
+        (cleanCode && dData.code && dData.code.trim().toUpperCase() === cleanCode) ||
+        (cleanName && dData.name && dData.name.trim().toLowerCase() === cleanName.toLowerCase())
+      );
+    });
+
+    if (duplicate) {
+      const dData = duplicate.data();
+      if (cleanCode && dData.code && dData.code.trim().toUpperCase() === cleanCode) {
+        throw new Error(`A program / strand with code "${cleanCode}" already exists.`);
+      } else {
+        throw new Error(`A program / strand named "${cleanName}" already exists.`);
+      }
+    }
+  }
+
   const ref = doc(db, COURSES_COLLECTION, id);
   await updateDoc(ref, {
     ...data,
+    ...(cleanCode ? { code: cleanCode } : {}),
+    ...(cleanName ? { name: cleanName } : {}),
     updatedAt: Timestamp.now(),
   });
 }
@@ -74,10 +174,32 @@ export async function deleteCourse(id: string): Promise<void> {
 // ─── SECTIONS ────────────────────────────────────────────────────────────────
 
 export async function createSection(data: Pick<SectionDocument, 'name' | 'courseId' | 'departmentId' | 'yearLevel'>): Promise<void> {
+  const cleanName = data.name.trim().toUpperCase();
+
+  // Check for existing active section with same name under same course and year level
+  const snap = await getDocs(
+    query(
+      collection(db, SECTIONS_COLLECTION),
+      where('courseId', '==', data.courseId),
+      where('yearLevel', '==', data.yearLevel),
+      where('archived', '==', false)
+    )
+  );
+
+  const duplicate = snap.docs.find(d => {
+    const dData = d.data();
+    return dData.name && dData.name.trim().toUpperCase() === cleanName;
+  });
+
+  if (duplicate) {
+    throw new Error(`Section "${cleanName}" already exists for this program and year level.`);
+  }
+
   const newRef = doc(collection(db, SECTIONS_COLLECTION));
   await setDoc(newRef, {
     id: newRef.id,
     ...data,
+    name: cleanName,
     archived: false,
     createdAt: Timestamp.now(),
     updatedAt: Timestamp.now(),
@@ -85,9 +207,33 @@ export async function createSection(data: Pick<SectionDocument, 'name' | 'course
 }
 
 export async function updateSection(id: string, data: Partial<Pick<SectionDocument, 'name' | 'courseId' | 'departmentId' | 'yearLevel' | 'archived'>>): Promise<void> {
+  const cleanName = data.name ? data.name.trim().toUpperCase() : undefined;
+
+  if (cleanName && data.courseId && data.yearLevel !== undefined) {
+    const snap = await getDocs(
+      query(
+        collection(db, SECTIONS_COLLECTION),
+        where('courseId', '==', data.courseId),
+        where('yearLevel', '==', data.yearLevel),
+        where('archived', '==', false)
+      )
+    );
+
+    const duplicate = snap.docs.find(d => {
+      if (d.id === id) return false;
+      const dData = d.data();
+      return dData.name && dData.name.trim().toUpperCase() === cleanName;
+    });
+
+    if (duplicate) {
+      throw new Error(`Section "${cleanName}" already exists for this program and year level.`);
+    }
+  }
+
   const ref = doc(db, SECTIONS_COLLECTION, id);
   await updateDoc(ref, {
     ...data,
+    ...(cleanName ? { name: cleanName } : {}),
     updatedAt: Timestamp.now(),
   });
 }

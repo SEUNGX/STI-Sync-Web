@@ -1,8 +1,7 @@
 import {
-  UserCircle, Lock, Activity, Calendar, Book,
-  Building, Shield, Users, CalendarDays, QrCode, Award,
-  Receipt, AlertTriangle, Coins,
-  Database, Eye, Files, Archive,
+  UserCircle, Lock, Calendar, Book,
+  Building, Users, CalendarDays,
+  Coins, Files, Archive,
 } from 'lucide-react';
 
 interface SettingsNavigationProps {
@@ -18,7 +17,6 @@ const navItems = [
     items: [
       { id: 'adviser-profile', icon: UserCircle, label: 'Adviser Profile' },
       { id: 'security-password', icon: Lock, label: 'Security & Password' },
-      { id: 'login-activity', icon: Activity, label: 'Login Activity' },
     ]
   },
   {
@@ -32,7 +30,6 @@ const navItems = [
     group: 'ORGANIZATIONS',
     items: [
       { id: 'organization-settings', icon: Building, label: 'Organization Settings' },
-      { id: 'roles-permissions', icon: Shield, label: 'Roles & Permissions' },
       { id: 'officer-management', icon: Users, label: 'Officer Management' },
     ]
   },
@@ -40,16 +37,12 @@ const navItems = [
     group: 'EVENTS',
     items: [
       { id: 'event-configuration', icon: CalendarDays, label: 'Event Configuration' },
-      { id: 'attendance-qr', icon: QrCode, label: 'Attendance & QR Settings' },
-      { id: 'certificate-settings', icon: Award, label: 'Certificate Settings' },
     ]
   },
   {
     group: 'FINANCE',
     items: [
       { id: 'payable-categories', icon: Coins, label: 'Fee & Fine Categories' },
-      { id: 'liquidation-settings', icon: Receipt, label: 'Liquidation Settings' },
-      { id: 'fine-penalty', icon: AlertTriangle, label: 'Fine & Penalty Rules' },
     ]
   },
   {
@@ -61,8 +54,6 @@ const navItems = [
   {
     group: 'SYSTEM',
     items: [
-      { id: 'data-management', icon: Database, label: 'Data Management' },
-      { id: 'audit-visibility', icon: Eye, label: 'Audit & Visibility' },
       { id: 'archive-center', icon: Archive, label: 'Archive & Trash Center' },
     ]
   },
@@ -115,11 +106,6 @@ export default function SettingsNavigation({
                       'bg-red-100 text-red-700'
                     }`}>
                       {item.badge}
-                    </span>
-                  )}
-                  {hasUnsavedChanges && isActive && (
-                    <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded">
-                      Unsaved
                     </span>
                   )}
                 </button>

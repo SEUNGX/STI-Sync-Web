@@ -529,6 +529,7 @@ export default function FinancialLiquidation() {
           userName={userName}
           userRole="officer"
           editingReport={editingReport}
+          existingLiquidations={liquidations}
         />
       )}
 

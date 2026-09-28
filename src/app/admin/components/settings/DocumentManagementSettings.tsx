@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Tag, Plus, Trash2, GripVertical, Edit2, Check, X,
+  Tag, Plus, Trash2, Edit2, Check, X,
   AlertCircle, Hash, Archive, Save, Loader2,
 } from 'lucide-react';
 
@@ -88,8 +88,6 @@ function CategoryRow({
 
   return (
     <div className={`flex items-center gap-3 p-3 border rounded-xl transition-colors ${cat.active ? 'border-gray-200 bg-white' : 'border-gray-100 bg-gray-50 opacity-60'}`}>
-      <GripVertical className="w-4 h-4 text-gray-300 cursor-grab flex-shrink-0" />
-
       {/* Color dot / picker trigger */}
       <div className="relative flex-shrink-0">
         <button
@@ -357,7 +355,6 @@ export default function DocumentManagementSettings() {
 
         {/* Column headers */}
         <div className="flex items-center gap-3 px-3 mb-2 text-xs font-bold text-gray-400 uppercase tracking-wide">
-          <div className="w-4 flex-shrink-0" />
           <div className="w-4 flex-shrink-0" />
           <div className="flex-1">Category Name</div>
           <div className="flex items-center gap-4 flex-shrink-0 mr-14">

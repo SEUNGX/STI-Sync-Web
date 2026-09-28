@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Plus, Archive, RotateCcw, Trash2, Edit2, X, AlertTriangle } from 'lucide-react';
+import { toast } from 'sonner';
 import { useEventTypesStream, useEventCategoriesStream, useVenuesStream, useEventConfigMutations, EventTypeDocument, EventCategoryDocument, VenueDocument } from '@/app/modules/events';
 
 interface EventConfigurationProps {
@@ -92,19 +93,130 @@ export default function EventConfiguration({ onUnsavedChange }: EventConfigurati
   };
 
   const saveType = async () => {
-    if (modal.type === 'add-type') await mutations.createEventType({ ...typeForm, archived: false });
-    else if (modal.type === 'edit-type') await mutations.updateEventType(modal.item.id, typeForm);
-    close();
+    const cleanName = typeForm.name.trim();
+    if (!cleanName) {
+      toast.error('Event type name is required.');
+      return;
+    }
+
+    // Check duplicate among active event types
+    const currentId = modal.type === 'edit-type' ? modal.item.id : null;
+    const duplicate = activeTypes.find(
+      (t) => t.id !== currentId && t.name.trim().toLowerCase() === cleanName.toLowerCase()
+    );
+    if (duplicate) {
+      toast.error(`An event type named "${cleanName}" already exists.`);
+      return;
+    }
+
+    try {
+      if (modal.type === 'add-type') {
+        const res = await mutations.createEventType({ ...typeForm, name: cleanName, archived: false });
+        if (res === null && mutations.error) {
+          toast.error(mutations.error.message || 'Failed to create event type.');
+          return;
+        }
+        toast.success(`Event type "${cleanName}" created successfully.`);
+      } else if (modal.type === 'edit-type') {
+        const res = await mutations.updateEventType(modal.item.id, { ...typeForm, name: cleanName });
+        if (res === null && mutations.error) {
+          toast.error(mutations.error.message || 'Failed to update event type.');
+          return;
+        }
+        toast.success(`Event type "${cleanName}" updated successfully.`);
+      }
+      onUnsavedChange();
+      close();
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to save event type.');
+    }
   };
+
   const saveCat = async () => {
-    if (modal.type === 'add-cat') await mutations.createEventCategory({ ...catForm, archived: false });
-    else if (modal.type === 'edit-cat') await mutations.updateEventCategory(modal.item.id, catForm);
-    close();
+    const cleanName = catForm.name.trim();
+    if (!cleanName) {
+      toast.error('Event category name is required.');
+      return;
+    }
+    if (!catForm.typeId) {
+      toast.error('Please select an event type for this category.');
+      return;
+    }
+
+    // Check duplicate among active categories under the same event type
+    const currentId = modal.type === 'edit-cat' ? modal.item.id : null;
+    const duplicate = activeCats.find(
+      (c) =>
+        c.id !== currentId &&
+        c.typeId === catForm.typeId &&
+        c.name.trim().toLowerCase() === cleanName.toLowerCase()
+    );
+    if (duplicate) {
+      toast.error(`An event category named "${cleanName}" already exists for this event type.`);
+      return;
+    }
+
+    try {
+      if (modal.type === 'add-cat') {
+        const res = await mutations.createEventCategory({ ...catForm, name: cleanName, archived: false });
+        if (res === null && mutations.error) {
+          toast.error(mutations.error.message || 'Failed to create event category.');
+          return;
+        }
+        toast.success(`Event category "${cleanName}" created successfully.`);
+      } else if (modal.type === 'edit-cat') {
+        const res = await mutations.updateEventCategory(modal.item.id, { ...catForm, name: cleanName });
+        if (res === null && mutations.error) {
+          toast.error(mutations.error.message || 'Failed to update event category.');
+          return;
+        }
+        toast.success(`Event category "${cleanName}" updated successfully.`);
+      }
+      onUnsavedChange();
+      close();
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to save event category.');
+    }
   };
+
   const saveVenue = async () => {
-    if (modal.type === 'add-venue') await mutations.createVenue({ ...venueForm, archived: false });
-    else if (modal.type === 'edit-venue') await mutations.updateVenue(modal.item.id, venueForm);
-    close();
+    const cleanName = venueForm.name.trim();
+    if (!cleanName) {
+      toast.error('Venue name is required.');
+      return;
+    }
+
+    // Check duplicate among active venues
+    const currentId = modal.type === 'edit-venue' ? modal.item.id : null;
+    const duplicate = activeVenues.find(
+      (v) => v.id !== currentId && v.name.trim().toLowerCase() === cleanName.toLowerCase()
+    );
+    if (duplicate) {
+      toast.error(`A venue named "${cleanName}" already exists.`);
+      return;
+    }
+
+    try {
+      if (modal.type === 'add-venue') {
+        const res = await mutations.createVenue({ ...venueForm, name: cleanName, archived: false });
+        if (res === null && mutations.error) {
+          toast.error(mutations.error.message || 'Failed to create venue.');
+          return;
+        }
+        toast.success(`Venue "${cleanName}" created successfully.`);
+      } else if (modal.type === 'edit-venue') {
+        const res = await mutations.updateVenue(modal.item.id, { ...venueForm, name: cleanName });
+        if (res === null && mutations.error) {
+          toast.error(mutations.error.message || 'Failed to update venue.');
+          return;
+        }
+        toast.success(`Venue "${cleanName}" updated successfully.`);
+      }
+      onUnsavedChange();
+      close();
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to save venue.');
+    }
   };
 
   const isLoading = loadingTypes || loadingCats || loadingVenues;

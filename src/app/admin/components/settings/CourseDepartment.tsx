@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Plus, Archive, RotateCcw, Trash2, Edit2, X, AlertTriangle } from 'lucide-react';
+import { toast } from 'sonner';
 import {
   useDepartments,
   useCourses,
@@ -181,40 +182,116 @@ export default function CourseDepartment({ onUnsavedChange }: CourseDepartmentPr
   };
 
   const handleSaveDept = async () => {
+    const cleanCode = deptForm.code.trim().toUpperCase();
+    const cleanName = deptForm.name.trim();
+
+    if (!cleanCode || !cleanName) {
+      toast.error('Department name and code are required.');
+      return;
+    }
+
+    // Check duplicate among active departments
+    const currentId = modal.type === 'edit-dept' ? modal.item.id : null;
+    const duplicate = activeDepts.find(d => 
+      d.id !== currentId && (
+        d.code.trim().toUpperCase() === cleanCode ||
+        d.name.trim().toLowerCase() === cleanName.toLowerCase()
+      )
+    );
+
+    if (duplicate) {
+      if (duplicate.code.trim().toUpperCase() === cleanCode) {
+        toast.error(`A department with code "${cleanCode}" already exists.`);
+      } else {
+        toast.error(`A department named "${cleanName}" already exists.`);
+      }
+      return;
+    }
+
     setIsSaving(true);
     try {
       if (modal.type === 'add-dept') {
-        await createDepartment({ name: deptForm.name, code: deptForm.code, academicLevel: deptForm.academicLevel });
+        await createDepartment({ name: cleanName, code: cleanCode, academicLevel: deptForm.academicLevel });
+        toast.success(`Department "${cleanCode}" created successfully.`);
       } else if (modal.type === 'edit-dept') {
-        await updateDepartment(modal.item.id, { name: deptForm.name, code: deptForm.code, academicLevel: deptForm.academicLevel });
+        await updateDepartment(modal.item.id, { name: cleanName, code: cleanCode, academicLevel: deptForm.academicLevel });
+        toast.success(`Department "${cleanCode}" updated successfully.`);
       }
       change(); close();
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      alert('Failed to save department.');
+      toast.error(e?.message || 'Failed to save department.');
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleSaveCourse = async () => {
+    const cleanCode = courseForm.code.trim().toUpperCase();
+    const cleanName = courseForm.name.trim();
+
+    if (!cleanCode || !cleanName || !courseForm.departmentId) {
+      toast.error('Program name, code, and department are required.');
+      return;
+    }
+
+    // Check duplicate among active courses
+    const currentId = modal.type === 'edit-course' ? modal.item.id : null;
+    const duplicate = activeCourses.find(c => 
+      c.id !== currentId && (
+        c.code.trim().toUpperCase() === cleanCode ||
+        c.name.trim().toLowerCase() === cleanName.toLowerCase()
+      )
+    );
+
+    if (duplicate) {
+      if (duplicate.code.trim().toUpperCase() === cleanCode) {
+        toast.error(`A program / strand with code "${cleanCode}" already exists.`);
+      } else {
+        toast.error(`A program / strand named "${cleanName}" already exists.`);
+      }
+      return;
+    }
+
     setIsSaving(true);
     try {
       if (modal.type === 'add-course') {
-        await createCourse({ ...courseForm });
+        await createCourse({ ...courseForm, code: cleanCode, name: cleanName });
+        toast.success(`Program / strand "${cleanCode}" created successfully.`);
       } else if (modal.type === 'edit-course') {
-        await updateCourse(modal.item.id, { ...courseForm });
+        await updateCourse(modal.item.id, { ...courseForm, code: cleanCode, name: cleanName });
+        toast.success(`Program / strand "${cleanCode}" updated successfully.`);
       }
       change(); close();
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      alert('Failed to save course.');
+      toast.error(e?.message || 'Failed to save course.');
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleSaveSection = async () => {
+    const cleanName = sectionForm.name.trim().toUpperCase();
+
+    if (!cleanName || !sectionForm.courseId) {
+      toast.error('Section name and program / strand are required.');
+      return;
+    }
+
+    const currentId = modal.type === 'edit-section' ? modal.item.id : null;
+    const duplicate = activeSections.find(s => 
+      s.id !== currentId &&
+      s.courseId === sectionForm.courseId &&
+      s.yearLevel === Number(sectionForm.yearLevel) &&
+      s.name.trim().toUpperCase() === cleanName
+    );
+
+    if (duplicate) {
+      toast.error(`Section "${cleanName}" already exists for this program and year level.`);
+      return;
+    }
+
     setIsSaving(true);
     try {
       const course = getCourse(sectionForm.courseId);
@@ -222,23 +299,25 @@ export default function CourseDepartment({ onUnsavedChange }: CourseDepartmentPr
 
       if (modal.type === 'add-section') {
         await createSection({ 
-          name: sectionForm.name, 
+          name: cleanName, 
           courseId: sectionForm.courseId, 
           departmentId: course.departmentId, 
           yearLevel: Number(sectionForm.yearLevel)
         });
+        toast.success(`Section "${cleanName}" created successfully.`);
       } else if (modal.type === 'edit-section') {
         await updateSection(modal.item.id, { 
-          name: sectionForm.name,
+          name: cleanName,
           courseId: sectionForm.courseId,
           departmentId: course.departmentId,
           yearLevel: Number(sectionForm.yearLevel)
         });
+        toast.success(`Section "${cleanName}" updated successfully.`);
       }
       change(); close();
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      alert('Failed to save section.');
+      toast.error(e?.message || 'Failed to save section.');
     } finally {
       setIsSaving(false);
     }
@@ -248,10 +327,11 @@ export default function CourseDepartment({ onUnsavedChange }: CourseDepartmentPr
     setIsSaving(true);
     try {
       await actionFn();
+      toast.success('Action completed successfully.');
       change(); close();
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      alert('Operation failed.');
+      toast.error(e?.message || 'Operation failed.');
     } finally {
       setIsSaving(false);
     }

@@ -18,7 +18,8 @@ import {
   Filter,
   Download,
   TrendingUp,
-  TrendingDown
+  TrendingDown,
+  Edit3
 } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { useAllLiquidations } from '../../modules/finance/hooks/useLiquidationStream';
@@ -36,7 +37,7 @@ import { toast } from 'sonner';
 import { TablePagination } from '../../components/common/TablePagination';
 
 const ITEMS_PER_PAGE = 8;
-type TabValue = 'all' | 'pending' | 'approved' | 'returned';
+type TabValue = 'all' | 'pending' | 'approved' | 'returned' | 'draft';
 
 function getLiquidationTimestamp(liq: LiquidationDocument): number {
   if (liq.createdAt) {
@@ -81,6 +82,7 @@ export function FinancialLiquidations() {
 
   const [activeTab, setActiveTab] = useState<TabValue>('all');
   const [selectedReport, setSelectedReport] = useState<LiquidationDocument | null>(null);
+  const [editingReport, setEditingReport] = useState<LiquidationDocument | null>(null);
   const [exportReport, setExportReport] = useState<LiquidationDocument | null>(null);
   const [reviewRemarks, setReviewRemarks] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -91,6 +93,12 @@ export function FinancialLiquidations() {
   const [currentPage, setCurrentPage] = useState(1);
   const [showFilters, setShowFilters] = useState(false);
   const [filterOrg, setFilterOrg] = useState('all');
+
+  const handleOpenEditDraft = (report: LiquidationDocument) => {
+    setSelectedReport(null);
+    setEditingReport(report);
+    setShowAdminCreateModal(true);
+  };
 
   useEffect(() => {
     if (targetId && liquidations.length > 0) {
@@ -103,7 +111,7 @@ export function FinancialLiquidations() {
 
   useEffect(() => {
     const tabParam = searchParams.get('tab');
-    if (tabParam && ['all', 'pending', 'approved', 'returned'].includes(tabParam)) {
+    if (tabParam && ['all', 'pending', 'approved', 'returned', 'draft'].includes(tabParam)) {
       setActiveTab(tabParam as TabValue);
       setCurrentPage(1);
     }
@@ -143,6 +151,7 @@ export function FinancialLiquidations() {
   const pendingItems = useMemo(() => liquidations.filter((l) => l.status === 'pending'), [liquidations]);
   const approvedItems = useMemo(() => liquidations.filter((l) => l.status === 'approved'), [liquidations]);
   const returnedItems = useMemo(() => liquidations.filter((l) => l.status === 'returned'), [liquidations]);
+  const draftItems = useMemo(() => liquidations.filter((l) => l.status === 'draft'), [liquidations]);
 
   const pendingAmount = useMemo(() => {
     return pendingItems.reduce((sum, item) => sum + (item.totalActualSpending || item.allocatedBudget || 0), 0);
@@ -155,6 +164,7 @@ export function FinancialLiquidations() {
   const pendingCount = pendingItems.length;
   const approvedCount = approvedItems.length;
   const returnedCount = returnedItems.length;
+  const draftCount = draftItems.length;
   const allCount = liquidations.length;
 
   // Pagination
@@ -371,6 +381,7 @@ export function FinancialLiquidations() {
               { key: 'pending', label: 'Pending', count: pendingCount },
               { key: 'approved', label: 'Approved', count: approvedCount },
               { key: 'returned', label: 'Returned', count: returnedCount },
+              { key: 'draft', label: 'Drafts', count: draftCount },
             ].map((tab) => {
               const isActive = activeTab === tab.key;
               return (
@@ -601,6 +612,17 @@ export function FinancialLiquidations() {
                       {/* Inline Actions */}
                       <td className="py-3.5 px-4 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-1.5">
+                          {liq.status === 'draft' && (
+                            <button
+                              onClick={() => handleOpenEditDraft(liq)}
+                              className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-[#001A4D] border border-blue-200 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer"
+                              title="Edit Draft Liquidation"
+                            >
+                              <Edit3 className="w-3 h-3" />
+                              <span>Edit</span>
+                            </button>
+                          )}
+
                           {isPending && (
                             <>
                               <button
@@ -883,8 +905,8 @@ export function FinancialLiquidations() {
                 </div>
               )}
 
-              {/* SAO Adviser Remarks */}
-              {selectedReport.status !== 'approved' && (
+              {/* SAO Adviser Remarks - Only for pending submissions under review */}
+              {selectedReport.status === 'pending' && (
                 <div>
                   <label className="block text-sm font-bold text-[#001A4D] mb-1.5">
                     SAO Adviser Remarks / Revision Notes
@@ -910,7 +932,8 @@ export function FinancialLiquidations() {
                 Close
               </Button>
 
-              {selectedReport.status === 'approved' ? (
+              {/* Status Specific Footer Actions */}
+              {selectedReport.status === 'approved' && (
                 <div className="flex items-center gap-3">
                   <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
                     <CheckCircle2 className="w-4 h-4" /> Approved by SAO Adviser
@@ -923,7 +946,9 @@ export function FinancialLiquidations() {
                     Export Liquidation Report
                   </Button>
                 </div>
-              ) : (
+              )}
+
+              {selectedReport.status === 'pending' && (
                 <div className="flex items-center gap-3">
                   <Button
                     onClick={handleReturn}
@@ -944,21 +969,49 @@ export function FinancialLiquidations() {
                   </Button>
                 </div>
               )}
+
+              {selectedReport.status === 'draft' && (
+                <div className="flex items-center gap-3">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-gray-100 text-gray-700 border border-gray-200">
+                    <Clock className="w-3.5 h-3.5 text-gray-500" /> Draft Report (Unsubmitted)
+                  </span>
+                  <Button
+                    onClick={() => handleOpenEditDraft(selectedReport)}
+                    className="bg-[#001A4D] hover:bg-[#002D72] text-white font-bold text-xs cursor-pointer shadow-xs flex items-center gap-1.5"
+                  >
+                    <Edit3 className="w-3.5 h-3.5 text-[#FFD41C]" />
+                    Edit Draft
+                  </Button>
+                </div>
+              )}
+
+              {selectedReport.status === 'returned' && (
+                <div className="flex items-center gap-3">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                    <RotateCcw className="w-3.5 h-3.5 text-amber-700" /> Awaiting Officer Resubmission
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         </div>
       )}
 
-      {/* SAO Admin Create Liquidation Modal */}
+      {/* SAO Admin Create / Edit Liquidation Modal */}
       {showAdminCreateModal && (
         <OfficerLiquidationModal
           isOpen={showAdminCreateModal}
-          onClose={() => setShowAdminCreateModal(false)}
-          orgId="sao_admin"
-          orgName="Student Affairs Office"
+          onClose={() => {
+            setShowAdminCreateModal(false);
+            setEditingReport(null);
+          }}
+          orgId={editingReport?.organizationId || "sao_admin"}
+          orgName={editingReport?.organizationName || "Student Affairs Office"}
           userUid="sao_admin_user"
           userName="SAO Adviser"
           userRole="admin"
+          editingReport={editingReport}
+          existingLiquidations={liquidations}
         />
       )}
 
