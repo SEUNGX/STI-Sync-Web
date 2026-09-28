@@ -1,5 +1,6 @@
+import { useMemo } from 'react';
 import { Link } from 'react-router';
-import { Calendar, Receipt, Users, BarChart3, MapPin, Clock, CheckCircle, Eye, AlertCircle, ArrowRight } from 'lucide-react';
+import { Calendar, Receipt, Users, MapPin, Clock, CheckCircle, ArrowRight } from 'lucide-react';
 import { useOfficerProfile } from '../../auth/hooks/useOfficerProfile';
 import { useOrganizationStream } from '../../modules/organizations/hooks/useOrganizationStream';
 import { useOrgEvents } from '../../modules/events/hooks/useEventStream';
@@ -7,24 +8,61 @@ import { useOrgLiquidations } from '../../modules/finance/hooks/useLiquidationSt
 import { useOrgMembers } from '../../modules/organizations/hooks/useOrgMembers';
 import { useOrgOfficers } from '../../modules/organizations/hooks/useOrgOfficers';
 import { useRoles } from '../../modules/roles/hooks/useRoles';
-import { useAttendanceStream } from '../../modules/attendance/hooks/useAttendanceStream';
+import { useStudents } from '../../modules/students/hooks/useStudentStream';
+import { useActiveAcademicPeriods } from '../../modules/academic/hooks/useAcademicStream';
 import { formatAppDate, format12HourTime } from '../../utils/date';
+
+const getTimestampMs = (val: any): number => {
+  if (!val) return 0;
+  if (typeof val?.toDate === 'function') return val.toDate().getTime();
+  if (typeof val?.seconds === 'number') return val.seconds * 1000;
+  if (typeof val === 'string' || typeof val === 'number') {
+    const parsed = new Date(val).getTime();
+    return isNaN(parsed) ? 0 : parsed;
+  }
+  return 0;
+};
 
 export default function OfficerDashboardPage() {
   const { profile } = useOfficerProfile();
   const { data: orgs } = useOrganizationStream();
   const { data: roles = [] } = useRoles();
+  const { data: students = [], loading: studentsLoading } = useStudents();
+  const { activeCollegePeriod, activeShsPeriod, isStudentPendingReEnrollment } = useActiveAcademicPeriods();
 
   const activeOrgId = profile?.activeOrganizationId || '';
   const activeOrg = orgs.find((o) => o.id === activeOrgId);
-  const activeOrgName = activeOrg ? activeOrg.name : 'My Organization';
   const officerName = profile?.studentName || 'Officer';
 
   const { events, loading: eventsLoading } = useOrgEvents(activeOrgId);
   const { liquidations, loading: liquidationsLoading } = useOrgLiquidations(activeOrgId);
   const { members, loading: membersLoading } = useOrgMembers(activeOrgId);
   const { officers = [] } = useOrgOfficers(activeOrgId);
-  const { attendance, loading: attendanceLoading } = useAttendanceStream();
+
+  // Student lookup map for fast student status and enrollment resolution
+  const studentMap = useMemo(() => {
+    const map = new Map<string, any>();
+    students.forEach((s) => {
+      if (s.studentId) map.set(s.studentId.trim().toLowerCase(), s);
+      if (s.email) map.set(s.email.trim().toLowerCase(), s);
+    });
+    return map;
+  }, [students]);
+
+  // Resolve active enrolled members (excluding inactive, unapproved, or unenrolled students for this term)
+  const activeEnrolledMembersCount = useMemo(() => {
+    return members.filter((m) => {
+      if (m.status !== 'active') return false;
+      const st =
+        studentMap.get((m.studentId || '').trim().toLowerCase()) ||
+        studentMap.get((m.email || '').trim().toLowerCase());
+      if (st) {
+        if (st.status !== 'ACTIVE') return false;
+        if (isStudentPendingReEnrollment(st)) return false;
+      }
+      return true;
+    }).length;
+  }, [members, studentMap, isStudentPendingReEnrollment]);
 
   // Resolve account owner position (e.g., Adviser, President, Vice President, Secretary)
   const positionTitle = (() => {
@@ -84,103 +122,131 @@ export default function OfficerDashboardPage() {
         : `${positionTitle} ${officerName}`)
     : officerName;
 
-  // Metrics calculations
-  const upcomingEventsList = events.filter((e) => e.proposalStatus === 'approved' || e.proposalStatus === 'pending' || e.proposalStatus === 'pending_review');
-  const pendingLiquidationsCount = liquidations.filter((l) => l.status === 'pending' || l.status === 'draft' || l.status === 'returned').length;
+  // Upcoming events sorted FIFO by creation date (oldest created first)
+  const upcomingEventsList = useMemo(() => {
+    const list = events.filter(
+      (e) =>
+        e.proposalStatus === 'approved' ||
+        e.proposalStatus === 'pending' ||
+        e.proposalStatus === 'pending_review'
+    );
+    return list.sort((a, b) => getTimestampMs(a.createdAt) - getTimestampMs(b.createdAt));
+  }, [events]);
 
-  const now = new Date();
-  const currentYear = now.getFullYear();
-  const currentMonth = now.getMonth();
+  const pendingLiquidationsCount = liquidations.filter(
+    (l) => l.status === 'pending' || l.status === 'draft' || l.status === 'returned'
+  ).length;
 
-  const eventsThisMonthCount = events.filter((e) => {
-    if (e.createdAt?.toDate) {
-      const d = e.createdAt.toDate();
-      return d.getFullYear() === currentYear && d.getMonth() === currentMonth;
-    }
-    if (e.sessions && e.sessions[0]?.date) {
-      const d = new Date(e.sessions[0].date);
-      return d.getFullYear() === currentYear && d.getMonth() === currentMonth;
-    }
-    return false;
-  }).length;
+  // Completed events in the current active semester / trimester
+  const completedEventsCurrentSemCount = useMemo(() => {
+    const activePeriodIds = new Set<string>();
+    if (activeCollegePeriod?.id) activePeriodIds.add(activeCollegePeriod.id);
+    if (activeShsPeriod?.id) activePeriodIds.add(activeShsPeriod.id);
 
-  // Real Pending Tasks
-  const pendingTasks: { id: string; task: string; dueDate: string; isDueDays: boolean; link: string }[] = [];
+    const activeYears = new Set<string>();
+    if (activeCollegePeriod?.academicYear) activeYears.add(activeCollegePeriod.academicYear);
+    if (activeShsPeriod?.academicYear) activeYears.add(activeShsPeriod.academicYear);
 
-  // 1. Returned liquidations (Urgent revisions requested by SAO)
-  liquidations.forEach((l) => {
-    if (l.status === 'returned') {
-      pendingTasks.push({
-        id: `liq-${l.id}`,
-        task: `Revise returned liquidation: ${l.eventTitle}`,
-        dueDate: l.returnRemarks ? `Remarks: ${l.returnRemarks.slice(0, 35)}...` : 'Revision requested by SAO Adviser',
-        isDueDays: true,
-        link: '/officer/liquidation',
-      });
-    }
-  });
+    const activeSemNames = new Set<string>();
+    if (activeCollegePeriod?.semester) activeSemNames.add(activeCollegePeriod.semester.toLowerCase());
+    if (activeShsPeriod?.semester) activeSemNames.add(activeShsPeriod.semester.toLowerCase());
 
-  // 2. Returned event proposals (Urgent revisions requested by SAO)
-  events.forEach((e) => {
-    if (e.proposalStatus === 'returned') {
-      pendingTasks.push({
-        id: `evt-${e.id}`,
-        task: `Revise returned event proposal: ${e.title}`,
-        dueDate: e.adviserRemarks ? `Remarks: ${e.adviserRemarks.slice(0, 35)}...` : 'Revision requested by SAO Adviser',
-        isDueDays: true,
-        link: '/officer/events',
-      });
-    }
-  });
+    return events.filter((e) => {
+      const isCompleted =
+        e.proposalStatus === 'completed' ||
+        (e as any).status === 'completed' ||
+        (e as any).status === 'Completed';
+      if (!isCompleted) return false;
 
-  // 3. Pending membership applications (Awaiting officer review & approval)
-  members.forEach((m) => {
-    if (m.status === 'pending') {
-      pendingTasks.push({
-        id: `mem-${m.id}`,
-        task: `Review membership application: ${m.studentName || 'Student'}`,
-        dueDate: m.course
-          ? `${m.course}${m.year ? ` • Year ${m.year}` : ''} (${m.studentId || 'Pending'})`
-          : 'Membership application awaiting approval',
-        isDueDays: false,
-        link: '/officer/members?tab=pending',
-      });
-    }
-  });
+      if (e.semesterId && activePeriodIds.has(e.semesterId)) return true;
+      if (e.schoolYear && activeYears.has(e.schoolYear)) {
+        if ((e as any).semester && activeSemNames.has(String((e as any).semester).toLowerCase())) return true;
+        return true;
+      }
+      if (!e.semesterId && !e.schoolYear) return true;
+      return false;
+    }).length;
+  }, [events, activeCollegePeriod, activeShsPeriod]);
 
-  // 4. Draft liquidations (In progress)
-  liquidations.forEach((l) => {
-    if (l.status === 'draft') {
-      pendingTasks.push({
-        id: `liq-${l.id}`,
-        task: `Complete draft liquidation: ${l.eventTitle}`,
-        dueDate: 'Draft in progress',
-        isDueDays: false,
-        link: '/officer/liquidation',
-      });
-    }
-  });
+  // Real Pending Tasks sorted FIFO by creation date (oldest created first)
+  const pendingTasks = useMemo(() => {
+    const tasks: { id: string; task: string; dueDate: string; isDueDays: boolean; link: string; createdAtTime: number }[] = [];
 
-  // 5. Draft event proposals (In progress)
-  events.forEach((e) => {
-    if (e.proposalStatus === 'draft') {
-      pendingTasks.push({
-        id: `evt-${e.id}`,
-        task: `Submit draft event proposal: ${e.title}`,
-        dueDate: 'Draft in progress',
-        isDueDays: false,
-        link: '/officer/events',
-      });
-    }
-  });
+    // 1. Returned liquidations (Urgent revisions requested by SAO)
+    liquidations.forEach((l) => {
+      if (l.status === 'returned') {
+        tasks.push({
+          id: `liq-${l.id}`,
+          task: `Revise returned liquidation: ${l.eventTitle}`,
+          dueDate: l.returnRemarks ? `Remarks: ${l.returnRemarks.slice(0, 35)}...` : 'Revision requested by SAO Adviser',
+          isDueDays: true,
+          link: '/officer/liquidation',
+          createdAtTime: getTimestampMs(l.createdAt),
+        });
+      }
+    });
 
-  // Recent Attendance Activity filtered for organization events or orgId
-  const orgEventIds = new Set(events.map((e) => e.id));
-  const recentAttendance = attendance.filter((a) => {
-    if (a.org && activeOrgId && a.org.toLowerCase().includes(activeOrgId.toLowerCase())) return true;
-    if (a.eventId && orgEventIds.has(a.eventId)) return true;
-    return true; // Show latest scans across app if org-specific filter has no hits
-  }).slice(0, 5);
+    // 2. Returned event proposals (Urgent revisions requested by SAO)
+    events.forEach((e) => {
+      if (e.proposalStatus === 'returned') {
+        tasks.push({
+          id: `evt-${e.id}`,
+          task: `Revise returned event proposal: ${e.title}`,
+          dueDate: e.adviserRemarks ? `Remarks: ${e.adviserRemarks.slice(0, 35)}...` : 'Revision requested by SAO Adviser',
+          isDueDays: true,
+          link: '/officer/events',
+          createdAtTime: getTimestampMs(e.createdAt),
+        });
+      }
+    });
+
+    // 3. Pending membership applications (Awaiting officer review & approval)
+    members.forEach((m) => {
+      if (m.status === 'pending') {
+        tasks.push({
+          id: `mem-${m.id}`,
+          task: `Review membership application: ${m.studentName || 'Student'}`,
+          dueDate: m.course
+            ? `${m.course}${m.year ? ` • Year ${m.year}` : ''} (${m.studentId || 'Pending'})`
+            : 'Membership application awaiting approval',
+          isDueDays: false,
+          link: '/officer/members?tab=pending',
+          createdAtTime: getTimestampMs(m.applicationDate || m.createdAt || m.dateJoined),
+        });
+      }
+    });
+
+    // 4. Draft liquidations (In progress)
+    liquidations.forEach((l) => {
+      if (l.status === 'draft') {
+        tasks.push({
+          id: `liq-${l.id}`,
+          task: `Complete draft liquidation: ${l.eventTitle}`,
+          dueDate: 'Draft in progress',
+          isDueDays: false,
+          link: '/officer/liquidation',
+          createdAtTime: getTimestampMs(l.createdAt),
+        });
+      }
+    });
+
+    // 5. Draft event proposals (In progress)
+    events.forEach((e) => {
+      if (e.proposalStatus === 'draft') {
+        tasks.push({
+          id: `evt-${e.id}`,
+          task: `Submit draft event proposal: ${e.title}`,
+          dueDate: 'Draft in progress',
+          isDueDays: false,
+          link: '/officer/events',
+          createdAtTime: getTimestampMs(e.createdAt),
+        });
+      }
+    });
+
+    // Sort FIFO: oldest created first
+    return tasks.sort((a, b) => a.createdAtTime - b.createdAtTime);
+  }, [liquidations, events, members]);
 
   const statusColors: Record<string, string> = {
     approved: 'bg-[#639922]',
@@ -207,8 +273,7 @@ export default function OfficerDashboardPage() {
       {/* Welcome Banner */}
       <div className="bg-blue-50/70 border border-blue-200/80 rounded-2xl p-6 flex items-center justify-between shadow-xs">
         <div>
-          <h2 className="text-[#001A4D] text-[20px] font-bold mb-1">Good day, {greetingDisplayName} 👋</h2>
-          <p className="text-gray-600 text-[14px]">Here's what's happening with <span className="font-bold text-[#0E4EBD]">{activeOrgName}</span> today.</p>
+          <h2 className="text-[#001A4D] text-[20px] font-bold">Good day, {greetingDisplayName} 👋</h2>
         </div>
         <div className="w-12 h-12 bg-blue-100/80 rounded-xl flex items-center justify-center border border-blue-200">
           <Calendar className="w-6 h-6 text-[#0E4EBD]" />
@@ -239,28 +304,30 @@ export default function OfficerDashboardPage() {
 
         <div className="bg-white border border-[#E0E0E0] rounded-2xl p-5 shadow-xs">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-gray-500 text-[13px] font-medium">Total Members</span>
-            <Users className="w-5 h-5 text-gray-400" />
+            <span className="text-gray-500 text-[13px] font-medium">Active Members</span>
+            <Users className="w-5 h-5 text-[#0E4EBD]" />
           </div>
           <div className="text-[#001A4D] text-[24px] font-bold">
-            {membersLoading ? '...' : members.length}
+            {membersLoading || studentsLoading ? '...' : activeEnrolledMembersCount}
           </div>
+          <p className="text-[11px] text-gray-400 mt-0.5">Enrolled this term</p>
         </div>
 
         <div className="bg-white border border-[#E0E0E0] rounded-2xl p-5 shadow-xs">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-gray-500 text-[13px] font-medium">Events This Month</span>
-            <BarChart3 className="w-5 h-5 text-[#0E4EBD]" />
+            <span className="text-gray-500 text-[13px] font-medium">Completed Events</span>
+            <CheckCircle className="w-5 h-5 text-emerald-600" />
           </div>
-          <div className="text-[#0E4EBD] text-[24px] font-bold">
-            {eventsLoading ? '...' : eventsThisMonthCount}
+          <div className="text-emerald-700 text-[24px] font-bold">
+            {eventsLoading ? '...' : completedEventsCurrentSemCount}
           </div>
+          <p className="text-[11px] text-gray-400 mt-0.5">In current sem / trimester</p>
         </div>
       </div>
 
       {/* Two-column section */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Upcoming Events */}
+        {/* Upcoming Events (5 rows, FIFO created date) */}
         <div className="lg:col-span-7 bg-white border border-[#E0E0E0] rounded-2xl overflow-hidden shadow-xs flex flex-col justify-between">
           <div>
             <div className="p-5 border-b border-[#E0E0E0] flex items-center justify-between">
@@ -277,7 +344,7 @@ export default function OfficerDashboardPage() {
                   No upcoming events scheduled. Create a proposal in Event Management.
                 </div>
               ) : (
-                upcomingEventsList.slice(0, 4).map((event) => {
+                upcomingEventsList.slice(0, 5).map((event) => {
                   const firstSession = event.sessions && event.sessions[0];
                   const dateStr = firstSession ? formatAppDate(firstSession.date, 'TBD') : 'TBD';
                   const timeStr = firstSession && firstSession.startTime ? `${format12HourTime(firstSession.startTime)}${firstSession.endTime ? ` – ${format12HourTime(firstSession.endTime)}` : ''}` : '';
@@ -310,7 +377,7 @@ export default function OfficerDashboardPage() {
           </div>
         </div>
 
-        {/* Pending Tasks */}
+        {/* Pending Action Items (5 rows, FIFO created date) */}
         <div className="lg:col-span-5 bg-white border border-[#E0E0E0] rounded-2xl overflow-hidden shadow-xs flex flex-col justify-between">
           <div>
             <div className="p-5 border-b border-[#E0E0E0]">
@@ -346,92 +413,6 @@ export default function OfficerDashboardPage() {
               )}
             </div>
           </div>
-        </div>
-      </div>
-
-      {/* Recent Attendance Activity */}
-      <div className="bg-white border border-[#E0E0E0] rounded-2xl overflow-hidden shadow-xs">
-        <div className="p-5 border-b border-[#E0E0E0] flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <h3 className="text-[#001A4D] text-[16px] font-bold">Recent Attendance Activity</h3>
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-[#639922] rounded-full animate-pulse" />
-              <span className="text-[#639922] text-[11px] font-bold">Live Stream</span>
-            </div>
-          </div>
-          <Link to="/officer/attendance" className="text-[#0E4EBD] text-[13px] font-bold hover:underline flex items-center gap-1">
-            View Full Logs <ArrowRight className="w-3.5 h-3.5" />
-          </Link>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-[#F8F8F8] border-b border-[#E0E0E0]">
-              <tr>
-                <th className="px-5 py-3 text-left text-gray-500 text-[12px] font-bold uppercase tracking-wider">Student</th>
-                <th className="px-5 py-3 text-left text-gray-500 text-[12px] font-bold uppercase tracking-wider">Event</th>
-                <th className="px-5 py-3 text-left text-gray-500 text-[12px] font-bold uppercase tracking-wider">Scan Time</th>
-                <th className="px-5 py-3 text-left text-gray-500 text-[12px] font-bold uppercase tracking-wider">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#E0E0E0]">
-              {attendanceLoading ? (
-                <tr>
-                  <td colSpan={4} className="px-5 py-8 text-center text-gray-500 text-sm">
-                    Loading attendance logs from database...
-                  </td>
-                </tr>
-              ) : recentAttendance.length === 0 ? (
-                <tr>
-                  <td colSpan={4} className="px-5 py-8 text-center text-gray-500 text-sm">
-                    No attendance scans recorded yet.
-                  </td>
-                </tr>
-              ) : (
-                recentAttendance.map((scan) => {
-                  const initials = (scan.name || 'Student')
-                    .split(' ')
-                    .map((n) => n[0])
-                    .join('')
-                    .substring(0, 2)
-                    .toUpperCase();
-
-                  const isFlagged = scan.status === 'Flagged';
-
-                  return (
-                    <tr key={scan.id} className="hover:bg-blue-50/40 transition-colors">
-                      <td className="px-5 py-3.5">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 bg-gradient-to-br from-[#001A4D] to-[#0E4EBD] rounded-full flex items-center justify-center text-white font-bold text-xs flex-shrink-0 shadow-xs">
-                            {initials}
-                          </div>
-                          <div>
-                            <p className="text-[#001A4D] text-[13px] font-bold">{scan.name}</p>
-                            <p className="text-gray-400 text-[11px]">{scan.studentId}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-5 py-3.5 text-[#001A4D] text-[13px] font-medium">{scan.event}</td>
-                      <td className="px-5 py-3.5 text-gray-500 text-[13px]">
-                        {scan.checkIn !== '—' ? scan.checkIn : scan.checkOut}
-                      </td>
-                      <td className="px-5 py-3.5">
-                        {isFlagged ? (
-                          <span className="px-2.5 py-1 bg-red-100 text-red-800 rounded-full text-[11px] font-bold flex items-center gap-1 w-fit">
-                            <AlertCircle className="w-3.5 h-3.5" /> Flagged ({scan.flaggedReason || 'Manual Check'})
-                          </span>
-                        ) : (
-                          <span className="px-2.5 py-1 bg-green-100 text-green-800 rounded-full text-[11px] font-bold flex items-center gap-1 w-fit">
-                            <CheckCircle className="w-3.5 h-3.5 text-green-600" /> {scan.status}
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
         </div>
       </div>
     </div>

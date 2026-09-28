@@ -23,6 +23,7 @@ import {
   ArrowDown,
   ShieldAlert,
   Info,
+  Archive,
 } from "lucide-react";
 import { collection, query, onSnapshot } from "firebase/firestore";
 import { db } from "../../../services/firebase";
@@ -77,22 +78,56 @@ function deriveBannerState(semesters: SemesterDocument[]): BannerState {
 function ActiveSemesterBanner({
   state,
   activeSemester,
+  activeTab,
+  completedCount = 0,
   canRollover,
   onRollover,
 }: {
   state: BannerState;
   activeSemester: SemesterDocument | undefined;
+  activeTab: "college" | "shs" | "completed";
+  completedCount?: number;
   canRollover: boolean;
   onRollover: () => void;
 }) {
+  const isShs = activeTab === "shs" || (activeSemester && (activeSemester.academicLevel === "SHS" || String(activeSemester.semester).includes("Trimester")));
+  const termTypeLabel = isShs ? "Trimester" : "Semester";
+
+  if (activeTab === "completed") {
+    return (
+      <div className="w-full p-6 sm:p-7 rounded-3xl bg-gradient-to-br from-[#001A4D] via-[#002B7F] to-[#0A47B8] text-white flex flex-col sm:flex-row sm:items-center justify-between mb-6 shadow-lg shadow-[#001A4D]/15 border border-blue-900/40 gap-4">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-white/10 backdrop-blur-sm flex items-center justify-center">
+            <Archive className="w-6 h-6 text-[#FFD41C]" />
+          </div>
+          <div>
+            <p className="text-white/70 text-xs uppercase tracking-wider mb-0.5 font-bold">Historical Academic Records</p>
+            <p className="text-white font-black text-[24px] sm:text-[28px] leading-tight">
+              Archived &amp; Completed Terms
+            </p>
+            <p className="text-white/80 text-xs sm:text-sm mt-0.5">
+              Browse and inspect past semester and trimester records, student lists, and activity archives.
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="px-4 py-2.5 bg-white/15 rounded-xl text-center min-w-[140px]">
+            <p className="text-[#FFD41C] font-bold text-xl">{completedCount}</p>
+            <p className="text-white/80 text-xs font-semibold">Completed Records</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!activeSemester && state === "active") {
     return (
       <div className="w-full p-6 rounded-2xl bg-gradient-to-r from-gray-500 to-gray-600 flex items-center justify-between mb-6">
         <div className="flex items-center gap-4">
           <School className="w-10 h-10 text-white/50" />
           <div>
-            <p className="text-white/70 text-xs uppercase tracking-wider mb-0.5">No Active Semester</p>
-            <p className="text-white font-bold text-xl">Add a semester and set it as Active to begin.</p>
+            <p className="text-white/70 text-xs uppercase tracking-wider mb-0.5 font-bold">No Active {termTypeLabel}</p>
+            <p className="text-white font-bold text-xl">Add a {termTypeLabel.toLowerCase()} to begin.</p>
           </div>
         </div>
       </div>
@@ -109,7 +144,7 @@ function ActiveSemesterBanner({
             <School className="w-6 h-6 text-[#FFD41C]" />
           </div>
           <div>
-            <p className="text-white/70 text-xs uppercase tracking-wider mb-0.5 font-bold">Currently Active Semester</p>
+            <p className="text-white/70 text-xs uppercase tracking-wider mb-0.5 font-bold">Currently Active {termTypeLabel}</p>
             <p className="text-white font-black text-[26px] sm:text-[28px] leading-tight">
               {activeSemester.semester} · A.Y. {activeSemester.academicYear}
             </p>
@@ -150,17 +185,17 @@ function ActiveSemesterBanner({
         <div className="flex items-center gap-4">
           <AlertTriangle className="w-10 h-10 text-white" />
           <div>
-            <p className="text-white font-bold text-xl">Semester Ending Soon</p>
+            <p className="text-white font-bold text-xl">{termTypeLabel} Ending Soon</p>
             <p className="text-white/90 text-sm">
               End Date: {formatDate(activeSemester.endDate)} · {days} day{days !== 1 ? "s" : ""} remaining
             </p>
-            <p className="text-white/80 text-sm mt-0.5">Prepare for semester rollover.</p>
+            <p className="text-white/80 text-sm mt-0.5">Prepare for {termTypeLabel.toLowerCase()} rollover.</p>
           </div>
         </div>
         <button
           onClick={onRollover}
           disabled={!canRollover}
-          title={!canRollover ? "Rollover locked until semester end date or re-enrollment deadline is reached." : "Run Semester Rollover"}
+          title={!canRollover ? `Rollover locked until ${termTypeLabel.toLowerCase()} end date or re-enrollment deadline is reached.` : `Run ${termTypeLabel} Rollover`}
           className={`px-5 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors ${
             canRollover
               ? "bg-[#001A4D] text-white hover:bg-[#001A4D]/90 cursor-pointer"
@@ -168,7 +203,7 @@ function ActiveSemesterBanner({
           }`}
         >
           <RefreshCw className="w-4 h-4" />
-          Run Semester Rollover
+          Run {termTypeLabel} Rollover
         </button>
       </div>
     );
@@ -180,16 +215,16 @@ function ActiveSemesterBanner({
         <div className="flex items-center gap-4">
           <AlertCircle className="w-10 h-10 text-white" />
           <div>
-            <p className="text-white font-bold text-xl">Semester Has Ended — Rollover Required</p>
+            <p className="text-white font-bold text-xl">{termTypeLabel} Has Ended — Rollover Required</p>
             <p className="text-white/90 text-sm mt-0.5">
-              The current semester end date has passed. Run the semester rollover to begin the new semester.
+              The current {termTypeLabel.toLowerCase()} end date has passed. Run the {termTypeLabel.toLowerCase()} rollover to begin the new {termTypeLabel.toLowerCase()}.
             </p>
           </div>
         </div>
         <button
           onClick={onRollover}
           disabled={!canRollover}
-          title={!canRollover ? "Rollover locked until semester end date or re-enrollment deadline is reached." : "Run Semester Rollover Now"}
+          title={!canRollover ? `Rollover locked until ${termTypeLabel.toLowerCase()} end date or re-enrollment deadline is reached.` : `Run ${termTypeLabel} Rollover Now`}
           className={`px-5 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors ${
             canRollover
               ? "bg-[#FFD41C] text-[#001A4D] hover:bg-[#FFD41C]/90 cursor-pointer"
@@ -197,7 +232,7 @@ function ActiveSemesterBanner({
           }`}
         >
           <RefreshCw className="w-4 h-4" />
-          Run Semester Rollover Now
+          Run {termTypeLabel} Rollover Now
         </button>
       </div>
     );
@@ -268,7 +303,8 @@ interface AddSemesterModalProps {
 function AddSemesterModal({ existingSemesters, defaultAcademicLevel = "COLLEGE", onClose, onSuccess }: AddSemesterModalProps) {
   const aySuggestions = useMemo(() => getAcademicYearSuggestions(), []);
 
-  const [academicLevel, setAcademicLevel] = useState<AcademicLevel>(defaultAcademicLevel);
+  const academicLevel = defaultAcademicLevel;
+  const isShs = academicLevel === "SHS";
   const [form, setForm] = useState({
     academicYear: aySuggestions[1] || "2026-2027",
     semester: "" as AcademicTerm | "",
@@ -445,7 +481,7 @@ function AddSemesterModal({ existingSemesters, defaultAcademicLevel = "COLLEGE",
     }
 
     // Required fields
-    if (!form.semester)           errs.semester     = "Please select a semester/trimester.";
+    if (!form.semester)           errs.semester     = `Please select a ${isShs ? 'trimester' : 'semester'}.`;
     if (!form.startDate)          errs.startDate    = "Start date is required.";
     if (!form.endDate)            errs.endDate      = "End date is required.";
 
@@ -466,18 +502,7 @@ function AddSemesterModal({ existingSemesters, defaultAcademicLevel = "COLLEGE",
       errs.endDate = "End date must be after start date.";
     }
     if (form.reenrollDeadline && form.startDate && form.reenrollDeadline > form.startDate) {
-      errs.reenrollDeadline = "Re-enrollment deadline should be on or before the semester start date.";
-    }
-
-    // Block adding if there's already an ACTIVE period for this track and new one is also ACTIVE
-    const hasActiveForTrack = existingSemesters.some(
-      (s) =>
-        !s.archived &&
-        s.status === "ACTIVE" &&
-        (s.academicLevel === academicLevel || (academicLevel === "SHS" ? String(s.semester).includes("Trimester") : (!s.academicLevel && !String(s.semester).includes("Trimester"))))
-    );
-    if (hasActiveForTrack && form.status === "ACTIVE") {
-      errs.status = `There is already an active ${academicLevel === 'SHS' ? 'trimester' : 'semester'}. A new period cannot be set as Active directly. Run a rollover to switch.`;
+      errs.reenrollDeadline = "Re-enrollment deadline should be on or before the start date.";
     }
 
     // Duplicate check: same academic year + same semester + same level
@@ -491,7 +516,7 @@ function AddSemesterModal({ existingSemesters, defaultAcademicLevel = "COLLEGE",
       );
     });
     if (duplicate && !errs.academicYear && !errs.semester) {
-      errs.duplicate = `${form.semester} for A.Y. ${form.academicYear} already exists under ${academicLevel === 'SHS' ? 'Senior High School' : 'College'}.`;
+      errs.duplicate = `${form.semester} for A.Y. ${form.academicYear} already exists under ${isShs ? 'Senior High School' : 'College'}.`;
     }
 
     return errs;
@@ -510,9 +535,9 @@ function AddSemesterModal({ existingSemesters, defaultAcademicLevel = "COLLEGE",
         startDate: form.startDate,
         endDate: form.endDate,
         reenrollDeadline: form.reenrollDeadline,
-        status: form.status,
+        status: "UPCOMING",
         academicLevel,
-        termType: academicLevel === 'SHS' ? 'TRIMESTER' : 'SEMESTER',
+        termType: isShs ? 'TRIMESTER' : 'SEMESTER',
       });
       setSaved(true);
       setTimeout(() => {
@@ -526,14 +551,6 @@ function AddSemesterModal({ existingSemesters, defaultAcademicLevel = "COLLEGE",
     }
   }
 
-  const hasActiveBlock = existingSemesters.some(
-    (s) =>
-      !s.archived &&
-      s.status === "ACTIVE" &&
-      (s.academicLevel === academicLevel || (academicLevel === "SHS" ? String(s.semester).includes("Trimester") : (!s.academicLevel && !String(s.semester).includes("Trimester"))))
-  );
-
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/55" onClick={onClose} />
@@ -543,32 +560,22 @@ function AddSemesterModal({ existingSemesters, defaultAcademicLevel = "COLLEGE",
           <div className="flex items-center gap-3">
             <CalendarPlus className="w-5 h-5 text-[#FFD41C]" />
             <h3 className="text-white font-bold text-base">
-              Add {academicLevel === 'SHS' ? 'Senior High School Trimester' : 'College Semester'}
+              Add {isShs ? 'Senior High School Trimester' : 'College Semester'}
             </h3>
           </div>
-          <button onClick={onClose} className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10">
+          <button onClick={onClose} className="text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10 cursor-pointer">
             <X className="w-5 h-5" />
           </button>
         </div>
-
-        {/* Active semester block warning */}
-        {hasActiveBlock && (
-          <div className="mx-5 mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
-            <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
-            <p className="text-amber-700 text-xs">
-              <strong>Active semester detected.</strong> New semesters default to <strong>Upcoming</strong>. You can switch active semesters anytime by running a <strong>Semester Rollover</strong>.
-            </p>
-          </div>
-        )}
 
         {/* Both Terms Exist Warning */}
         {termAvailability.bothExist && (
           <div className="mx-5 mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-2 text-xs text-[#001A4D]">
             <AlertCircle className="w-4 h-4 text-[#0E4EBD] flex-shrink-0 mt-0.5" />
             <div>
-              <p className="font-bold">Both 1st & 2nd Semesters Created</p>
+              <p className="font-bold">All {isShs ? 'Trimesters' : 'Semesters'} Created</p>
               <p className="text-[11px] text-gray-700 mt-0.5">
-                Both terms for A.Y. {form.academicYear} have already been registered. Please choose an upcoming Academic Year below.
+                All terms for A.Y. {form.academicYear} have already been registered under this track. Please choose an upcoming Academic Year below.
               </p>
             </div>
           </div>
@@ -584,43 +591,6 @@ function AddSemesterModal({ existingSemesters, defaultAcademicLevel = "COLLEGE",
 
         {/* Body */}
         <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
-          {/* Academic Track Selector */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Academic Track <span className="text-red-500">*</span>
-            </label>
-            <div className="flex gap-2.5">
-              <button
-                type="button"
-                onClick={() => {
-                  setAcademicLevel('COLLEGE');
-                  handleSelectTerm('1st Semester');
-                }}
-                className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold border transition-all ${
-                  academicLevel === 'COLLEGE'
-                    ? 'bg-[#001A4D] text-[#FFD41C] border-[#001A4D] shadow-sm'
-                    : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                College (Semestral)
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setAcademicLevel('SHS');
-                  handleSelectTerm('1st Trimester');
-                }}
-                className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold border transition-all ${
-                  academicLevel === 'SHS'
-                    ? 'bg-amber-600 text-white border-amber-600 shadow-sm'
-                    : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                Senior High School (Trimestral)
-              </button>
-            </div>
-          </div>
-
           {/* Academic Year */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -658,7 +628,7 @@ function AddSemesterModal({ existingSemesters, defaultAcademicLevel = "COLLEGE",
                     key={ay}
                     type="button"
                     onClick={() => handleSelectAY(ay)}
-                    className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all ${
+                    className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
                       isSelected
                         ? "bg-[#001A4D] text-[#FFD41C] shadow-xs"
                         : "bg-gray-100 text-gray-700 hover:bg-gray-200"
@@ -674,10 +644,10 @@ function AddSemesterModal({ existingSemesters, defaultAcademicLevel = "COLLEGE",
           {/* Semester / Trimester Term Availability */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              {academicLevel === 'SHS' ? 'Trimester' : 'Semester'} <span className="text-red-500">*</span>
+              {isShs ? 'Trimester' : 'Semester'} <span className="text-red-500">*</span>
             </label>
-            <div className={`grid ${academicLevel === 'SHS' ? 'grid-cols-3' : 'grid-cols-2'} gap-2.5`}>
-              {(academicLevel === 'SHS'
+            <div className={`grid ${isShs ? 'grid-cols-3' : 'grid-cols-2'} gap-2.5`}>
+              {(isShs
                 ? (['1st Trimester', '2nd Trimester', '3rd Trimester'] as TrimesterTerm[])
                 : (['1st Semester', '2nd Semester'] as SemesterTerm[])
               ).map((opt) => {
@@ -727,14 +697,14 @@ function AddSemesterModal({ existingSemesters, defaultAcademicLevel = "COLLEGE",
           {/* Auto-generated Label (read-only) */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center gap-1.5">
-              Semester Label
+              {isShs ? 'Trimester Label' : 'Semester Label'}
               <span className="text-[10px] text-[#0E4EBD] bg-blue-50 px-1.5 py-0.5 rounded font-semibold">AUTO</span>
             </label>
             <div className="relative">
               <input
                 type="text"
                 readOnly
-                value={autoLabel || "Select Academic Year and Semester above…"}
+                value={autoLabel || `Select Academic Year and ${isShs ? 'Trimester' : 'Semester'} above…`}
                 className="w-full px-4 py-2.5 border border-gray-200 rounded-lg bg-gray-50 text-gray-600 font-mono font-semibold text-sm pr-9"
               />
               <Lock className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2" />
@@ -808,42 +778,11 @@ function AddSemesterModal({ existingSemesters, defaultAcademicLevel = "COLLEGE",
               <p className="text-xs text-gray-500 mt-1">Date by which students must confirm enrollment for this term (must be before or on start date).</p>
             )}
           </div>
-
-          {/* Status */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Initial Status</label>
-            <div className="flex gap-4">
-              {(["UPCOMING", "ACTIVE"] as SemesterStatus[]).map((s) => (
-                <label key={s} className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="status"
-                    value={s}
-                    checked={form.status === s}
-                    disabled={s === "ACTIVE" && hasActiveBlock}
-                    onChange={() => {
-                      setForm({ ...form, status: s });
-                      setErrors((prev) => ({ ...prev, status: "" }));
-                    }}
-                    className="accent-[#0E4EBD]"
-                  />
-                  <span className={`text-sm capitalize ${s === "ACTIVE" && hasActiveBlock ? "text-gray-400" : ""}`}>
-                    {s === "UPCOMING" ? "Upcoming (Recommended)" : "Active"}
-                  </span>
-                </label>
-              ))}
-            </div>
-            {errors.status && (
-              <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-                <p className="text-red-700 text-xs">{errors.status}</p>
-              </div>
-            )}
-          </div>
         </div>
 
         {/* Footer */}
         <div className="px-5 py-4 border-t border-gray-200 flex items-center justify-between">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 transition-colors">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 transition-colors cursor-pointer">
             Cancel
           </button>
           <button
@@ -852,7 +791,7 @@ function AddSemesterModal({ existingSemesters, defaultAcademicLevel = "COLLEGE",
             className={`px-5 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2 transition-all ${
               saved
                 ? "bg-green-600 text-white"
-                : "bg-[#001A4D] text-white hover:bg-[#001A4D]/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                : "bg-[#001A4D] text-white hover:bg-[#001A4D]/90 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             }`}
           >
             {saving ? (
@@ -1926,16 +1865,19 @@ function EditSemesterModal({ semester, existingSemesters, onClose }: EditSemeste
             ) : null}
           </div>
 
-          {/* Semester */}
+          {/* Semester / Trimester */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Semester <span className="text-red-500">*</span>
+              {String(semester.semester).includes('Trimester') || semester.academicLevel === 'SHS' ? 'Trimester' : 'Semester'} <span className="text-red-500">*</span>
             </label>
-            <div className="flex gap-3">
-              {(["1st Semester", "2nd Semester"] as SemesterTerm[]).map((opt) => (
+            <div className={`grid ${(String(semester.semester).includes('Trimester') || semester.academicLevel === 'SHS') ? 'grid-cols-3' : 'grid-cols-2'} gap-3`}>
+              {((String(semester.semester).includes('Trimester') || semester.academicLevel === 'SHS')
+                ? (["1st Trimester", "2nd Trimester", "3rd Trimester"] as any[])
+                : (["1st Semester", "2nd Semester"] as SemesterTerm[])
+              ).map((opt) => (
                 <label
                   key={opt}
-                  className={`flex-1 flex items-center gap-2.5 px-4 py-3 border rounded-lg cursor-pointer transition-all ${
+                  className={`flex items-center gap-2.5 px-3 py-2.5 border rounded-lg cursor-pointer transition-all ${
                     form.semester === opt
                       ? "border-[#0E4EBD] bg-blue-50/50 ring-2 ring-[#0E4EBD]/30"
                       : "border-gray-200 hover:border-gray-300"
@@ -1952,7 +1894,7 @@ function EditSemesterModal({ semester, existingSemesters, onClose }: EditSemeste
                     }}
                     className="accent-[#0E4EBD]"
                   />
-                  <span className="text-sm font-medium text-[#001A4D]">{opt}</span>
+                  <span className="text-xs font-bold text-[#001A4D]">{opt}</span>
                 </label>
               ))}
             </div>
@@ -1962,14 +1904,14 @@ function EditSemesterModal({ semester, existingSemesters, onClose }: EditSemeste
           {/* Auto label */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center gap-1.5">
-              Semester Label
+              {String(semester.semester).includes('Trimester') || semester.academicLevel === 'SHS' ? 'Trimester Label' : 'Semester Label'}
               <span className="text-[10px] text-[#0E4EBD] bg-blue-50 px-1.5 py-0.5 rounded font-semibold">AUTO</span>
             </label>
             <div className="relative">
               <input
                 readOnly
                 type="text"
-                value={autoLabel || "Fill in Academic Year and Semester above…"}
+                value={autoLabel || `Fill in Academic Year and ${String(semester.semester).includes('Trimester') || semester.academicLevel === 'SHS' ? 'Trimester' : 'Semester'} above…`}
                 className="w-full px-4 py-2.5 border border-gray-200 rounded-lg bg-gray-50 text-gray-500 italic text-sm pr-9"
               />
               <Lock className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2" />
@@ -2132,6 +2074,11 @@ export function AcademicSemesterSettings() {
 
   const canAnyRollover = isCollegeRolloverReady || isShsRolloverReady;
 
+  const completedSemestersCount = useMemo(
+    () => semesters.filter((s) => s.status === "COMPLETED").length,
+    [semesters]
+  );
+
   const currentDisplayActiveSemester = activeTab === "shs" ? activeShsSemester : activeCollegeSemester;
   const bannerState = deriveBannerState(
     currentDisplayActiveSemester ? [currentDisplayActiveSemester] : []
@@ -2160,7 +2107,7 @@ export function AcademicSemesterSettings() {
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-gray-500 text-sm font-medium">Settings &rsaquo; Academic Periods &amp; Tracks</p>
+          <h2 className="text-2xl font-bold text-[#001A4D]">Academic Year &amp; Semester</h2>
         </div>
         <button
           onClick={() => setShowRollover(true)}
@@ -2181,10 +2128,12 @@ export function AcademicSemesterSettings() {
         </button>
       </div>
 
-      {/* Active Semester Banner */}
+      {/* Active Semester Banner / Completed Records Card */}
       <ActiveSemesterBanner
         state={bannerState}
         activeSemester={currentDisplayActiveSemester}
+        activeTab={activeTab}
+        completedCount={completedSemestersCount}
         canRollover={
           currentDisplayActiveSemester
             ? isDeadlinePassed(currentDisplayActiveSemester.endDate) ||
@@ -2239,7 +2188,7 @@ export function AcademicSemesterSettings() {
                     : "text-gray-600 hover:text-gray-900"
                 }`}
               >
-                Completed
+                Archived &amp; Completed
               </button>
             </div>
           </div>
@@ -2254,13 +2203,15 @@ export function AcademicSemesterSettings() {
                 Sort: {sortOrder === "asc" ? "Chronological (Oldest First)" : "Reverse Chronological (Newest First)"}
               </span>
             </button>
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="px-4 py-2 bg-[#001A4D] text-[#FFD41C] rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-[#001A4D]/90 transition-colors shadow-xs"
-            >
-              <Plus className="w-4 h-4" />
-              Add {activeTab === "shs" ? "Trimester" : "Semester"}
-            </button>
+            {activeTab !== "completed" && (
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="px-4 py-2 bg-[#001A4D] text-[#FFD41C] rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-[#001A4D]/90 transition-colors shadow-xs cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                Add {activeTab === "shs" ? "Trimester" : "Semester"}
+              </button>
+            )}
           </div>
         </div>
 

@@ -13,6 +13,7 @@ interface Step6Props {
 }
 
 export default function Step6Documents({ data, onUpdate, isOfficer, errors = {} }: Step6Props) {
+
   // Dynamic Theme Styling based on Officer vs Admin
   const accentBorder = 'border-[#0E4EBD]';
   const accentText = 'text-[#0E4EBD]';
@@ -151,9 +152,27 @@ export default function Step6Documents({ data, onUpdate, isOfficer, errors = {} 
     const hasUploadedActivityProposal = Boolean(activityPropDoc?.fileUrl);
 
     const hasOrg = Boolean(data.hostingOrgId);
-    const hasStaff = Boolean(
-      data.eventHeadUid || data.officerInChargeUid || (data.scanners && data.scanners.length > 0)
+    const isQrEnabled = Boolean(
+      data.enableQRTickets !== false && (data as any).enableQR !== false && data.attendanceEnabled !== false
     );
+    const hasOfficerAssigned = Boolean(data.eventHeadUid || data.officerInChargeUid);
+    const hasStaff = Boolean(hasOfficerAssigned || (data.scanners && data.scanners.length > 0));
+
+    let officerCheckStatus: 'passed' | 'warning' = 'passed';
+    let officerCheckReason = '';
+
+    if (!isQrEnabled) {
+      officerCheckStatus = 'passed';
+      officerCheckReason = hasOfficerAssigned
+        ? (data.eventHeadName ? `Event Head (${data.eventHeadName}) assigned` : 'Lead officer assigned')
+        : 'QR ticketing disabled (Attendance scanners not required)';
+    } else {
+      officerCheckStatus = hasStaff ? 'passed' : 'warning';
+      officerCheckReason = hasStaff
+        ? (data.eventHeadName ? `Event Head (${data.eventHeadName}) / Scanners assigned` : 'Event Head / Attendance scanners assigned')
+        : 'No attendance scanners assigned yet (Optional)';
+    }
+
     const hasSchedule = Boolean(
       data.sessions &&
         data.sessions.length > 0 &&
@@ -177,10 +196,8 @@ export default function Step6Documents({ data, onUpdate, isOfficer, errors = {} 
       {
         id: 2,
         check: 'Assigned officers are registered and in good standing',
-        status: hasStaff ? ('passed' as const) : ('warning' as const),
-        reason: hasStaff
-          ? 'Event Head / Officers in charge assigned'
-          : 'No event head or officer-in-charge assigned yet',
+        status: officerCheckStatus,
+        reason: officerCheckReason,
         auto: true,
       },
       {
@@ -449,6 +466,11 @@ export default function Step6Documents({ data, onUpdate, isOfficer, errors = {} 
                       <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-[10px] font-bold rounded">
                         Auto-checked
                       </span>
+                      {(item as any).required && (
+                        <span className="px-2 py-0.5 bg-red-100 text-red-700 text-[10px] font-extrabold rounded border border-red-200">
+                          Required
+                        </span>
+                      )}
                     </div>
                     <p className="text-xs text-gray-600 font-medium">{item.reason}</p>
                   </div>

@@ -1,7 +1,9 @@
-import { useState, useEffect, KeyboardEvent } from 'react';
+import { useState, useEffect, useMemo, KeyboardEvent } from 'react';
 import { Lock, Upload, Tag, X, Check, Plus, Edit2, Sparkles, AlertCircle, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import { useOrganizationStream } from '../../../organizations';
+import { useOrgOfficers } from '../../../organizations/hooks/useOrgOfficers';
+import { useRoles } from '../../../roles/hooks/useRoles';
 import { useEventTypesStream } from '../../hooks/useEventConfigStream';
 import { createEventType } from '../../services/event-config.service';
 import type { EventFormData } from '../../types/event.types';
@@ -26,6 +28,9 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer, errors = 
   // Streams
   const { data: orgs, loading: orgsLoading } = useOrganizationStream();
   const { eventTypes, loading: typesLoading } = useEventTypesStream();
+  const { data: roles = [] } = useRoles();
+  const effectiveOrgId = data.hostingOrgId || officerProfile?.activeOrganizationId || '';
+  const { officers = [] } = useOrgOfficers(effectiveOrgId);
 
   // Custom Event Type Modal State
   const [showCustomTypeModal, setShowCustomTypeModal] = useState(false);
@@ -205,6 +210,44 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer, errors = 
     (showOfficerMode && officerProfile?.activeOrganizationId ? activeOrgs.find(o => o.id === officerProfile.activeOrganizationId) : null);
   const selectedType = activeTypes.find(t => t.id === data.eventTypeId);
 
+  // Resolve actual creator role/position title
+  const resolvedRoleTitle = useMemo(() => {
+    if (!showOfficerMode) {
+      return adviserProfile?.jobTitle || 'System Administrator';
+    }
+
+    if (officerProfile?.isAdviser || officerProfile?.activeRoleId?.toLowerCase() === 'adviser') {
+      return 'Club Adviser';
+    }
+
+    if (officerProfile?.activeRoleId) {
+      const matchedRole = roles.find((r) => r.id === officerProfile.activeRoleId);
+      if (matchedRole?.name) return matchedRole.name;
+    }
+
+    const currentOfficer = officers.find(
+      (o) =>
+        (officerProfile?.studentId && o.studentId === officerProfile.studentId) ||
+        (officerProfile?.email && o.email?.toLowerCase() === officerProfile.email.toLowerCase())
+    );
+
+    if (currentOfficer?.roleId) {
+      const matchedRole = roles.find((r) => r.id === currentOfficer.roleId);
+      if (matchedRole?.name) return matchedRole.name;
+    }
+
+    if (selectedOrg?.presidentName && officerProfile?.studentName &&
+        selectedOrg.presidentName.trim().toLowerCase() === officerProfile.studentName.trim().toLowerCase()) {
+      return 'President';
+    }
+
+    if (officerProfile?.activeRoleId && officerProfile.activeRoleId.length > 2 && !officerProfile.activeRoleId.includes('-')) {
+      return officerProfile.activeRoleId.charAt(0).toUpperCase() + officerProfile.activeRoleId.slice(1);
+    }
+
+    return 'Club Officer';
+  }, [showOfficerMode, adviserProfile, officerProfile, roles, officers, selectedOrg]);
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-6">
       {/* Left Panel */}
@@ -218,13 +261,44 @@ export default function Step1EventDetails({ data, onUpdate, isOfficer, errors = 
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Created By</label>
-              <div className="flex items-center gap-3 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg">
-                <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${accentGradient} flex items-center justify-center text-white font-bold text-sm`}>
+              <div className="flex items-center gap-3.5 px-4 py-3 bg-gray-50/90 border border-gray-200 rounded-xl shadow-2xs">
+                <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${accentGradient} flex items-center justify-center text-white font-bold text-sm shadow-xs flex-shrink-0`}>
                   {creatorAvatar}
                 </div>
-                <div>
-                  <div className="font-medium text-gray-900">{creatorName}</div>
-                  <div className="text-xs text-gray-500">{creatorRole}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-bold text-gray-900 text-sm">{creatorName}</span>
+                    <span className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-blue-50 text-[#0E4EBD] border border-blue-200">
+                      {resolvedRoleTitle}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-gray-500 mt-1 flex-wrap">
+                    {showOfficerMode ? (
+                      <>
+                        {officerProfile?.studentId && (
+                          <span className="font-medium text-gray-700">
+                            Student ID: <span className="font-mono">{officerProfile.studentId}</span>
+                          </span>
+                        )}
+                        {officerProfile?.studentId && officerProfile?.email && <span>•</span>}
+                        {officerProfile?.email && (
+                          <span className="truncate">{officerProfile.email}</span>
+                        )}
+                        {selectedOrg && (
+                          <>
+                            <span>•</span>
+                            <span className="font-semibold text-[#001A4D]">{selectedOrg.acronym || selectedOrg.name}</span>
+                          </>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        {adviserProfile?.email && <span className="truncate">{adviserProfile.email}</span>}
+                        <span>•</span>
+                        <span className="font-medium text-gray-700">Student Affairs and Services (SAS)</span>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

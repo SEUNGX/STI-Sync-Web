@@ -11,7 +11,7 @@ import { useOrganizationTypes } from '../hooks/useOrganizationTypes';
 import { useOrganizationMutations } from '../hooks/useOrganizationMutations';
 import { useOrganizationStream } from '../hooks/useOrganizationStream';
 import { useAllActiveOfficers } from '../hooks/useOrgOfficers';
-import { useDepartments, useSemesters } from '../../academic';
+import { useDepartments, useSemesters, useActiveAcademicPeriods } from '../../academic';
 import { useRoles } from '../../roles';
 import { useStudents } from '../../students/hooks/useStudentStream';
 import type { CreateOrganizationPayload, OrgAdviserData } from '../types/organization.types';
@@ -46,7 +46,6 @@ interface Step1Errors {
   typeId?: string;
   department?: string;
   acronym?: string;
-  schoolYear?: string;
   description?: string;
   logo?: string;
 }
@@ -168,20 +167,25 @@ export default function CreateClubModal({ isOpen, onClose, createdBy = 'system',
   // ─── Live data ───────────────────────────────────────────────────────────────
   const { data: orgTypes, loading: loadingTypes } = useOrganizationTypes();
   const { data: departments, loading: loadingDepts } = useDepartments();
-  const { data: semesters, loading: loadingSemesters } = useSemesters();
+  const { data: semesters } = useSemesters();
+  const { activeCollegePeriod, activeShsPeriod } = useActiveAcademicPeriods();
   const { data: rawRoles, loading: loadingRoles } = useRoles();
   const { data: allStudents } = useStudents();
   const { officers: existingOfficers } = useAllActiveOfficers();
   const { data: allOrganizations } = useOrganizationStream();
   const { create, isSaving } = useOrganizationMutations();
 
-  const [searchQueries, setSearchQueries] = useState<Record<string, string>>({});
-  const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
-
   const activeOrgTypes = orgTypes.filter(t => !t.archived);
   const activeDepts = departments.filter(d => !d.archived);
   const activeSemester = useMemo(() => semesters.find(s => s.status === 'ACTIVE') ?? null, [semesters]);
   const activeRoles = useMemo(() => rawRoles.filter(r => !r.archived), [rawRoles]);
+
+  // Active period display string
+  const currentAcademicPeriodLabel = useMemo(() => {
+    const period = activeCollegePeriod || activeShsPeriod || activeSemester;
+    if (!period) return 'Current Academic Term';
+    return `A.Y. ${period.academicYear} — ${period.semester}`;
+  }, [activeCollegePeriod, activeShsPeriod, activeSemester]);
 
   // Step 1 Form State
   const [formData, setFormData] = useState({
@@ -189,8 +193,6 @@ export default function CreateClubModal({ isOpen, onClose, createdBy = 'system',
     typeId: '',
     department: '',
     acronym: '',
-    schoolYear: '',
-    semester: '',
     description: '',
     logo: null as File | null,
   });
@@ -208,17 +210,6 @@ export default function CreateClubModal({ isOpen, onClose, createdBy = 'system',
 
   // Step 3 Officers State
   const [officers, setOfficers] = useState<OfficerAssignment[]>([]);
-
-  // Keep schoolYear/semester in sync with live active semester
-  useEffect(() => {
-    if (activeSemester && !formData.schoolYear) {
-      setFormData(prev => ({
-        ...prev,
-        schoolYear: activeSemester.academicYear,
-        semester: activeSemester.semester,
-      }));
-    }
-  }, [activeSemester, formData.schoolYear]);
 
   // Initialize officers based on active roles
   useEffect(() => {
@@ -395,14 +386,15 @@ export default function CreateClubModal({ isOpen, onClose, createdBy = 'system',
   // ─── Final Creation Handler ────────────────────────────────────────────────
   const handleCreate = async () => {
     setSubmitError(null);
+    const activePeriod = activeCollegePeriod || activeShsPeriod || activeSemester;
     const payload: CreateOrganizationPayload = {
       name: formData.name.trim(),
       acronym: formData.acronym.trim(),
       typeId: formData.typeId,
       departmentId: formData.department,
       description: formData.description.trim(),
-      academicYear: formData.schoolYear,
-      semester: formData.semester,
+      academicYear: activePeriod?.academicYear || '',
+      semester: activePeriod?.semester || '',
       logoUrl: null,
       adviser: {
         ...adviserData,
@@ -521,43 +513,20 @@ export default function CreateClubModal({ isOpen, onClose, createdBy = 'system',
           </div>
         </div>
 
-        {/* Acronym + School Year */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-semibold text-[#001A4D] mb-1.5">
-              Acronym <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              value={formData.acronym}
-              onChange={(e) => { setFormData({ ...formData, acronym: e.target.value.toUpperCase() }); setStep1Errors(prev => { const n = { ...prev }; delete n.acronym; return n; }); }}
-              placeholder="e.g. JPCS"
-              maxLength={10}
-              className={`w-full px-4 py-2.5 border rounded-xl font-mono text-sm focus:ring-2 focus:ring-[#0E4EBD] focus:border-transparent ${step1Errors.acronym ? 'border-red-400 bg-red-50' : 'border-[#E0E0E0]'}`}
-            />
-            <FieldError msg={step1Errors.acronym} />
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold text-[#001A4D] mb-1.5">
-              School Year & Semester
-              <span className="ml-1 text-xs font-normal text-gray-400">(from active semester)</span>
-            </label>
-            {loadingSemesters ? (
-              <div className="flex items-center gap-2 px-4 py-2.5 border border-[#E0E0E0] rounded-xl text-sm text-gray-400">
-                <Loader2 className="w-4 h-4 animate-spin" /> Loading...
-              </div>
-            ) : activeSemester ? (
-              <div className="px-4 py-2.5 border border-green-300 bg-green-50 rounded-xl text-xs text-green-800 font-semibold flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                A.Y. {activeSemester.academicYear} — {activeSemester.semester}
-              </div>
-            ) : (
-              <div className="px-4 py-2.5 border border-amber-300 bg-amber-50 rounded-xl text-xs text-amber-700">
-                No active semester set in Academic Settings.
-              </div>
-            )}
-          </div>
+        {/* Acronym */}
+        <div>
+          <label className="block text-sm font-semibold text-[#001A4D] mb-1.5">
+            Acronym <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="text"
+            value={formData.acronym}
+            onChange={(e) => { setFormData({ ...formData, acronym: e.target.value.toUpperCase() }); setStep1Errors(prev => { const n = { ...prev }; delete n.acronym; return n; }); }}
+            placeholder="e.g. JPCS"
+            maxLength={10}
+            className={`w-full px-4 py-2.5 border rounded-xl font-mono text-sm focus:ring-2 focus:ring-[#0E4EBD] focus:border-transparent ${step1Errors.acronym ? 'border-red-400 bg-red-50' : 'border-[#E0E0E0]'}`}
+          />
+          <FieldError msg={step1Errors.acronym} />
         </div>
 
         {/* Description */}
@@ -967,9 +936,9 @@ export default function CreateClubModal({ isOpen, onClose, createdBy = 'system',
             <div className="text-[#001A4D] font-semibold">{deptLabel || '—'}</div>
           </div>
           <div>
-            <div className="text-gray-400 font-medium">Academic Year</div>
+            <div className="text-gray-400 font-medium">Academic Period</div>
             <div className="text-[#001A4D] font-semibold">
-              {formData.schoolYear ? `A.Y. ${formData.schoolYear} — ${formData.semester}` : '—'}
+              {currentAcademicPeriodLabel}
             </div>
           </div>
           <div className="col-span-2">

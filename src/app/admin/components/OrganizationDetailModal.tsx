@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { X, Users, Crown, Calendar, Building2, Shield, Mail, FileText, CheckCircle2 } from 'lucide-react';
 import type { OrganizationDocument } from '../../modules/organizations/types/organization.types';
 import { useOrgOfficers } from '../../modules/organizations/hooks/useOrgOfficers';
 import { useOrgMembers } from '../../modules/organizations/hooks/useOrgMembers';
 import { useOrganizationTypes } from '../../modules/organizations/hooks/useOrganizationTypes';
 import { useRoles } from '../../modules/roles/hooks/useRoles';
+import { useUserNameResolver } from '../../modules/finance/hooks/useUserNameResolver';
 
 interface OrganizationDetailModalProps {
   organization: OrganizationDocument | null;
@@ -20,6 +21,32 @@ export function OrganizationDetailModal({ organization, isOpen, onClose }: Organ
   const { members, loading: loadingMembers } = useOrgMembers(orgId);
   const { data: orgTypes } = useOrganizationTypes();
   const { data: roles } = useRoles();
+  const { resolveUserName } = useUserNameResolver();
+
+  const resolvedCreatorName = useMemo(() => {
+    if (!organization?.createdBy) return 'System Administrator';
+
+    // First attempt resolving via real-time name resolver (matching students, officers, advisers, sas_admins, users)
+    const resolved = resolveUserName(organization.createdBy);
+    if (resolved) return resolved;
+
+    const raw = organization.createdBy.trim();
+    const lower = raw.toLowerCase();
+
+    // If it's a known placeholder or system indicator
+    if (lower === 'system' || lower === 'admin' || lower === 'sas_admin' || lower === 'sao' || lower === 'sas') {
+      return 'SAS Administrator';
+    }
+
+    // If it's not an email, not a raw UID hash, and looks like a readable name
+    const isUidHash = /^[a-zA-Z0-9_-]{20,}$/.test(raw);
+    const isEmail = raw.includes('@');
+    if (!isUidHash && !isEmail && raw.length > 1) {
+      return raw;
+    }
+
+    return 'SAS Administrator';
+  }, [organization?.createdBy, resolveUserName]);
 
   if (!isOpen || !organization) return null;
 
@@ -163,7 +190,7 @@ export function OrganizationDetailModal({ organization, isOpen, onClose }: Organ
                 </div>
                 <div>
                   <span className="font-semibold text-gray-700 block mb-0.5">Created By</span>
-                  <span>{organization.createdBy || 'System Administrator'}</span>
+                  <span className="font-medium text-gray-800">{resolvedCreatorName}</span>
                 </div>
               </div>
             </div>

@@ -10,6 +10,7 @@ interface AdminRecordPaymentModalProps {
   recordedByUid: string;
   resolvedName?: string;
   resolvedSchoolId?: string;
+  isQREnabled?: boolean;
 }
 
 export function AdminRecordPaymentModal({
@@ -18,6 +19,7 @@ export function AdminRecordPaymentModal({
   recordedByUid,
   resolvedName,
   resolvedSchoolId,
+  isQREnabled = true,
 }: AdminRecordPaymentModalProps) {
   const remaining = Math.max(0, (payable.assignedAmount || 0) - (payable.paidAmount || 0));
 
@@ -129,7 +131,7 @@ export function AdminRecordPaymentModal({
           </div>
 
           {/* Admin Explicit QR Code Ticket Unlock Control (Only for pre-event / event fees where QR gate access is needed) */}
-          {payable.type === 'event_fee' && (
+          {payable.type === 'event_fee' && isQREnabled && (
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-3.5 space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">

@@ -6,7 +6,6 @@ import {
   DollarSign, AlertTriangle, Coins, Info, ShieldAlert, Shield
 } from "lucide-react";
 import { toast } from "sonner";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { useAllEvents } from "../../modules/events/hooks/useEventStream";
 import { useAttendanceStream } from "../../modules/attendance/hooks/useAttendanceStream";
 import { useVenuesStream, useEventCategoriesStream } from "../../modules/events/hooks/useEventConfigStream";
@@ -753,16 +752,6 @@ export function AttendanceMonitoring() {
   const totalAbsent = mappedEvents.reduce((s, e) => s + e.absent, 0);
   const totalFlagged = mappedEvents.reduce((s, e) => s + e.flagged, 0);
 
-  const overviewChart = useMemo(() => mappedEvents.filter((e) => e.status !== "Upcoming").map((e) => {
-    const evtName = e.name || "Untitled Event";
-    return {
-      event: evtName.length > 18 ? evtName.slice(0, 18) + "…" : evtName,
-      registered: e.registered,
-      checkedIn: e.checkedIn,
-      absent: e.absent,
-    };
-  }), [mappedEvents]);
-
   const activeSelectedEvent = useMemo(() => {
     if (!selectedEventId) return null;
     return mappedEvents.find(e => e.id === selectedEventId) || null;
@@ -809,31 +798,6 @@ export function AttendanceMonitoring() {
           );
         })}
       </div>
-
-      {/* Attendance Feed Chart */}
-      {overviewChart.length > 0 && (
-        <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="font-bold text-[#001A4D] text-base">Campus Event Attendance Overview</h3>
-              <p className="text-xs text-gray-400">Comparison of registered vs. attended students across active events</p>
-            </div>
-          </div>
-          <div className="h-48 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={overviewChart} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F0F0F0" />
-                <XAxis dataKey="event" tick={{ fontSize: 11, fill: '#6B7280' }} />
-                <YAxis tick={{ fontSize: 11, fill: '#6B7280' }} />
-                <Tooltip />
-                <Bar dataKey="registered" fill="#E2E8F0" radius={[4, 4, 0, 0]} name="Registered" />
-                <Bar dataKey="checkedIn" fill="#0E4EBD" radius={[4, 4, 0, 0]} name="Attended" />
-                <Bar dataKey="absent" fill="#EF4444" radius={[4, 4, 0, 0]} name="Absent" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      )}
 
       {/* Event Flexible Filter Toolbar */}
       <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm space-y-3">

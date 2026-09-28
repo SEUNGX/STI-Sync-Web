@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Users, Globe, UserCheck, CheckSquare, Layers, BookOpen, GraduationCap, ShieldAlert, Lock } from 'lucide-react';
-import { useCourses, useSections, useSemesters } from '../../../academic';
+import { useCourses, useSections, useSemesters, useDepartments } from '../../../academic';
 import { useStudents } from '../../../students/hooks/useStudentStream';
 import { useOrgMembers } from '../../../organizations/hooks/useOrgMembers';
 import { useOrganizationStream } from '../../../organizations';
@@ -22,6 +22,7 @@ export default function Step3Participants({ data, onUpdate, isOfficer, errors = 
   const { data: students, loading: studentsLoading } = useStudents();
   const { data: orgs } = useOrganizationStream();
   const { data: semesters } = useSemesters();
+  const { data: departments = [] } = useDepartments();
   const { members: orgMembers, loading: membersLoading } = useOrgMembers(data.hostingOrgId || '');
 
   const activeCourses = useMemo(() => courses.filter(c => !c.archived), [courses]);
@@ -52,6 +53,60 @@ export default function Step3Participants({ data, onUpdate, isOfficer, errors = 
   const selectedYears = data.targetYearLevels || [];
   const selectedSections = data.targetSections || [];
 
+  // Helper to determine if a course is Senior High School
+  const isShsCourse = (course: any): boolean => {
+    if (!course) return false;
+    return (
+      course.academicLevel === 'SHS' ||
+      course.departmentId === 'SHS' ||
+      String(course.code || '').toUpperCase().includes('SHS') ||
+      String(course.code || '').toUpperCase().includes('STEM') ||
+      String(course.code || '').toUpperCase().includes('ABM') ||
+      String(course.code || '').toUpperCase().includes('HUMSS') ||
+      String(course.code || '').toUpperCase().includes('TVL') ||
+      String(course.code || '').toUpperCase().includes('GAS') ||
+      String(course.name || '').toLowerCase().includes('senior high')
+    );
+  };
+
+  // Determine if selected courses are exclusively College or exclusively SHS
+  const selectedCourseObjects = useMemo(() => {
+    return activeCourses.filter(c => selectedCourses.includes(c.id));
+  }, [activeCourses, selectedCourses]);
+
+  const isCollegeOnly = useMemo(() => {
+    if (selectedCourseObjects.length === 0) return false;
+    return selectedCourseObjects.every(c => !isShsCourse(c));
+  }, [selectedCourseObjects]);
+
+  const isShsOnly = useMemo(() => {
+    if (selectedCourseObjects.length === 0) return false;
+    return selectedCourseObjects.every(c => isShsCourse(c));
+  }, [selectedCourseObjects]);
+
+  // Check if a specific year level is disabled based on course selection
+  const isYearDisabled = (year: string) => {
+    if (isRestricted) return true;
+    if (isCollegeOnly && (year === 'G11' || year === 'G12')) return true;
+    if (isShsOnly && ['1st Year', '2nd Year', '3rd Year', '4th Year'].includes(year)) return true;
+    return false;
+  };
+
+  // Prune unassociated year levels when college-only or shs-only mode changes
+  useEffect(() => {
+    if (isCollegeOnly) {
+      const valid = selectedYears.filter(y => y !== 'G11' && y !== 'G12');
+      if (valid.length !== selectedYears.length) {
+        updateField('targetYearLevels', valid);
+      }
+    } else if (isShsOnly) {
+      const valid = selectedYears.filter(y => y === 'G11' || y === 'G12');
+      if (valid.length !== selectedYears.length) {
+        updateField('targetYearLevels', valid);
+      }
+    }
+  }, [isCollegeOnly, isShsOnly, selectedYears]);
+
   // Initialize defaults
   useEffect(() => {
     const updates: Partial<EventFormData> = {};
@@ -68,8 +123,48 @@ export default function Step3Participants({ data, onUpdate, isOfficer, errors = 
   };
 
   // Scope toggle (All Students vs Org Members) for Officers
+  // When org members only is chosen, automatically select the target courses of the org (exclusive event)
   const setAudienceScope = (scope: 'all' | 'members') => {
     updateField('targetAudienceScope', scope);
+    if (scope === 'members' && currentOrg) {
+      const rawDeptId = (currentOrg.departmentId || (currentOrg as any).department || '').trim().toLowerCase();
+      const rawDeptName = (currentOrg.department || (currentOrg as any).departmentName || '').trim().toLowerCase();
+      const isCross =
+        !rawDeptId ||
+        rawDeptId === 'cross-departmental' ||
+        rawDeptId === 'cross-department' ||
+        rawDeptId === 'all' ||
+        rawDeptId === 'general' ||
+        rawDeptName === 'cross-departmental' ||
+        rawDeptName === 'college-wide' ||
+        rawDeptName === 'campus-wide' ||
+        (currentOrg as any).isCrossDepartmental === true;
+
+      if (!isCross) {
+        const matchedDept = departments.find(
+          (d) =>
+            d.id.toLowerCase() === rawDeptId ||
+            d.code?.toLowerCase() === rawDeptId ||
+            d.name?.toLowerCase() === rawDeptName ||
+            (d.code && rawDeptName.includes(d.code.toLowerCase())) ||
+            (d.name && rawDeptName.includes(d.name.toLowerCase()))
+        );
+
+        const orgCourses = activeCourses.filter((c) => {
+          if (matchedDept && (c.departmentId === matchedDept.id || c.departmentCode === matchedDept.code)) return true;
+          if (c.departmentId?.toLowerCase() === rawDeptId) return true;
+          if (c.code?.toLowerCase() === rawDeptId) return true;
+          if (rawDeptName && (c.name.toLowerCase().includes(rawDeptName) || c.code.toLowerCase().includes(rawDeptName))) return true;
+          return false;
+        });
+
+        if (orgCourses.length > 0) {
+          const courseIds = orgCourses.map((c) => c.id);
+          updateField('targetCourses', courseIds);
+          updateField('allowedCourses', courseIds);
+        }
+      }
+    }
   };
 
   // Course Toggles & Select All
@@ -94,6 +189,7 @@ export default function Step3Participants({ data, onUpdate, isOfficer, errors = 
 
   // Year Level Toggles & Select All
   const toggleYear = (year: string) => {
+    if (isYearDisabled(year)) return;
     const next = selectedYears.includes(year)
       ? selectedYears.filter(y => y !== year)
       : [...selectedYears, year];
@@ -101,16 +197,40 @@ export default function Step3Participants({ data, onUpdate, isOfficer, errors = 
   };
 
   const selectAllYears = () => {
-    updateField('targetYearLevels', [...availableYearLevels]);
+    const selectable = availableYearLevels.filter((y) => !isYearDisabled(y));
+    updateField('targetYearLevels', selectable);
   };
 
   const clearAllYears = () => {
     updateField('targetYearLevels', []);
   };
 
-  // Cascading Sections Filter based on selected courses and year levels
+  // Cascading Sections Filter based on selected courses, year levels, and academic scope (SHS vs College)
   const availableSections = useMemo(() => {
     return activeSections.filter(sec => {
+      // Disassociate SHS sections if College only
+      const isSecShs = 
+        sec.academicLevel === 'SHS' ||
+        Number(sec.yearLevel) === 11 || 
+        Number(sec.yearLevel) === 12 ||
+        sec.name.toUpperCase().includes('G11') ||
+        sec.name.toUpperCase().includes('G12') ||
+        sec.name.toUpperCase().includes('11-') ||
+        sec.name.toUpperCase().includes('12-');
+
+      if (isCollegeOnly && isSecShs) return false;
+
+      // Disassociate College sections if SHS only
+      const isSecCollege = 
+        sec.academicLevel === 'COLLEGE' ||
+        [1, 2, 3, 4].includes(Number(sec.yearLevel)) ||
+        sec.name.includes('-1') ||
+        sec.name.includes('-2') ||
+        sec.name.includes('-3') ||
+        sec.name.includes('-4');
+
+      if (isShsOnly && !isSecShs && isSecCollege) return false;
+
       // 1. Filter by Course if any courses are selected
       if (selectedCourses.length > 0) {
         const matchesCourse =
@@ -156,7 +276,18 @@ export default function Step3Participants({ data, onUpdate, isOfficer, errors = 
 
       return true;
     });
-  }, [activeSections, selectedCourses, selectedYears, activeCourses]);
+  }, [activeSections, selectedCourses, selectedYears, activeCourses, isCollegeOnly, isShsOnly]);
+
+  // Prune unassociated sections from selectedSections
+  useEffect(() => {
+    if (selectedSections.length > 0) {
+      const validNames = new Set(availableSections.map((s) => s.name));
+      const pruned = selectedSections.filter((s) => validNames.has(s));
+      if (pruned.length !== selectedSections.length) {
+        updateField('targetSections', pruned);
+      }
+    }
+  }, [availableSections]);
 
   // Section Toggles & Select All
   const toggleSection = (secNameOrId: string) => {
@@ -418,8 +549,18 @@ export default function Step3Participants({ data, onUpdate, isOfficer, errors = 
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Layers className={`w-4 h-4 ${accentText}`} />
-                  <label className="text-xs font-bold text-gray-900 uppercase tracking-wider flex items-center gap-1.5">
-                    <span>Year Levels ({selectedYears.length === 0 ? 'All Year Levels' : `${selectedYears.length} Selected`})</span>
+                  <label className="text-xs font-bold text-gray-900 uppercase tracking-wider flex items-center gap-1.5 flex-wrap">
+                    <span>Year Levels ({selectedYears.length === 0 ? 'All Eligible Levels' : `${selectedYears.length} Selected`})</span>
+                    {isCollegeOnly && (
+                      <span className="text-[10px] text-blue-700 bg-blue-50 px-2 py-0.5 rounded font-semibold border border-blue-200">
+                        College Only (SHS Disabled)
+                      </span>
+                    )}
+                    {isShsOnly && (
+                      <span className="text-[10px] text-amber-800 bg-amber-50 px-2 py-0.5 rounded font-semibold border border-amber-200">
+                        SHS Only (College Disabled)
+                      </span>
+                    )}
                     {isRestricted && <Lock className="w-3.5 h-3.5 text-amber-600" />}
                   </label>
                 </div>
@@ -430,7 +571,7 @@ export default function Step3Participants({ data, onUpdate, isOfficer, errors = 
                       onClick={selectAllYears}
                       className={`text-xs ${accentText} hover:underline font-semibold flex items-center gap-1 cursor-pointer`}
                     >
-                      <CheckSquare className="w-3.5 h-3.5" /> Select All ({availableYearLevels.length})
+                      <CheckSquare className="w-3.5 h-3.5" /> Select All ({availableYearLevels.filter(y => !isYearDisabled(y)).length})
                     </button>
                     <span className="text-gray-300">|</span>
                     <button
@@ -447,18 +588,28 @@ export default function Step3Participants({ data, onUpdate, isOfficer, errors = 
               <div className="flex flex-wrap gap-2">
                 {availableYearLevels.map(year => {
                   const isSelected = selectedYears.includes(year);
+                  const disabled = isYearDisabled(year);
                   return (
                     <button
                       type="button"
                       key={year}
-                      disabled={isRestricted}
+                      disabled={disabled}
+                      title={
+                        isRestricted
+                          ? 'Locked upon approval'
+                          : isCollegeOnly && (year === 'G11' || year === 'G12')
+                          ? 'Disabled for College-only programs'
+                          : isShsOnly && !['G11', 'G12'].includes(year)
+                          ? 'Disabled for SHS-only programs'
+                          : undefined
+                      }
                       onClick={() => toggleYear(year)}
                       className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-                        isRestricted ? 'cursor-not-allowed opacity-75' : 'cursor-pointer'
-                      } ${
-                        isSelected
-                          ? `${accentBg} text-white ${accentBorder} shadow-xs`
-                          : 'bg-gray-50 text-gray-700 border-gray-200 hover:border-[#0E4EBD] hover:bg-blue-50/50'
+                        disabled
+                          ? 'cursor-not-allowed opacity-35 bg-gray-100 text-gray-400 border-gray-200 line-through'
+                          : isSelected
+                          ? `${accentBg} text-white ${accentBorder} shadow-xs cursor-pointer`
+                          : 'bg-gray-50 text-gray-700 border-gray-200 hover:border-[#0E4EBD] hover:bg-blue-50/50 cursor-pointer'
                       }`}
                     >
                       {year}

@@ -199,7 +199,7 @@ export default function OrganizationSettings({ onUnsavedChange, initialSubTab = 
   // ─── Organization Filters & Views ───────────────────────────────────────────
   const [orgSearch, setOrgSearch] = useState('');
   const [orgTypeFilter, setOrgTypeFilter] = useState('All');
-  const [orgStatusTab, setOrgStatusTab] = useState<'active' | 'suspended' | 'archived'>('active');
+  const [orgStatusTab, setOrgStatusTab] = useState<'active' | 'archived'>('active');
 
   // Modals for Organization actions
   const [isCreateClubOpen, setIsCreateClubOpen] = useState(false);
@@ -207,7 +207,7 @@ export default function OrganizationSettings({ onUnsavedChange, initialSubTab = 
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isStatusOpen, setIsStatusOpen] = useState(false);
-  const [statusMode, setStatusMode] = useState<'suspend' | 'archive' | null>(null);
+  const [statusMode, setStatusMode] = useState<'archive' | null>(null);
 
   // ─── Types & Roles State ───────────────────────────────────────────────────
   const [typeArchivedView, setTypeArchivedView] = useState(false);
@@ -391,7 +391,6 @@ export default function OrganizationSettings({ onUnsavedChange, initialSubTab = 
               <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
                 {[
                   { key: 'active', label: 'Active' },
-                  { key: 'suspended', label: 'Suspended' },
                   { key: 'archived', label: 'Archived' }
                 ].map((st) => (
                   <button
@@ -549,26 +548,6 @@ export default function OrganizationSettings({ onUnsavedChange, initialSubTab = 
                       >
                         <Edit2 className="w-4 h-4" />
                       </button>
-
-                      {/* Suspend / Reactivate */}
-                      {!isArchived && (
-                        <button
-                          type="button"
-                          title={isSuspended ? 'Reactivate Organization' : 'Suspend Organization'}
-                          onClick={() => {
-                            setSelectedOrg(org);
-                            setStatusMode('suspend');
-                            setIsStatusOpen(true);
-                          }}
-                          className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                            isSuspended
-                              ? 'text-green-600 hover:bg-green-50'
-                              : 'text-amber-600 hover:bg-amber-50'
-                          }`}
-                        >
-                          {isSuspended ? <CheckCircle2 className="w-4 h-4" /> : <Ban className="w-4 h-4" />}
-                        </button>
-                      )}
 
                       {/* Archive / Restore */}
                       <button

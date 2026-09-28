@@ -97,6 +97,44 @@ export function useUserNameResolver() {
       console.warn('[useUserNameResolver] Error listening to advisers:', e);
     }
 
+    // 4. Listen to sas_admins (SAS Administrators / SAO Advisers)
+    try {
+      const unsubSasAdmins = onSnapshot(collection(db, 'sas_admins'), (snap) => {
+        snap.docs.forEach((d) => {
+          const data = d.data();
+          const adminName = data.displayName || `${data.firstName || ''} ${data.lastName || ''}`.trim() || data.name;
+          if (adminName) {
+            if (d.id) localMap.set(d.id.trim().toLowerCase(), adminName);
+            if (data.uid) localMap.set(String(data.uid).trim().toLowerCase(), adminName);
+            if (data.email) localMap.set(String(data.email).trim().toLowerCase(), adminName);
+          }
+        });
+        updateMap();
+      });
+      unsubs.push(unsubSasAdmins);
+    } catch (e) {
+      console.warn('[useUserNameResolver] Error listening to sas_admins:', e);
+    }
+
+    // 5. Listen to users collection (general user accounts)
+    try {
+      const unsubUsers = onSnapshot(collection(db, 'users'), (snap) => {
+        snap.docs.forEach((d) => {
+          const data = d.data();
+          const userName = data.displayName || data.fullName || `${data.firstName || ''} ${data.lastName || ''}`.trim() || data.name;
+          if (userName) {
+            if (d.id) localMap.set(d.id.trim().toLowerCase(), userName);
+            if (data.uid) localMap.set(String(data.uid).trim().toLowerCase(), userName);
+            if (data.email) localMap.set(String(data.email).trim().toLowerCase(), userName);
+          }
+        });
+        updateMap();
+      });
+      unsubs.push(unsubUsers);
+    } catch (e) {
+      // ignore if users collection is not present
+    }
+
     return () => {
       unsubs.forEach((u) => u());
     };

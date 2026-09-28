@@ -12,6 +12,7 @@ import { useOrganizationStream } from '../../organizations/hooks/useOrganization
 import { useEventTypesStream, useVenuesStream } from '../hooks/useEventConfigStream';
 import { useDepartments, useCourses, useSections } from '../../academic/hooks/useAcademicStream';
 import { EventPayablesQRControl } from '../../finance/components/EventPayablesQRControl';
+import { useEventPayablesStream } from '../../finance/hooks/usePayableStream';
 import { exportEventProposalPDF } from '../utils/event-proposal-pdf';
 import { canWithdrawProposal, canCancelEvent, isEventEditable, getEventTimingStatus } from '../utils/event-lifecycle.utils';
 import { CancelEventModal } from './CancelEventModal';
@@ -69,6 +70,25 @@ export default function OfficerEventDetailView({
   const { data: departments = [] } = useDepartments();
   const { data: courses = [] } = useCourses();
   const { data: sections = [] } = useSections();
+
+  const { data: eventPayables = [] } = useEventPayablesStream(event.id);
+  const hasPayables = Boolean(
+    eventPayables.length > 0 ||
+    event.studentPayablesEnabled === true ||
+    (event.studentPayablesEnabled !== false && ((event.adminFeeOverride || 0) > 0 || (event.suggestedFeePerStudent || 0) > 0))
+  );
+  const isQREnabled = Boolean(
+    event.enableQRTickets !== false && (event as any).enableQR !== false && event.attendanceEnabled !== false
+  );
+
+  const navSections = useMemo(() => {
+    return NAV_SECTIONS.filter((section) => {
+      if (section.id === 'payables') {
+        return hasPayables;
+      }
+      return true;
+    });
+  }, [hasPayables]);
 
   const editCheck = isEventEditable(event, 'officer');
   const isEditable = editCheck.editable;
@@ -367,7 +387,7 @@ export default function OfficerEventDetailView({
             <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-3 mb-2">
               Event Sections
             </p>
-            {NAV_SECTIONS.map((section) => {
+            {navSections.map((section) => {
               const Icon = section.icon;
               const isActive = activeSection === section.id;
 
@@ -1164,32 +1184,37 @@ export default function OfficerEventDetailView({
           </section>
 
           {/* SECTION 7: PAYABLES & QR GATE TICKETS */}
-          <section
-            ref={(el) => { sectionRefs.current['payables'] = el; }}
-            className="space-y-4"
-          >
-            <SectionHeader
-              title="7. Event Payables & QR Ticket Access Control"
-              subtitle={
-                isCancelled
-                  ? "Event cancelled — Payment collection closed, unpaid fees auto-waived, and gate passes revoked"
-                  : "Target participant collection roster, payment settlement, and QR ticket unlocking"
-              }
-            />
-
-            <div className="space-y-4">
-              <EventPayablesQRControl
-                eventId={event.id}
-                eventTitle={event.title}
-                adminFeeAmount={event.adminFeeOverride || event.suggestedFeePerStudent || totalRequested}
-                recordedByUid={profile?.studentId || profile?.id || 'officer'}
-                isOfficer={true}
-                isClubEvent={true}
-                hostingOrgName={orgName}
-                isCancelled={isCancelled}
+          {hasPayables && (
+            <section
+              ref={(el) => { sectionRefs.current['payables'] = el; }}
+              className="space-y-4"
+            >
+              <SectionHeader
+                title="7. Event Payables & QR Ticket Access Control"
+                subtitle={
+                  isCancelled
+                    ? "Event cancelled — Payment collection closed, unpaid fees auto-waived, and gate passes revoked"
+                    : isQREnabled
+                    ? "Target participant collection roster, payment settlement, and QR ticket unlocking"
+                    : "Target participant collection roster and payment settlement (QR tickets disabled)"
+                }
               />
-            </div>
-          </section>
+
+              <div className="space-y-4">
+                <EventPayablesQRControl
+                  eventId={event.id}
+                  eventTitle={event.title}
+                  adminFeeAmount={event.adminFeeOverride || event.suggestedFeePerStudent || totalRequested}
+                  recordedByUid={profile?.studentId || profile?.id || 'officer'}
+                  isOfficer={true}
+                  isClubEvent={true}
+                  hostingOrgName={orgName}
+                  isCancelled={isCancelled}
+                  isQREnabled={isQREnabled}
+                />
+              </div>
+            </section>
+          )}
 
           {/* SECTION 8: PROPOSAL HISTORY & REMARKS */}
           <section

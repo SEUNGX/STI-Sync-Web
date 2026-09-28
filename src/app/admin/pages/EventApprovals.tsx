@@ -32,7 +32,7 @@ import { TablePagination } from "../../components/common/TablePagination";
 
 const ITEMS_PER_PAGE = 8;
 
-type TabValue = "all" | "pending" | "approved" | "completed" | "archived" | "rejected" | "drafts" | "cancelled";
+type TabValue = "all" | "pending" | "approved" | "returned" | "completed" | "archived" | "rejected" | "drafts" | "cancelled";
 type DateRangeOption = "all" | "this_week" | "this_month" | "custom";
 
 function isWithinDateRange(
@@ -186,7 +186,7 @@ export function EventApprovals() {
 
   useEffect(() => {
     const tabParam = searchParams.get("tab");
-    if (tabParam && ["all", "pending", "approved", "completed", "archived", "rejected", "drafts", "cancelled"].includes(tabParam)) {
+    if (tabParam && ["all", "pending", "approved", "returned", "completed", "archived", "rejected", "drafts", "cancelled"].includes(tabParam)) {
       setActiveTab(tabParam as TabValue);
       setCurrentPage(1);
     }
@@ -268,6 +268,7 @@ export function EventApprovals() {
         }
 
         if (activeTab === "pending" && event.proposalStatus !== "pending" && event.proposalStatus !== "pending_review") return false;
+        if (activeTab === "returned" && event.proposalStatus !== "returned") return false;
         if (activeTab === "approved") {
           const isDone = event.status === "completed" || event.proposalStatus === "completed" || isEventPast(event);
           if (event.proposalStatus !== "approved" || isDone) return false;
@@ -352,6 +353,7 @@ export function EventApprovals() {
   const allCount = events.filter((e) => !e.isArchived && !e.isDeleted).length;
   const pendingCount = events.filter((e) => (e.proposalStatus === "pending" || e.proposalStatus === "pending_review") && e.status !== "cancelled" && !e.isArchived && !e.isDeleted).length;
   const approvedCount = events.filter((e) => e.proposalStatus === "approved" && e.status !== "completed" && !isEventPast(e) && e.status !== "cancelled" && !e.isArchived && !e.isDeleted).length;
+  const returnedCount = events.filter((e) => e.proposalStatus === "returned" && e.status !== "cancelled" && !e.isArchived && !e.isDeleted).length;
   const completedCount = events.filter((e) => (e.status === "completed" || e.proposalStatus === "completed" || (e.proposalStatus === "approved" && isEventPast(e))) && e.status !== "cancelled" && !e.isArchived && !e.isDeleted).length;
   const archivedCount = events.filter((e) => e.isArchived === true && !e.isDeleted).length;
   const rejectedCount = events.filter((e) => e.proposalStatus === "rejected" && e.status !== "cancelled" && !e.isArchived && !e.isDeleted).length;
@@ -689,6 +691,7 @@ export function EventApprovals() {
               { key: "all", label: "All", count: allCount },
               { key: "pending", label: "Pending", count: pendingCount },
               { key: "approved", label: "Approved", count: approvedCount },
+              { key: "returned", label: "Returned", count: returnedCount },
               { key: "completed", label: "Completed", count: completedCount },
               { key: "archived", label: "Archived", count: archivedCount },
               { key: "cancelled", label: "Cancelled", count: cancelledCount },

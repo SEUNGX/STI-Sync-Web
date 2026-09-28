@@ -470,7 +470,10 @@ export function validateStep4(data: EventFormData): StepValidationResult {
   const errors: string[] = [];
   const fieldErrors: Record<string, string> = {};
 
-  const isQREnabled = Boolean(data.enableQRTickets === true || (data as any).enableQR === true);
+  const isQREnabled = Boolean(
+    data.enableQRTickets !== false && (data as any).enableQR !== false && data.attendanceEnabled !== false
+  );
+
   if (!isQREnabled) {
     // If QR ticketing is not enabled, staff / scanners are not required
     return { isValid: true, errors: [] };
@@ -552,6 +555,8 @@ export function validateStep6(data: EventFormData, isOfficer = false): StepValid
       fieldErrors.activityProposal = 'Activity Proposal document is required.';
     }
   }
+
+
 
   // Any custom document marked required must have a fileUrl
   docs.forEach((doc, idx) => {

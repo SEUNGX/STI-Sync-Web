@@ -21,6 +21,7 @@ import { useOrganizationStream } from '../../modules/organizations/hooks/useOrga
 import { useEventTypesStream, useVenuesStream } from '../../modules/events/hooks/useEventConfigStream';
 import { useDepartments, useCourses, useSections } from '../../modules/academic/hooks/useAcademicStream';
 import { EventPayablesQRControl } from '../../modules/finance/components/EventPayablesQRControl';
+import { useEventPayablesStream } from '../../modules/finance/hooks/usePayableStream';
 import { exportEventProposalPDF } from '../../modules/events/utils/event-proposal-pdf';
 import { formatCurrency } from '../../utils/currency';
 import { formatAppDate, formatAppDateTime, formatSessionDateTime, format12HourTime } from '../../utils/date';
@@ -169,9 +170,19 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
     }
   };
 
+  const { data: eventPayables = [] } = useEventPayablesStream(event.id);
+  const hasPayables = Boolean(
+    eventPayables.length > 0 ||
+    event.studentPayablesEnabled === true ||
+    (event.studentPayablesEnabled !== false && ((event.adminFeeOverride || 0) > 0 || (event.suggestedFeePerStudent || 0) > 0))
+  );
+  const isQREnabled = Boolean(
+    event.enableQRTickets !== false && (event as any).enableQR !== false && event.attendanceEnabled !== false
+  );
+
   const navItems = NAV_SECTIONS.filter(s => {
     if (s.id === 'payables') {
-      return (isApproved || isCancelled) && event.studentPayablesEnabled !== false;
+      return (isApproved || isCompleted || isCancelled) && hasPayables;
     }
     return true;
   });
@@ -1149,8 +1160,8 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
             </div>
           </section>
 
-          {/* SECTION 7 — PAYABLES & QR ACCESS CONTROL (For Approved/Completed/Cancelled Events) */}
-          {(isApproved || isCompleted || isCancelled) && (
+          {/* SECTION 7 — PAYABLES & QR ACCESS CONTROL (For Approved/Completed/Cancelled Events with Payables) */}
+          {(isApproved || isCompleted || isCancelled) && hasPayables && (
             <section
               ref={el => { sectionRefs.current['payables'] = el; }}
               onMouseEnter={() => { setActiveSection('payables'); setVisitedSections(p => new Set([...p, 'payables'])); }}
@@ -1163,7 +1174,9 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
                     ? "Event cancelled — Collections closed, fees auto-waived, and gate passes revoked"
                     : isCompleted
                     ? "Event completed — Full attendee records, payment collection, and ticket status"
-                    : "Participant fees, collection status, and gate pass lock controls"
+                    : isQREnabled
+                    ? "Participant fees, collection status, and gate pass lock controls"
+                    : "Participant fees and collection status (QR tickets disabled)"
                 }
               />
               <div className="space-y-4">
@@ -1184,6 +1197,7 @@ export default function EventProposalReview({ event, onClose }: EventProposalRev
                   }
                   hostingOrgName={orgName}
                   isCancelled={isCancelled}
+                  isQREnabled={isQREnabled}
                 />
               </div>
             </section>

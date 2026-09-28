@@ -89,6 +89,9 @@ export default function Step5Budget({ data, onUpdate, isOfficer, errors = {}, is
   const amountPerStudent = data.adminFeeOverride !== undefined ? data.adminFeeOverride : calculatedPerStudent;
   const totalCollected = amountPerStudent * participantCount;
   const surplus = totalCollected - totalProposed;
+  const isQREnabled = Boolean(
+    data.enableQRTickets !== false && (data as any).enableQR !== false && data.attendanceEnabled !== false
+  );
 
   useEffect(() => {
     if (data.studentPayablesEnabled && data.adminFeeOverride === undefined) {
@@ -553,22 +556,26 @@ export default function Step5Budget({ data, onUpdate, isOfficer, errors = {}, is
                         </div>
                       </div>
                     </div>
-                    <div className="w-14 h-14 bg-[#FFC107]/20 border-2 border-[#FFC107] rounded-xl flex items-center justify-center flex-shrink-0">
-                      <QrCode className="w-7 h-7 text-[#FFC107]" />
-                    </div>
+                    {isQREnabled && (
+                      <div className="w-14 h-14 bg-[#FFC107]/20 border-2 border-[#FFC107] rounded-xl flex items-center justify-center flex-shrink-0">
+                        <QrCode className="w-7 h-7 text-[#FFC107]" />
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                {/* QR Lock Notice */}
-                <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-xl">
-                  <Lock className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <div className="font-bold text-red-800 text-sm mb-1">QR Attendance Ticket Lock Policy</div>
-                    <p className="text-red-700 text-sm">
-                      A student's QR code for attendance check-in will <strong>not be unlocked</strong> until their event payment has been confirmed. Unpaid students will be blocked from scanning in at the event gate.
-                    </p>
+                {/* QR Lock Notice — only shown if QR attendance tickets are enabled */}
+                {isQREnabled && (
+                  <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-xl">
+                    <Lock className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <div className="font-bold text-red-800 text-sm mb-1">QR Attendance Ticket Lock Policy</div>
+                      <p className="text-red-700 text-sm">
+                        A student's QR code for attendance check-in will <strong>not be unlocked</strong> until their event payment has been confirmed. Unpaid students will be blocked from scanning in at the event gate.
+                      </p>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
 
               {/* Footer Actions */}

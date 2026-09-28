@@ -128,10 +128,10 @@ export function StudentRegistry() {
     switch (activeView) {
       case 'dashboard':
         return (
-          <RegistryDashboard 
-            onNavigate={handleNavigate} 
-            categorizedStudents={{ ...categorizedStudents, suspended: [] }} 
-            activeSemester={activeSemester} 
+          <RegistryDashboard
+            onNavigate={handleNavigate}
+            categorizedStudents={{ ...categorizedStudents, suspended: [] }}
+            activeSemester={activeSemester}
             activeCollegePeriod={activeCollegePeriod}
             activeShsPeriod={activeShsPeriod}
             allStudents={students}
@@ -141,9 +141,9 @@ export function StudentRegistry() {
         return <PendingVerification students={pending} initialStudentId={targetStudentId} />;
       case 'reenrollment':
         return (
-          <ReEnrollmentManagement 
-            students={active} 
-            activeSemester={activeSemester} 
+          <ReEnrollmentManagement
+            students={active}
+            activeSemester={activeSemester}
             activeCollegePeriod={activeCollegePeriod}
             activeShsPeriod={activeShsPeriod}
           />
@@ -156,10 +156,10 @@ export function StudentRegistry() {
         return <ArchivedGraduates students={archived} />;
       default:
         return (
-          <RegistryDashboard 
-            onNavigate={handleNavigate} 
-            categorizedStudents={{ ...categorizedStudents, suspended: [] }} 
-            activeSemester={activeSemester} 
+          <RegistryDashboard
+            onNavigate={handleNavigate}
+            categorizedStudents={{ ...categorizedStudents, suspended: [] }}
+            activeSemester={activeSemester}
             activeCollegePeriod={activeCollegePeriod}
             activeShsPeriod={activeShsPeriod}
             allStudents={students}
@@ -174,21 +174,19 @@ export function StudentRegistry() {
       <div className="flex flex-wrap items-center gap-2 bg-white border border-[#E0E0E0] rounded-xl p-2 shadow-sm">
         <button
           onClick={() => setActiveView('dashboard')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
-            activeView === 'dashboard'
-              ? 'bg-[#001A4D] text-white'
-              : 'text-[#001A4D] hover:bg-gray-50'
-          }`}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${activeView === 'dashboard'
+            ? 'bg-[#001A4D] text-white'
+            : 'text-[#001A4D] hover:bg-gray-50'
+            }`}
         >
-          Dashboard
+          Registry Home
         </button>
         <button
           onClick={() => setActiveView('pending')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
-            activeView === 'pending'
-              ? 'bg-[#001A4D] text-white'
-              : 'text-[#001A4D] hover:bg-gray-50'
-          }`}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${activeView === 'pending'
+            ? 'bg-[#001A4D] text-white'
+            : 'text-[#001A4D] hover:bg-gray-50'
+            }`}
         >
           <Clock className="w-4 h-4" />
           Pending Verification
@@ -200,11 +198,10 @@ export function StudentRegistry() {
         </button>
         <button
           onClick={() => setActiveView('reenrollment')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
-            activeView === 'reenrollment'
-              ? 'bg-[#001A4D] text-white'
-              : 'text-[#001A4D] hover:bg-gray-50'
-          }`}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${activeView === 'reenrollment'
+            ? 'bg-[#001A4D] text-white'
+            : 'text-[#001A4D] hover:bg-gray-50'
+            }`}
         >
           <RefreshCw className="w-4 h-4" />
           Re-enrollment
@@ -216,33 +213,30 @@ export function StudentRegistry() {
         </button>
         <button
           onClick={() => setActiveView('active')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
-            activeView === 'active'
-              ? 'bg-[#001A4D] text-white'
-              : 'text-[#001A4D] hover:bg-gray-50'
-          }`}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${activeView === 'active'
+            ? 'bg-[#001A4D] text-white'
+            : 'text-[#001A4D] hover:bg-gray-50'
+            }`}
         >
           <UserCheck className="w-4 h-4" />
           Active Students
         </button>
         <button
           onClick={() => setActiveView('inactive')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
-            activeView === 'inactive'
-              ? 'bg-[#001A4D] text-white'
-              : 'text-[#001A4D] hover:bg-gray-50'
-          }`}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${activeView === 'inactive'
+            ? 'bg-[#001A4D] text-white'
+            : 'text-[#001A4D] hover:bg-gray-50'
+            }`}
         >
           <UserX className="w-4 h-4" />
           Inactive Students
         </button>
         <button
           onClick={() => setActiveView('archived')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
-            activeView === 'archived'
-              ? 'bg-[#001A4D] text-white'
-              : 'text-[#001A4D] hover:bg-gray-50'
-          }`}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${activeView === 'archived'
+            ? 'bg-[#001A4D] text-white'
+            : 'text-[#001A4D] hover:bg-gray-50'
+            }`}
         >
           <Archive className="w-4 h-4" />
           Archived

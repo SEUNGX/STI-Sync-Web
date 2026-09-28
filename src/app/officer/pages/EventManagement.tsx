@@ -76,6 +76,61 @@ function formatSubmittedDate(dateInput: any): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
+export function getEventBudget(event: EventDocument): number {
+  if (event.totalApprovedBudget !== undefined && event.totalApprovedBudget !== null && Number(event.totalApprovedBudget) > 0) {
+    return Number(event.totalApprovedBudget);
+  }
+  if ((event as any).allocatedBudget !== undefined && Number((event as any).allocatedBudget) > 0) {
+    return Number((event as any).allocatedBudget);
+  }
+  if ((event as any).totalRequestedBudget !== undefined && Number((event as any).totalRequestedBudget) > 0) {
+    return Number((event as any).totalRequestedBudget);
+  }
+  if (Array.isArray(event.budgetItems) && event.budgetItems.length > 0) {
+    return event.budgetItems.reduce((acc, item: any) => {
+      const lineCost = Number(item.approvedAmount) > 0 
+        ? Number(item.approvedAmount) 
+        : (Number(item.quantity) || 0) * (Number(item.unitCost) || Number(item.cost) || 0);
+      return acc + (Number(lineCost) || Number(item.totalCost) || 0);
+    }, 0);
+  }
+  return 0;
+}
+
+function formatEventDateRange(sessions?: any[]): string {
+  if (!sessions || sessions.length === 0) return 'TBD';
+
+  const validDates = sessions
+    .map((s) => parseDateSafe(s.date))
+    .filter((d): d is Date => d !== null)
+    .sort((a, b) => a.getTime() - b.getTime());
+
+  if (validDates.length === 0) return 'TBD';
+
+  const firstDate = validDates[0];
+  const lastDate = validDates[validDates.length - 1];
+
+  if (firstDate.toDateString() === lastDate.toDateString()) {
+    return firstDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  const startMonth = firstDate.toLocaleDateString('en-US', { month: 'short' });
+  const endMonth = lastDate.toLocaleDateString('en-US', { month: 'short' });
+  const startDay = firstDate.getDate();
+  const endDay = lastDate.getDate();
+  const startYear = firstDate.getFullYear();
+  const endYear = lastDate.getFullYear();
+
+  if (startYear === endYear) {
+    if (startMonth === endMonth) {
+      return `${startMonth} ${startDay}-${endDay}`;
+    }
+    return `${startMonth} ${startDay} - ${endMonth} ${endDay}`;
+  }
+
+  return `${startMonth} ${startDay}, ${startYear} - ${endMonth} ${endDay}, ${endYear}`;
+}
+
 function getEventTimestamp(event: EventDocument): number {
   const c = parseDateSafe(event.createdAt);
   if (c) return c.getTime();
@@ -284,15 +339,15 @@ export default function EventManagement() {
       toast.info(`No ${activeStatus === 'all' ? '' : activeStatus + ' '}events to export.`);
       return;
     }
-    const headers = ['Event Title', 'Category', 'Date', 'Venue', 'Total Budget', 'Submitted', 'Status'];
+    const headers = ['Event Title', 'Category', 'Event Date', 'Venue', 'Total Budget', 'Submitted', 'Status'];
     const rows = filteredEvents.map((e) => {
-      const firstDate = e.sessions && e.sessions[0] ? formatShortDate(e.sessions[0].date) : 'TBD';
+      const eventDate = formatEventDateRange(e.sessions);
       const venueName = venueMap.get(e.venueId || '') || e.eventFormat || 'On-Campus';
-      const totalBudget = (e.budgetItems || []).reduce((sum, b) => sum + (Number(b.totalCost) || 0), 0);
+      const totalBudget = getEventBudget(e);
       return [
         `"${(e.title || '').replace(/"/g, '""')}"`,
         `"${categoryMap.get(e.eventCategoryId || '') || 'General'}"`,
-        `"${firstDate}"`,
+        `"${eventDate}"`,
         `"${venueName}"`,
         `"${totalBudget}"`,
         `"${formatSubmittedDate(e.createdAt)}"`,
@@ -403,43 +458,9 @@ export default function EventManagement() {
       {/* ── Header ── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <div className="text-gray-500 text-xs mb-1">
-            Dashboard &gt; Event Management {activeOrgName && <span className="font-semibold text-[#001A4D]">({activeOrgName})</span>}
-          </div>
           <h1 className="text-2xl font-bold text-[#001A4D] tracking-tight">
-            Event Proposals &amp; Management
+            Event Management
           </h1>
-          <p className="text-gray-500 text-sm mt-0.5">
-            Create, manage, and submit event proposals for Student Affairs review
-          </p>
-
-          {/* Metric Summary Badges */}
-          <div className="flex flex-wrap items-center gap-2.5 mt-3">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50/80 border border-amber-200 rounded-lg text-xs font-bold text-amber-800">
-              <span className="font-extrabold text-amber-900">{statusCounts.pending}</span> Pending Review
-            </div>
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50/80 border border-emerald-200 rounded-lg text-xs font-bold text-emerald-800">
-              <span className="font-extrabold text-emerald-900">{statusCounts.approved}</span> Approved
-            </div>
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50/80 border border-blue-200 rounded-lg text-xs font-bold text-blue-800">
-              <span className="font-extrabold text-blue-900">{statusCounts.completed}</span> Completed
-            </div>
-            {statusCounts.archived > 0 && (
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 border border-slate-300 rounded-lg text-xs font-bold text-slate-700">
-                <span className="font-extrabold text-slate-900">{statusCounts.archived}</span> Archived
-              </div>
-            )}
-            {statusCounts.returned > 0 && (
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50/80 border border-amber-300 rounded-lg text-xs font-bold text-amber-900">
-                <span className="font-extrabold">{statusCounts.returned}</span> Returned
-              </div>
-            )}
-            {statusCounts.rejected > 0 && (
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-red-50/80 border border-red-200 rounded-lg text-xs font-bold text-red-800">
-                <span className="font-extrabold text-red-900">{statusCounts.rejected}</span> Rejected
-              </div>
-            )}
-          </div>
         </div>
 
         {/* Solid button without gradients */}
@@ -455,6 +476,117 @@ export default function EventManagement() {
         </button>
       </div>
 
+      {/* ── Metric Summary Cards ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Pending Card */}
+        <div
+          onClick={() => handleTabChange('pending')}
+          className={`p-4 rounded-2xl border transition-all cursor-pointer relative overflow-hidden group shadow-xs ${
+            activeStatus === 'pending'
+              ? 'bg-gradient-to-br from-amber-500 to-amber-600 text-white border-amber-600 ring-2 ring-amber-400/30 shadow-md'
+              : 'bg-white border-gray-200 hover:border-amber-300 hover:shadow-sm'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className={`text-xs font-bold uppercase tracking-wider ${activeStatus === 'pending' ? 'text-amber-100' : 'text-gray-500'}`}>
+              Pending Review
+            </span>
+            <div className={`p-2 rounded-xl ${activeStatus === 'pending' ? 'bg-white/20 text-white' : 'bg-amber-50 text-amber-700'}`}>
+              <Clock className="w-4 h-4" />
+            </div>
+          </div>
+          <div className={`text-2xl font-black mb-1 ${activeStatus === 'pending' ? 'text-white' : 'text-gray-900'}`}>
+            {loading ? '...' : statusCounts.pending}
+          </div>
+          <div className="flex items-center justify-between">
+            <span className={`text-[11px] font-medium ${activeStatus === 'pending' ? 'text-amber-100' : 'text-amber-700'}`}>
+              Awaiting SAO Action
+            </span>
+          </div>
+        </div>
+
+        {/* Approved Card */}
+        <div
+          onClick={() => handleTabChange('approved')}
+          className={`p-4 rounded-2xl border transition-all cursor-pointer relative overflow-hidden group shadow-xs ${
+            activeStatus === 'approved'
+              ? 'bg-gradient-to-br from-emerald-600 to-emerald-700 text-white border-emerald-700 ring-2 ring-emerald-400/30 shadow-md'
+              : 'bg-white border-gray-200 hover:border-emerald-300 hover:shadow-sm'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className={`text-xs font-bold uppercase tracking-wider ${activeStatus === 'approved' ? 'text-emerald-100' : 'text-gray-500'}`}>
+              Approved
+            </span>
+            <div className={`p-2 rounded-xl ${activeStatus === 'approved' ? 'bg-white/20 text-white' : 'bg-emerald-50 text-emerald-600'}`}>
+              <CheckCircle2 className="w-4 h-4" />
+            </div>
+          </div>
+          <div className={`text-2xl font-black mb-1 ${activeStatus === 'approved' ? 'text-white' : 'text-gray-900'}`}>
+            {loading ? '...' : statusCounts.approved}
+          </div>
+          <div className="flex items-center justify-between">
+            <span className={`text-[11px] font-medium ${activeStatus === 'approved' ? 'text-emerald-100' : 'text-emerald-600'}`}>
+              Active &amp; Scheduled
+            </span>
+          </div>
+        </div>
+
+        {/* Completed Card */}
+        <div
+          onClick={() => handleTabChange('completed')}
+          className={`p-4 rounded-2xl border transition-all cursor-pointer relative overflow-hidden group shadow-xs ${
+            activeStatus === 'completed'
+              ? 'bg-gradient-to-br from-blue-600 to-blue-700 text-white border-blue-700 ring-2 ring-blue-400/30 shadow-md'
+              : 'bg-white border-gray-200 hover:border-blue-300 hover:shadow-sm'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className={`text-xs font-bold uppercase tracking-wider ${activeStatus === 'completed' ? 'text-blue-100' : 'text-gray-500'}`}>
+              Completed
+            </span>
+            <div className={`p-2 rounded-xl ${activeStatus === 'completed' ? 'bg-white/20 text-white' : 'bg-blue-50 text-blue-600'}`}>
+              <Calendar className="w-4 h-4" />
+            </div>
+          </div>
+          <div className={`text-2xl font-black mb-1 ${activeStatus === 'completed' ? 'text-white' : 'text-gray-900'}`}>
+            {loading ? '...' : statusCounts.completed}
+          </div>
+          <div className="flex items-center justify-between">
+            <span className={`text-[11px] font-medium ${activeStatus === 'completed' ? 'text-blue-100' : 'text-blue-600'}`}>
+              Concluded Events
+            </span>
+          </div>
+        </div>
+
+        {/* Rejected Card */}
+        <div
+          onClick={() => handleTabChange('rejected')}
+          className={`p-4 rounded-2xl border transition-all cursor-pointer relative overflow-hidden group shadow-xs ${
+            activeStatus === 'rejected'
+              ? 'bg-gradient-to-br from-rose-600 to-red-700 text-white border-rose-700 ring-2 ring-rose-400/30 shadow-md'
+              : 'bg-white border-gray-200 hover:border-rose-300 hover:shadow-sm'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className={`text-xs font-bold uppercase tracking-wider ${activeStatus === 'rejected' ? 'text-rose-100' : 'text-gray-500'}`}>
+              Rejected
+            </span>
+            <div className={`p-2 rounded-xl ${activeStatus === 'rejected' ? 'bg-white/20 text-white' : 'bg-rose-50 text-rose-600'}`}>
+              <XCircle className="w-4 h-4" />
+            </div>
+          </div>
+          <div className={`text-2xl font-black mb-1 ${activeStatus === 'rejected' ? 'text-white' : 'text-gray-900'}`}>
+            {loading ? '...' : statusCounts.rejected}
+          </div>
+          <div className="flex items-center justify-between">
+            <span className={`text-[11px] font-medium ${activeStatus === 'rejected' ? 'text-rose-100' : 'text-rose-600'}`}>
+              Declined Proposals
+            </span>
+          </div>
+        </div>
+      </div>
+
       {/* ── Main Container: Tabs + Search + Fixed Height Table + Pagination ── */}
       <div className="bg-white border border-[#E5E7EB] rounded-2xl shadow-xs overflow-hidden">
         {/* Top Control Bar */}
@@ -465,12 +597,12 @@ export default function EventManagement() {
               { key: 'all', label: 'All', count: statusCounts.all },
               { key: 'pending', label: 'Pending', count: statusCounts.pending },
               { key: 'approved', label: 'Approved', count: statusCounts.approved },
-              { key: 'completed', label: 'Completed', count: statusCounts.completed },
-              { key: 'archived', label: 'Archived', count: statusCounts.archived },
               { key: 'returned', label: 'Returned', count: statusCounts.returned },
-              { key: 'cancelled', label: 'Cancelled', count: statusCounts.cancelled },
+              { key: 'completed', label: 'Completed', count: statusCounts.completed },
               { key: 'rejected', label: 'Rejected', count: statusCounts.rejected },
               { key: 'draft', label: 'Drafts', count: statusCounts.draft },
+              { key: 'archived', label: 'Archived', count: statusCounts.archived },
+              { key: 'cancelled', label: 'Cancelled', count: statusCounts.cancelled },
             ].map((tab) => {
               const isActive = activeStatus === tab.key;
               return (
@@ -624,7 +756,7 @@ export default function EventManagement() {
                 <tr>
                   <th className="py-3 px-4">Event</th>
                   <th className="py-3 px-4">Category</th>
-                  <th className="py-3 px-4">Date</th>
+                  <th className="py-3 px-4">Event Date</th>
                   <th className="py-3 px-4">Venue</th>
                   <th className="py-3 px-4">Budget</th>
                   <th className="py-3 px-4">Submitted</th>
@@ -636,8 +768,8 @@ export default function EventManagement() {
                 {paginatedItems.map((event) => {
                   const categoryName = categoryMap.get(event.eventCategoryId || '') || 'General';
                   const venueName = venueMap.get(event.venueId || '') || event.eventFormat || 'On-Campus';
-                  const totalBudget = (event.budgetItems || []).reduce((sum, b) => sum + (Number(b.totalCost) || 0), 0);
-                  const firstSessionDate = event.sessions && event.sessions[0] ? formatShortDate(event.sessions[0].date) : 'TBD';
+                  const totalBudget = getEventBudget(event);
+                  const eventDateRange = formatEventDateRange(event.sessions);
 
                   const isRejected = event.proposalStatus === 'rejected';
                   const isReturned = event.proposalStatus === 'returned';
@@ -669,11 +801,11 @@ export default function EventManagement() {
                         </span>
                       </td>
 
-                      {/* Date */}
+                      {/* Event Date */}
                       <td className="py-3.5 px-4 text-gray-600 font-medium whitespace-nowrap">
                         <div className="flex items-center gap-1.5">
                           <Calendar className="w-3.5 h-3.5 text-gray-400" />
-                          <span>{firstSessionDate}</span>
+                          <span>{eventDateRange}</span>
                         </div>
                       </td>
 

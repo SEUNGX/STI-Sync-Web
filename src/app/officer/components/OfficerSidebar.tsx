@@ -9,7 +9,6 @@ import {
   Users,
   Bell,
   Settings,
-  ChevronDown,
   Wallet,
   Files,
   BarChart3,
@@ -76,13 +75,12 @@ export function OfficerSidebar() {
           STI College Ormoc
         </p>
 
-        {/* Organization Context Switcher */}
-        <button className="w-full flex items-center justify-between px-3 py-2 bg-blue-50/70 border border-blue-200/80 rounded-lg hover:bg-blue-100/70 transition-colors">
-          <span className="text-[#0E4EBD] text-xs font-semibold truncate pr-2" title={activeOrg?.name || ''}>
-            {activeOrg ? activeOrg.name : (profile?.activeOrganizationId ? 'Managing Organization...' : 'Select Organization')}
-          </span>
-          <ChevronDown className="text-[#0E4EBD] flex-shrink-0 w-3.5 h-3.5" />
-        </button>
+        {/* Organization Context Display */}
+        <div className="w-full px-3 py-2 bg-blue-50/70 border border-blue-200/80 rounded-lg text-center">
+          <p className="text-[#0E4EBD] text-xs font-semibold truncate" title={activeOrg?.name || ''}>
+            {activeOrg ? activeOrg.name : (profile?.activeOrganizationId ? 'Managing Organization...' : 'Student Organization')}
+          </p>
+        </div>
       </div>
 
       {/* Navigation Items */}

@@ -20,6 +20,7 @@ interface EventPayablesQRControlProps {
   hostingOrgName?: string;
   readOnly?: boolean;
   isCancelled?: boolean;
+  isQREnabled?: boolean;
 }
 
 export function EventPayablesQRControl({
@@ -32,6 +33,7 @@ export function EventPayablesQRControl({
   hostingOrgName,
   readOnly = false,
   isCancelled = false,
+  isQREnabled = true,
 }: EventPayablesQRControlProps) {
   const { data: payables, loading } = useEventPayablesStream(eventId);
   const { data: students } = useStudents();
@@ -206,7 +208,11 @@ export function EventPayablesQRControl({
             <h3 className="text-lg font-bold">Student Payables & QR Access Control</h3>
           </div>
           <p className="text-gray-300 text-xs">
-            {canManagePayments
+            {!isQREnabled
+              ? (canManagePayments
+                  ? `Manage student fee collections and payment settlement for ${eventTitle}`
+                  : `View student payables roster and payment records for ${eventTitle}`)
+              : canManagePayments
               ? `Manage student payments and explicitly unlock or lock event QR ticket entry for ${eventTitle}`
               : `View student payables roster and QR ticket entry status for ${eventTitle}`}
           </p>
@@ -219,8 +225,16 @@ export function EventPayablesQRControl({
             <p className="font-bold text-sm text-[#FFC107]">{formatCurrency(totalCollected)} <span className="text-gray-300 font-normal text-xs">/ {formatCurrency(totalAssigned)}</span></p>
           </div>
           <div className="bg-white/10 px-3.5 py-2 rounded-lg border border-white/10">
-            <p className="text-gray-400 text-[10px] uppercase font-semibold">Unlocked Tickets</p>
-            <p className="font-bold text-sm text-emerald-400">{unlockedCount} <span className="text-gray-300 font-normal text-xs">/ {payables.length}</span></p>
+            <p className="text-gray-400 text-[10px] uppercase font-semibold">{isQREnabled ? 'Unlocked Tickets' : 'QR Gate Pass'}</p>
+            <p className="font-bold text-sm text-emerald-400">
+              {isQREnabled ? (
+                <>
+                  {unlockedCount} <span className="text-gray-300 font-normal text-xs">/ {payables.length}</span>
+                </>
+              ) : (
+                <span className="text-gray-300 text-xs font-semibold">Not Required</span>
+              )}
+            </p>
           </div>
           <button
             onClick={handleSyncPayablesData}
@@ -234,7 +248,7 @@ export function EventPayablesQRControl({
         </div>
       </div>
 
-      {/* Notice Banner when Event is Cancelled or Admin is viewing a club event */}
+      {/* Notice Banner when Event is Cancelled or Admin is viewing a club event or QR is disabled */}
       {isCancelled ? (
         <div className="p-4 bg-red-50 border-b border-red-200 flex items-start gap-3 text-xs text-red-900">
           <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
@@ -247,6 +261,16 @@ export function EventPayablesQRControl({
             </div>
             <p className="text-red-700 text-[11px] mt-0.5 leading-relaxed">
               This event has been cancelled. Recording payments and unlocking QR attendance passes are disabled. Unpaid payables have been waived and any collected fees have been queued for refund in the Finance Center.
+            </p>
+          </div>
+        </div>
+      ) : !isQREnabled ? (
+        <div className="p-3.5 bg-blue-50 border-b border-blue-200 flex items-start gap-2.5 text-xs text-blue-900">
+          <AlertCircle className="w-4 h-4 text-[#0E4EBD] flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="font-bold text-[#001A4D]">Event Payables Active — QR Tickets Not Required</p>
+            <p className="text-blue-800 text-[11px] mt-0.5">
+              Payment collections and student fee tracking are fully functional for this event. Since QR tickets are not required, QR ticket unlocking buttons are disabled.
             </p>
           </div>
         </div>
@@ -282,8 +306,12 @@ export function EventPayablesQRControl({
               { id: 'all', label: `All (${payables.length})` },
               { id: 'unpaid', label: `Unpaid (${unpaidCount})` },
               { id: 'paid', label: `Paid (${paidCount})` },
-              { id: 'locked', label: `Locked (${lockedCount})` },
-              { id: 'unlocked', label: `Unlocked (${unlockedCount})` },
+              ...(isQREnabled
+                ? [
+                    { id: 'locked' as const, label: `Locked (${lockedCount})` },
+                    { id: 'unlocked' as const, label: `Unlocked (${unlockedCount})` },
+                  ]
+                : []),
             ] as const
           ).map((f) => (
             <button
@@ -311,7 +339,7 @@ export function EventPayablesQRControl({
               <th className="px-5 py-3">Fee Amount</th>
               <th className="px-5 py-3">Paid Amount</th>
               <th className="px-5 py-3">Payment Status</th>
-              <th className="px-5 py-3">QR Ticket Access</th>
+              <th className="px-5 py-3">{isQREnabled ? 'QR Ticket Access' : 'QR Ticket Access (Disabled)'}</th>
               <th className="px-5 py-3 text-right">Actions</th>
             </tr>
           </thead>
@@ -366,6 +394,16 @@ export function EventPayablesQRControl({
                         <Lock className="w-3.5 h-3.5 text-gray-400" />
                         <span>Revoked</span>
                       </span>
+                    ) : !isQREnabled ? (
+                      <button
+                        type="button"
+                        disabled
+                        className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold inline-flex items-center gap-1.5 bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed opacity-75"
+                        title="QR tickets are not required for this event. Ticket access control buttons are disabled."
+                      >
+                        <Lock className="w-3.5 h-3.5 text-gray-400" />
+                        <span>Disabled</span>
+                      </button>
                     ) : canManagePayments ? (
                       <button
                         onClick={() => handleToggleQR(payable.id, isUnlocked)}
@@ -503,6 +541,7 @@ export function EventPayablesQRControl({
           recordedByUid={recordedByUid}
           resolvedName={getStudentDisplayName(selectedPayable)}
           resolvedSchoolId={getStudentDisplayId(selectedPayable)}
+          isQREnabled={isQREnabled}
         />
       )}
     </div>
