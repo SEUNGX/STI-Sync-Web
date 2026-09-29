@@ -324,11 +324,114 @@ export function getEventTimingStatus(event?: Partial<EventDocument> | null): Eve
 }
 
 /**
+ * Checks whether all scheduled sessions of an event have officially ended.
+ */
+export function areEventSessionsOver(
+  event?: Partial<EventDocument> | null
+): { allOver: boolean; reason?: string; unfinishedSession?: any } {
+  if (!event) {
+    return { allOver: false, reason: 'Event not found.' };
+  }
+
+  const sessions = event.sessions || [];
+  if (sessions.length === 0) {
+    // If no explicit sessions array, check startDate / endDate fallback if present
+    if (event.endDate || event.startDate) {
+      const dateStr = typeof (event.endDate || event.startDate) === 'string'
+        ? (event.endDate || event.startDate)!.split('T')[0]
+        : '';
+      if (dateStr) {
+        const [year, month, day] = dateStr.split('-').map(Number);
+        const endParts = (event.endTime || '23:59').split(':').map(Number);
+        const end = new Date(year, month - 1, day, endParts[0] || 23, endParts[1] || 59, 59);
+        if (new Date() < end) {
+          return {
+            allOver: false,
+            reason: `Event date has not finished yet (scheduled until ${dateStr} ${event.endTime || '23:59'}).`,
+          };
+        }
+      }
+    }
+    return { allOver: true };
+  }
+
+  const now = new Date();
+  for (const s of sessions) {
+    if (!s.date) continue;
+    let dateStr = '';
+    if (typeof s.date === 'string') {
+      dateStr = s.date.split('T')[0];
+    } else if (s.date && typeof s.date.toDate === 'function') {
+      dateStr = s.date.toDate().toISOString().split('T')[0];
+    } else if (s.date instanceof Date) {
+      dateStr = s.date.toISOString().split('T')[0];
+    } else if (s.date && typeof s.date.seconds === 'number') {
+      dateStr = new Date(s.date.seconds * 1000).toISOString().split('T')[0];
+    }
+
+    if (!dateStr) continue;
+
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const endParts = (s.endTime || '23:59').split(':').map(Number);
+    const end = new Date(year, month - 1, day, endParts[0] || 23, endParts[1] || 59, 59);
+
+    if (now < end) {
+      return {
+        allOver: false,
+        unfinishedSession: s,
+        reason: `Session "${s.title || 'Scheduled Session'}" is not over yet (scheduled until ${dateStr} ${s.endTime || '23:59'}). All sessions must conclude before the event can be completed.`,
+      };
+    }
+  }
+
+  return { allOver: true };
+}
+
+/**
+ * Checks whether an event can be concluded.
+ */
+export function canConcludeEvent(
+  event?: Partial<EventDocument> | null
+): { canConclude: boolean; reason?: string; unfinishedSession?: any } {
+  if (!event) {
+    return { canConclude: false, reason: 'Event not found.' };
+  }
+
+  if (event.isArchived) {
+    return { canConclude: false, reason: 'Archived events cannot be concluded.' };
+  }
+
+  const status = (event.status || event.proposalStatus || '').toLowerCase();
+  if (status === 'completed' || (event as any).isConcluded) {
+    return { canConclude: false, reason: 'Event is already completed.' };
+  }
+
+  if (status === 'cancelled' || event.isCancelled) {
+    return { canConclude: false, reason: 'Cancelled events cannot be concluded.' };
+  }
+
+  if (status === 'rejected') {
+    return { canConclude: false, reason: 'Rejected proposals cannot be concluded.' };
+  }
+
+  const sessionsOver = areEventSessionsOver(event);
+  if (!sessionsOver.allOver) {
+    return {
+      canConclude: false,
+      reason: sessionsOver.reason || 'Event sessions are not over yet.',
+      unfinishedSession: sessionsOver.unfinishedSession,
+    };
+  }
+
+  return { canConclude: true };
+}
+
+/**
  * Checks whether a user can initiate cancellation of an event.
  * Rules:
- * 1. Completed events cannot be cancelled.
- * 2. Ongoing events cannot be cancelled (only upcoming events).
- * 3. Only the creating organization can cancel their event (Officers).
+ * 1. Cancel button only shows if the event is NOT approved yet (applies to both Admin and Officer web).
+ * 2. Approved, Completed, Cancelled, and Rejected events cannot be cancelled.
+ * 3. Only unapproved proposals / drafts (draft, pending_review, pending, returned) can be cancelled.
  */
 export function canCancelEvent(
   event?: Partial<EventDocument> | null,
@@ -351,24 +454,31 @@ export function canCancelEvent(
     return { canCancel: false, reason: 'Rejected events cannot be cancelled.' };
   }
 
-  // 1. Completed Barrier: Completed events cannot be cancelled
-  const timingStatus = getEventTimingStatus(event);
-  if (timingStatus === 'completed' || event.status === 'completed' || event.proposalStatus === 'completed') {
+  // Check if event is approved (Approved events CANNOT be cancelled for both Admin & Officer)
+  const pStatus = (event.proposalStatus || '').toLowerCase();
+  const eStatus = (event.status || '').toLowerCase();
+  const lStatus = ((event as any).lifecycleStatus || '').toLowerCase();
+
+  const isApproved =
+    pStatus === 'approved' ||
+    pStatus === 'completed' ||
+    eStatus === 'approved' ||
+    eStatus === 'completed' ||
+    eStatus === 'ongoing' ||
+    lStatus === 'approved' ||
+    lStatus === 'completed' ||
+    lStatus === 'published' ||
+    Boolean((event as any).isApproved) ||
+    Boolean((event as any).isDirectPublished);
+
+  if (isApproved) {
     return {
       canCancel: false,
-      reason: 'Completed events cannot be cancelled. Initiate post-event liquidation or archiving instead.',
+      reason: 'Approved events cannot be cancelled. Cancellation is only permitted for unapproved proposals.',
     };
   }
 
-  // 2. Ongoing Barrier: Live/ongoing events cannot be cancelled
-  if (timingStatus === 'ongoing' || event.status === 'ongoing') {
-    return {
-      canCancel: false,
-      reason: 'Ongoing events cannot be cancelled while live in session. Scanner gate passes and attendance tracking are active.',
-    };
-  }
-
-  // 3. Organization Ownership Barrier (Officers)
+  // Officer Role Ownership Check:
   if (userRole === 'officer') {
     if (event.hostingOrgId === 'sas') {
       return {
@@ -380,41 +490,15 @@ export function canCancelEvent(
     if (userOrgId && event.hostingOrgId && event.hostingOrgId !== userOrgId) {
       return {
         canCancel: false,
-        reason: "Officers can only cancel their own organization's events.",
+        reason: "Officers can only cancel their own organization's event proposals.",
       };
     }
 
     return { canCancel: true };
   }
 
-  // 4. Admin Role Authority:
-  // Admins can only cancel approved upcoming institutional / school / SAS events.
-  // Admins are NOT allowed to cancel student organization events.
+  // Admin Role Authority Check:
   if (userRole === 'admin') {
-    const status = (event.proposalStatus || event.status || '').toLowerCase();
-    if (status === 'pending' || status === 'pending_review' || status === 'draft') {
-      return {
-        canCancel: false,
-        reason: 'Pending proposals cannot be cancelled by Admin. Use the Review modal to Approve, Return, or Reject the proposal.',
-      };
-    }
-
-    const isInstitutional =
-      !event.hostingOrgId ||
-      event.hostingOrgId === 'sas' ||
-      event.hostingOrgId === 'sao' ||
-      event.hostingOrgId === 'sas_admin' ||
-      event.hostingOrgId === 'sao_admin' ||
-      event.isOfficerProposal === false ||
-      (event as any).isInstitutional === true;
-
-    if (!isInstitutional) {
-      return {
-        canCancel: false,
-        reason: 'Admins cannot cancel student organization events. Only institutional, school, or SAS events can be cancelled by SAO administration.',
-      };
-    }
-
     return { canCancel: true };
   }
 

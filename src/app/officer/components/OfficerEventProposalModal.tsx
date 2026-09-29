@@ -13,7 +13,6 @@ import type { EventDocument, EventFormData } from '../../modules/events/types/ev
 import Step1EventDetails from '../../modules/events/components/wizard/Step1EventDetails';
 import Step2Schedule from '../../modules/events/components/wizard/Step2Schedule';
 import Step3Participants from '../../modules/events/components/wizard/Step3Participants';
-import Step4Staff from '../../modules/events/components/wizard/Step4Staff';
 import Step5Budget from '../../modules/events/components/wizard/Step5Budget';
 import Step6Documents from '../../modules/events/components/wizard/Step6Documents';
 import Step7Publish from '../../modules/events/components/wizard/Step7Publish';
@@ -29,7 +28,6 @@ const FLAG_STEP_MAP: Record<string, string> = {
   'Event Information (title, description, objectives)': 'Event Details',
   'Schedule or Venue': 'Schedule',
   'Participant Settings': 'Participants',
-  'Event Team Assignment': 'Staff',
   'Budget Request': 'Budget',
   'Submitted Documents': 'Documents',
 };
@@ -40,7 +38,6 @@ const getStepForFlag = (flag: string): string | null => {
   if (lower.includes('event info') || lower.includes('title')) return 'Event Details';
   if (lower.includes('schedule') || lower.includes('venue')) return 'Schedule';
   if (lower.includes('participant')) return 'Participants';
-  if (lower.includes('team') || lower.includes('staff')) return 'Staff';
   if (lower.includes('budget')) return 'Budget';
   if (lower.includes('document')) return 'Documents';
   return null;
@@ -151,14 +148,6 @@ const checkStepModified = (stepName: string, currentData: EventFormData, baselin
         JSON.stringify(cleanStringArray(currentData.allowedCourses)) !== JSON.stringify(cleanStringArray(baseline.allowedCourses)) ||
         JSON.stringify(cleanStringArray(currentData.allowedYearLevels)) !== JSON.stringify(cleanStringArray(baseline.allowedYearLevels)) ||
         JSON.stringify(normalizeSessions(currentData.sessions)) !== JSON.stringify(normalizeSessions(baseline.sessions))
-      );
-
-    case 'Staff':
-      return (
-        (currentData.eventHeadUid || '').trim() !== (baseline.eventHeadUid || '').trim() ||
-        (currentData.officerInChargeUid || '').trim() !== (baseline.officerInChargeUid || '').trim() ||
-        JSON.stringify(cleanStringArray(currentData.scannerUids)) !== JSON.stringify(cleanStringArray(baseline.scannerUids)) ||
-        JSON.stringify(normalizeScanners(currentData.scanners)) !== JSON.stringify(normalizeScanners(baseline.scanners))
       );
 
     case 'Budget': {
@@ -288,10 +277,7 @@ export default function OfficerEventProposalModal({ isOpen, onClose, initialDraf
     ...formData,
   });
 
-  const isQREnabled = Boolean(formData.enableQRTickets === true || (formData as any).enableQR === true);
-  const activeSteps = isQREnabled
-    ? ['Event Details', 'Schedule', 'Participants', 'Staff', 'Budget', 'Documents', 'Submit']
-    : ['Event Details', 'Schedule', 'Participants', 'Budget', 'Documents', 'Submit'];
+  const activeSteps = ['Event Details', 'Schedule', 'Participants', 'Budget', 'Documents', 'Submit'];
 
   const currentStepName = activeSteps[currentStep] || activeSteps[0];
 
@@ -472,7 +458,6 @@ export default function OfficerEventProposalModal({ isOpen, onClose, initialDraf
       case 'Event Details': return <Step1EventDetails {...props} />;
       case 'Schedule': return <Step2Schedule {...props} />;
       case 'Participants': return <Step3Participants {...props} />;
-      case 'Staff': return <Step4Staff {...props} />;
       case 'Budget': return <Step5Budget {...props} />;
       case 'Documents': return <Step6Documents {...props} />;
       case 'Submit': return <Step7Publish {...props} onPublish={handleSubmitProposal} isPublishing={saving || loading} />;

@@ -4,7 +4,6 @@ import { toast } from 'sonner';
 import Step1EventDetails from '../../modules/events/components/wizard/Step1EventDetails';
 import Step2Schedule from '../../modules/events/components/wizard/Step2Schedule';
 import Step3Participants from '../../modules/events/components/wizard/Step3Participants';
-import Step4Staff from '../../modules/events/components/wizard/Step4Staff';
 import Step5Budget from '../../modules/events/components/wizard/Step5Budget';
 import Step6Documents from '../../modules/events/components/wizard/Step6Documents';
 import Step7Publish from '../../modules/events/components/wizard/Step7Publish';
@@ -27,7 +26,6 @@ const STEPS = [
   'Event Details',
   'Schedule',
   'Participants',
-  'Staff',
   'Budget',
   'Documents',
   'Publish'
@@ -38,11 +36,10 @@ const STEPS = [
  * fields are populated in the draft. Returns the 0-based step index.
  */
 function inferLastStep(draft: EventDocument): number {
-  if (draft.documents && draft.documents.length > 0) return 5; // Documents (Step 6)
+  if (draft.documents && draft.documents.length > 0) return 4; // Documents (Step 5)
   if (
     draft.budgetItems && draft.budgetItems.length > 0
-  ) return 4; // Budget (Step 5)
-  if (draft.scanners && draft.scanners.length > 0) return 3; // Staff (Step 4)
+  ) return 3; // Budget (Step 4)
   if (
     draft.targetYearLevels && draft.targetYearLevels.length > 0
   ) return 2; // Participants (Step 3)
@@ -121,10 +118,7 @@ export default function SaoEventCreationModal({
     setFormData(prev => ({ ...prev, ...stepData }));
   };
 
-  const isQREnabled = Boolean(formData.enableQRTickets === true || (formData as any).enableQR === true);
-  const steps = isQREnabled
-    ? ['Event Details', 'Schedule', 'Participants', 'Staff', 'Budget', 'Documents', 'Publish']
-    : ['Event Details', 'Schedule', 'Participants', 'Budget', 'Documents', 'Publish'];
+  const steps = ['Event Details', 'Schedule', 'Participants', 'Budget', 'Documents', 'Publish'];
 
   const currentStepName = steps[currentStep] || steps[0];
 
@@ -271,8 +265,6 @@ export default function SaoEventCreationModal({
         return <Step2Schedule {...stepProps} />;
       case 'Participants':
         return <Step3Participants {...stepProps} />;
-      case 'Staff':
-        return <Step4Staff {...stepProps} />;
       case 'Budget':
         return <Step5Budget {...stepProps} />;
       case 'Documents':

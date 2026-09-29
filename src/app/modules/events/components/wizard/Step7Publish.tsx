@@ -42,7 +42,6 @@ export default function Step7Publish({ data, onUpdate, onPublish, isPublishing, 
   const s1Res = validateStep1(data, showOfficerMode);
   const s2Res = validateStep2(data, allEvents, (data as any).id);
   const s3Res = validateStep3(data);
-  const s4Res = validateStep4(data);
   const s5Res = validateStep5(data);
   const s6Res = validateStep6(data, showOfficerMode);
   const isCertified = Boolean(data.isCertified || data.officerAcknowledgement);
@@ -51,11 +50,10 @@ export default function Step7Publish({ data, onUpdate, onPublish, isPublishing, 
     { id: 1, label: 'Event details complete', desc: s1Res.isValid ? 'Title, banner, and type specified' : (s1Res.errors[0] || 'Missing event details'), status: s1Res.isValid ? 'valid' : 'invalid' },
     { id: 2, label: 'Schedule and venue assigned', desc: s2Res.isValid ? 'Active semester, sessions, and venue configured without conflicts' : (s2Res.errors[0] || 'Schedule incomplete or has conflicts'), status: s2Res.isValid ? 'valid' : 'invalid' },
     { id: 3, label: 'Participant settings configured', desc: s3Res.isValid ? 'Target audience and academic cohort set' : (s3Res.errors[0] || 'Invalid participant settings'), status: s3Res.isValid ? 'valid' : 'invalid' },
-    { id: 4, label: 'Staff fully assigned', desc: s4Res.isValid ? 'Event Head, Officer-in-Charge, and scanners' : (s4Res.errors[0] || 'Staff assignments incomplete'), status: s4Res.isValid ? 'valid' : 'invalid' },
-    { id: 5, label: 'Budget requested', desc: s5Res.isValid ? 'Itemized budget lines are valid' : (s5Res.errors[0] || 'Invalid budget items'), status: s5Res.isValid ? 'valid' : 'invalid' },
-    { id: 6, label: 'Documents uploaded', desc: s6Res.isValid ? 'Required proposal documents attached' : (s6Res.errors[0] || 'Required documents missing'), status: s6Res.isValid ? 'valid' : 'invalid' },
+    { id: 4, label: 'Budget requested', desc: s5Res.isValid ? 'Itemized budget lines are valid' : (s5Res.errors[0] || 'Invalid budget items'), status: s5Res.isValid ? 'valid' : 'invalid' },
+    { id: 5, label: 'Documents uploaded', desc: s6Res.isValid ? 'Required proposal documents attached' : (s6Res.errors[0] || 'Required documents missing'), status: s6Res.isValid ? 'valid' : 'invalid' },
     {
-      id: 7,
+      id: 6,
       label: showOfficerMode ? 'Officer Proposal Acknowledgement' : 'SAO Adviser Authorization',
       desc: isCertified
         ? (showOfficerMode ? 'Proposal certified accurate and ready for SAO review' : 'Event creation authorized under SAO Adviser authority')

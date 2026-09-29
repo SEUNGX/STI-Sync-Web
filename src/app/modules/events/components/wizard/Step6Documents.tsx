@@ -195,13 +195,6 @@ export default function Step6Documents({ data, onUpdate, isOfficer, errors = {} 
       },
       {
         id: 2,
-        check: 'Assigned officers are registered and in good standing',
-        status: officerCheckStatus,
-        reason: officerCheckReason,
-        auto: true,
-      },
-      {
-        id: 3,
         check: 'Event schedule and venue assigned',
         status: hasSchedule ? ('passed' as const) : ('warning' as const),
         reason: hasSchedule

@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   CheckCircle2,
   AlertTriangle,
+  AlertCircle,
   Lock,
   X,
   Clock,
@@ -11,6 +12,7 @@ import {
 import { toast } from 'sonner';
 import type { EventDocument } from '../types/event.types';
 import { concludeEvent } from '../services/event-lifecycle.service';
+import { areEventSessionsOver } from '../utils/event-lifecycle.utils';
 
 interface ConcludeEventModalProps {
   isOpen: boolean;
@@ -32,28 +34,22 @@ export const ConcludeEventModal: React.FC<ConcludeEventModalProps> = ({
   const [note, setNote] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Check if scheduled sessions are finished
+  const sessions = event?.sessions || [];
+  const sessionsOver = useMemo(() => areEventSessionsOver(event), [event]);
+
   if (!isOpen || !event) return null;
 
-  // Check if scheduled sessions are finished
-  const sessions = event.sessions || [];
-  const now = new Date();
-  let hasFutureSessions = false;
-
-  for (const s of sessions) {
-    if (!s.date) continue;
-    const dateStr = typeof s.date === 'string' ? s.date.split('T')[0] : '';
-    if (!dateStr) continue;
-    const [year, month, day] = dateStr.split('-').map(Number);
-    const endParts = (s.endTime || '23:59').split(':').map(Number);
-    const end = new Date(year, month - 1, day, endParts[0] || 23, endParts[1] || 59, 59);
-
-    if (now < end) {
-      hasFutureSessions = true;
-      break;
-    }
-  }
-
   const handleConfirm = async () => {
+    if (!sessionsOver.allOver) {
+      toast.error('Cannot Conclude Event', {
+        description:
+          sessionsOver.reason ||
+          'Scheduled sessions are not finished yet. All sessions must end before concluding the event.',
+      });
+      return;
+    }
+
     try {
       setIsSubmitting(true);
       await concludeEvent(event.id, adminUid, adminName, note);
@@ -85,7 +81,7 @@ export const ConcludeEventModal: React.FC<ConcludeEventModalProps> = ({
           <button
             onClick={onClose}
             disabled={isSubmitting}
-            className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors"
+            className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -98,8 +94,14 @@ export const ConcludeEventModal: React.FC<ConcludeEventModalProps> = ({
               <span className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">
                 {event.referenceId || 'EVT-REF'}
               </span>
-              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300">
-                Ready for Completion
+              <span
+                className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                  sessionsOver.allOver
+                    ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300'
+                    : 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200'
+                }`}
+              >
+                {sessionsOver.allOver ? 'Ready for Completion' : 'Sessions Ongoing / Incomplete'}
               </span>
             </div>
             <h3 className="font-bold text-slate-900 dark:text-white text-base leading-snug">
@@ -117,12 +119,16 @@ export const ConcludeEventModal: React.FC<ConcludeEventModalProps> = ({
             </div>
           </div>
 
-          {/* Early Conclude Warning */}
-          {hasFutureSessions && (
-            <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 flex items-start gap-3">
-              <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
-              <div className="text-xs text-amber-800 dark:text-amber-200 leading-relaxed">
-                <span className="font-bold">Scheduled sessions are not finished yet.</span> Concluding early will immediately lock live attendance scanners and stop gate admissions.
+          {/* Sessions Not Over Blocking Warning */}
+          {!sessionsOver.allOver && (
+            <div className="p-3.5 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+              <div className="text-xs text-red-800 dark:text-red-200 leading-relaxed">
+                <span className="font-bold block text-xs mb-0.5 text-red-900 dark:text-red-100">
+                  Event cannot be concluded yet:
+                </span>
+                {sessionsOver.reason ||
+                  'Scheduled sessions are not finished yet. All sessions must end before concluding this event.'}
               </div>
             </div>
           )}
@@ -135,11 +141,15 @@ export const ConcludeEventModal: React.FC<ConcludeEventModalProps> = ({
             <ul className="text-xs text-slate-600 dark:text-slate-400 space-y-2">
               <li className="flex items-start gap-2">
                 <Lock className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
-                <span><strong>Locks Attendance Scanners:</strong> QR check-in gates are sealed from new scans.</span>
+                <span>
+                  <strong>Locks Attendance Scanners:</strong> QR check-in gates are sealed from new scans.
+                </span>
               </li>
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
-                <span><strong>Unlocks Post-Event Workflows:</strong> Enables financial liquidation submission, certificate distribution, and eventual archiving.</span>
+                <span>
+                  <strong>Unlocks Post-Event Workflows:</strong> Enables financial liquidation submission, certificate distribution, and eventual archiving.
+                </span>
               </li>
             </ul>
           </div>
@@ -153,8 +163,9 @@ export const ConcludeEventModal: React.FC<ConcludeEventModalProps> = ({
               type="text"
               value={note}
               onChange={(e) => setNote(e.target.value)}
+              disabled={!sessionsOver.allOver}
               placeholder="e.g., Event successfully concluded with all attendees accounted for."
-              className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50"
             />
           </div>
         </div>
@@ -170,8 +181,8 @@ export const ConcludeEventModal: React.FC<ConcludeEventModalProps> = ({
           </button>
           <button
             onClick={handleConfirm}
-            disabled={isSubmitting}
-            className="px-5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 rounded-xl shadow-xs transition-colors flex items-center gap-2 cursor-pointer disabled:opacity-50"
+            disabled={isSubmitting || !sessionsOver.allOver}
+            className="px-5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 rounded-xl shadow-xs transition-colors flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSubmitting ? (
               <>

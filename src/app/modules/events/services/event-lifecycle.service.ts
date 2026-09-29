@@ -28,7 +28,7 @@ import { LIQUIDATIONS_COLLECTION } from '../../finance/services/liquidation.serv
 import { PAYABLES_COLLECTION } from '../../finance/services/payable.service';
 import { logAuditEvent } from '../../audit/services/audit.service';
 import type { EventDocument, EventProposalHistoryLog } from '../types/event.types';
-import { getEventTimingStatus } from '../utils/event-lifecycle.utils';
+import { getEventTimingStatus, areEventSessionsOver } from '../utils/event-lifecycle.utils';
 
 export interface EventArchiveReadinessSummary {
   eventTitle: string;
@@ -72,6 +72,15 @@ export async function concludeEvent(
 
   if (eventData.isArchived) {
     throw new Error('Archived events cannot be modified.');
+  }
+
+  // Enforce session completion validation
+  const sessionsOver = areEventSessionsOver(eventData);
+  if (!sessionsOver.allOver) {
+    throw new Error(
+      sessionsOver.reason ||
+        'Cannot conclude event: Scheduled sessions are not over yet. All sessions must end before concluding.'
+    );
   }
 
   const historyEntry: EventProposalHistoryLog = {

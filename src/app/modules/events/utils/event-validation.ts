@@ -579,14 +579,12 @@ export function validateStep7(data: EventFormData, isOfficer = false): StepValid
   const s1 = validateStep1(data, isOfficer);
   const s2 = validateStep2(data);
   const s3 = validateStep3(data);
-  const s4 = validateStep4(data);
   const s5 = validateStep5(data);
   const s6 = validateStep6(data, isOfficer);
 
   if (!s1.isValid) errors.push(...s1.errors);
   if (!s2.isValid) errors.push(...s2.errors);
   if (!s3.isValid) errors.push(...s3.errors);
-  if (!s4.isValid) errors.push(...s4.errors);
   if (!s5.isValid) errors.push(...s5.errors);
   if (!s6.isValid) errors.push(...s6.errors);
 
