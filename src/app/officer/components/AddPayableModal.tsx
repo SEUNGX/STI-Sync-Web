@@ -55,7 +55,6 @@ export function AddPayableModal({
 
   const { members = [], loading: loadingMembers } = useOrgMembers(organizationId);
 
-  const [selectedSemId, setSelectedSemId] = useState<string>(activeSemester?.id || '');
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
   const [payableType, setPayableType] = useState<PayableType>('custom');
   const [categoryName, setCategoryName] = useState<string>('Club Assessment');
@@ -177,13 +176,13 @@ export function AddPayableModal({
       return;
     }
 
-    const semId = selectedSemId || activeSemester?.id;
+    const semId = activeSemester?.id || semesters.find((s) => s.status === 'ACTIVE')?.id || semesters[0]?.id;
     if (!semId) {
-      toast.error('Please select an academic semester.');
+      toast.error('No active academic semester found. Please contact administration.');
       return;
     }
 
-    const selectedSemesterObj = semesters.find((s) => s.id === semId);
+    const selectedSemesterObj = semesters.find((s) => s.id === semId) || activeSemester;
 
     // Determine target members
     const targetMembers =
@@ -382,7 +381,7 @@ export function AddPayableModal({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Amount */}
             <div>
               <label className="block text-xs font-bold text-[#001A4D] uppercase tracking-wider mb-1.5">
@@ -403,24 +402,6 @@ export function AddPayableModal({
                   required
                 />
               </div>
-            </div>
-
-            {/* Semester */}
-            <div>
-              <label className="block text-xs font-bold text-[#001A4D] uppercase tracking-wider mb-1.5">
-                Semester <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={selectedSemId}
-                onChange={(e) => setSelectedSemId(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#001A4D]/20 focus:border-[#001A4D] outline-none bg-white cursor-pointer"
-              >
-                {semesters.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.label}
-                  </option>
-                ))}
-              </select>
             </div>
 
             {/* Due Date */}

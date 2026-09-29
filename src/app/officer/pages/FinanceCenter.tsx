@@ -29,6 +29,7 @@ import {
   TrendingUp,
   Wallet,
   Coins,
+  Calendar,
   CheckCircle,
   AlertCircle,
   Clock,
@@ -274,7 +275,7 @@ function AddOrgIncomeModal({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Notes / Source of Funds</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Description</label>
             <textarea
               rows={2}
               placeholder="e.g. Initial club fund, Sponsorship, Club budget allocation, SAS Subsidy"
@@ -412,9 +413,7 @@ function AddOrgExpenseModal({
 
   const [form, setForm] = useState({
     description: "",
-    eventId: "",
     amount: "",
-    date: new Date().toISOString().split("T")[0],
     receiptNumber: ""
   });
   const [receiptUrl, setReceiptUrl] = useState<string>("");
@@ -441,17 +440,13 @@ function AddOrgExpenseModal({
       toast.warning("Please wait for the receipt photo to finish uploading.");
       return;
     }
-    if (!form.description?.trim()) {
-      toast.error("Please enter an expense description.");
-      return;
-    }
     const parsedAmount = parseFloat(form.amount);
     if (!form.amount || isNaN(parsedAmount) || parsedAmount <= 0) {
       toast.error("Please enter a valid expense amount greater than ₱0.");
       return;
     }
-    if (!form.date) {
-      toast.error("Please select an expense date.");
+    if (!form.description?.trim()) {
+      toast.error("Please enter an expense description.");
       return;
     }
 
@@ -460,9 +455,9 @@ function AddOrgExpenseModal({
       await addOrgLedgerTransaction({
         organizationId,
         semesterId: activeSemester?.id || null,
-        date: Timestamp.fromDate(getTransactionDate(form.date)),
+        date: Timestamp.fromDate(new Date()),
         description: form.description.trim(),
-        eventId: form.eventId || null,
+        eventId: null,
         type: "expense",
         source: "manual_expense",
         amount: parsedAmount,
@@ -499,28 +494,19 @@ function AddOrgExpenseModal({
         </div>
 
         <div className="p-5 space-y-4 overflow-y-auto flex-1">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Date <span className="text-red-500">*</span></label>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              Expense Amount (₱) <span className="text-red-500">*</span>
+            </label>
+            <div className="relative">
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-medium">₱</span>
               <input
-                type="date"
-                value={form.date}
-                onChange={(e) => setForm({ ...form, date: e.target.value })}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
+                type="number"
+                placeholder="0.00"
+                className="w-full pl-8 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
+                value={form.amount}
+                onChange={(e) => setForm({ ...form, amount: e.target.value })}
               />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Amount (₱) <span className="text-red-500">*</span></label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">₱</span>
-                <input
-                  type="number"
-                  placeholder="0.00"
-                  className="w-full pl-8 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
-                  value={form.amount}
-                  onChange={(e) => setForm({ ...form, amount: e.target.value })}
-                />
-              </div>
             </div>
           </div>
 
@@ -533,20 +519,6 @@ function AddOrgExpenseModal({
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
             />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Related Event (optional)</label>
-            <select
-              value={form.eventId}
-              onChange={(e) => setForm({ ...form, eventId: e.target.value })}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
-            >
-              <option value="">— No specific event —</option>
-              {orgEvents.map((evt) => (
-                <option key={evt.id} value={evt.id}>{evt.title}</option>
-              ))}
-            </select>
           </div>
 
           {/* ── Proof of Expense / Receipt Photo Upload ── */}
@@ -1503,7 +1475,12 @@ function StudentCollectionsAndPayablesTab({
   const [viewCollection, setViewCollection] = useState<StudentEventCollectionGroup | null>(null);
   const [showGenerateDues, setShowGenerateDues] = useState(false);
   const [showAddPayable, setShowAddPayable] = useState(false);
-  const [selectedPayableForPayment, setSelectedPayableForPayment] = useState<PayableDocument | null>(null);
+  const [paymentModalData, setPaymentModalData] = useState<{
+    payables: PayableDocument[];
+    defaultPayableId?: string;
+    studentName?: string;
+    studentSchoolId?: string;
+  } | null>(null);
   const [selectedPayableForRefund, setSelectedPayableForRefund] = useState<PayableDocument | null>(null);
   const [isTransferring, setIsTransferring] = useState(false);
 
@@ -2060,7 +2037,7 @@ function StudentCollectionsAndPayablesTab({
             <table className="w-full">
               <thead className="bg-gray-50">
                 <tr>
-                  {["Member", "Assigned Payables", "Total Assigned", "Total Paid", "Outstanding", "Status", ...(!isPast ? ["Actions"] : [])].map(
+                  {["Member", "Assigned Payables", "Due Date", "Total Assigned", "Total Paid", "Outstanding", "Status", ...(!isPast ? ["Actions"] : [])].map(
                     (col) => (
                       <th
                         key={col}
@@ -2075,14 +2052,14 @@ function StudentCollectionsAndPayablesTab({
               <tbody className="divide-y divide-gray-100 text-xs">
                 {membersLoading ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
+                    <td colSpan={8} className="px-4 py-8 text-center text-gray-500">
                       <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-[#0E4EBD]" />
                       Loading club members roster...
                     </td>
                   </tr>
                 ) : paginatedMembers.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-gray-500 text-sm">
+                    <td colSpan={8} className="px-4 py-8 text-center text-gray-500 text-sm">
                       No active club members found matching your search.
                     </td>
                   </tr>
@@ -2141,10 +2118,10 @@ function StudentCollectionsAndPayablesTab({
                               <p className="text-gray-400 text-xs font-mono">
                                 {m.schoolId}
                                 {m.courseCode && (
-                                  <span className="ml-1 text-gray-500 font-sans font-medium">· {m.courseCode}</span>
+                                   <span className="ml-1 text-gray-500 font-sans font-medium">· {m.courseCode}</span>
                                 )}
                                 {m.yearLevel && (
-                                  <span className="ml-1 text-gray-400 font-sans">· {m.yearLevel}</span>
+                                   <span className="ml-1 text-gray-400 font-sans">· {m.yearLevel}</span>
                                 )}
                               </p>
                             </div>
@@ -2165,6 +2142,45 @@ function StudentCollectionsAndPayablesTab({
                                 <span className="font-semibold text-gray-800">{formatCurrency(p.assignedAmount)}</span>
                               </div>
                             ))
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-gray-600 space-y-1 whitespace-nowrap">
+                          {m.payables.length === 0 ? (
+                            <span className="text-gray-400 italic text-[11px]">—</span>
+                          ) : (
+                            m.payables.map((p) => {
+                              const isPastDue =
+                                (p.status === "overdue" ||
+                                  (p.dueDate?.toMillis && p.dueDate.toMillis() < now)) &&
+                                p.status !== "paid" &&
+                                p.status !== "waived" &&
+                                p.status !== "refunded";
+
+                              return (
+                                <div
+                                  key={p.id}
+                                  className="flex items-center gap-1.5 border-b border-gray-100 last:border-0 pb-0.5"
+                                >
+                                  <Calendar
+                                    className={`w-3.5 h-3.5 flex-shrink-0 ${
+                                      isPastDue ? "text-red-500" : "text-gray-400"
+                                    }`}
+                                  />
+                                  <span
+                                    className={`font-medium ${
+                                      isPastDue ? "text-red-600 font-semibold" : "text-gray-700"
+                                    }`}
+                                  >
+                                    {formatAppDate(p.dueDate, "No deadline")}
+                                  </span>
+                                  {isPastDue && (
+                                    <span className="text-[9px] font-bold uppercase px-1 py-0.2 bg-red-100 text-red-600 rounded">
+                                      Overdue
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })
                           )}
                         </td>
                         <td className="px-4 py-3 text-gray-700 text-sm font-semibold">{formatCurrency(assigned)}</td>
@@ -2198,10 +2214,11 @@ function StudentCollectionsAndPayablesTab({
                               {outstanding > 0 && !hasRefundPending ? (
                                 <button
                                   onClick={() => {
-                                    const pendingPayable = m.payables.find(
-                                      (p) => (p.assignedAmount || 0) > (p.paidAmount || 0) && p.status !== 'refund_pending' && p.status !== 'refunded' && p.status !== 'waived'
-                                    );
-                                    if (pendingPayable) setSelectedPayableForPayment(pendingPayable);
+                                    setPaymentModalData({
+                                      payables: m.payables,
+                                      studentName: m.studentName,
+                                      studentSchoolId: m.schoolId,
+                                    });
                                   }}
                                   className="px-3 py-1 bg-green-600 text-white rounded-lg text-xs font-semibold hover:bg-green-700 transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
                                 >
@@ -2282,7 +2299,12 @@ function StudentCollectionsAndPayablesTab({
                         {!isPast && (
                           <td className="px-4 py-3">
                             <button
-                              onClick={() => setSelectedPayableForPayment(p)}
+                              onClick={() => setPaymentModalData({
+                                payables: [p],
+                                defaultPayableId: p.id,
+                                studentName: p.studentName,
+                                studentSchoolId: p.studentSchoolId || p.studentId,
+                              })}
                               className="px-3 py-1 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700 transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
                             >
                               <CheckCircle className="w-3.5 h-3.5" /> Record Payment
@@ -2336,11 +2358,14 @@ function StudentCollectionsAndPayablesTab({
         />
       )}
 
-      {selectedPayableForPayment && (
+      {paymentModalData && (
         <RecordPaymentModal
-          isOpen={!!selectedPayableForPayment}
-          onClose={() => setSelectedPayableForPayment(null)}
-          payable={selectedPayableForPayment}
+          isOpen={!!paymentModalData}
+          onClose={() => setPaymentModalData(null)}
+          payables={paymentModalData.payables}
+          defaultPayableId={paymentModalData.defaultPayableId}
+          studentName={paymentModalData.studentName}
+          studentSchoolId={paymentModalData.studentSchoolId}
           recordedBy={officerStudentId}
         />
       )}

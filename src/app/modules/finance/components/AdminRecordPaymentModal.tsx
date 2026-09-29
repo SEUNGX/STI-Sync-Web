@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { X, CheckCircle, Lock, Unlock, Loader2, Coins, AlertCircle } from 'lucide-react';
+import { X, CheckCircle, Lock, Unlock, Loader2, Coins, AlertCircle, Calendar } from 'lucide-react';
 import type { PayableDocument } from '../types/payable.types';
 import { recordPayment } from '../services/payable.service';
 import { formatCurrency } from '../../../utils/currency';
+import { formatAppDate, parseDateSafe } from '../../../utils/date';
 
 interface AdminRecordPaymentModalProps {
   payable: PayableDocument;
@@ -35,6 +36,14 @@ export function AdminRecordPaymentModal({
     payable.status === 'refund_pending' ||
     payable.status === 'refunded' ||
     (payable as any).status === 'cancelled';
+
+  const isOverdue =
+    (payable.status === 'overdue' ||
+      (payable.dueDate &&
+        (parseDateSafe(payable.dueDate)?.getTime() || 0) < Date.now())) &&
+    payable.status !== 'paid' &&
+    payable.status !== 'waived' &&
+    payable.status !== 'refunded';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -91,6 +100,20 @@ export function AdminRecordPaymentModal({
               <span className="text-gray-600">Total Fee: {formatCurrency(payable.assignedAmount)}</span>
               <span className="text-gray-600">Already Paid: {formatCurrency(payable.paidAmount || 0)}</span>
               <span className="font-bold text-[#001A4D]">Remaining: {formatCurrency(remaining)}</span>
+            </div>
+            <div className="flex items-center justify-between mt-1.5 pt-1.5 border-t border-[#7F77DD]/20 text-xs">
+              <span className="text-gray-600 flex items-center gap-1">
+                <Calendar className="w-3.5 h-3.5 text-gray-500" />
+                Deadline:
+              </span>
+              <span className={`font-semibold ${isOverdue ? 'text-red-600' : 'text-[#001A4D]'}`}>
+                {formatAppDate(payable.dueDate, 'No deadline set')}
+                {isOverdue && (
+                  <span className="ml-1.5 text-[9px] px-1 py-0.2 bg-red-100 text-red-600 rounded font-bold uppercase">
+                    Overdue
+                  </span>
+                )}
+              </span>
             </div>
           </div>
 

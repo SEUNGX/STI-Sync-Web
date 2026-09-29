@@ -185,7 +185,7 @@ function AddBudgetModal({ currentBalance: _currentBalance, onClose, onSave }: {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Notes / Source of Funds</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Description</label>
             <textarea
               rows={2}
               placeholder="e.g. Annual institutional allocation from school administration, Initial school budget"
@@ -1140,13 +1140,13 @@ function CollectionDetailModal({
 }
 
 // ─── Add Manual Expense Modal ──────────────────────────────────────────────────
-function AddExpenseModal({ activeSemesterId, events, onClose, onSave }: {
+function AddExpenseModal({ activeSemesterId, onClose, onSave }: {
   activeSemesterId: string | null;
-  events: any[];
+  events?: any[];
   onClose: () => void;
   onSave: (tx: Omit<SaoLedgerDocument, "id" | "createdAt">) => Promise<void> | void;
 }) {
-  const [form, setForm] = useState({ description: "", event: "", amount: "", date: new Date().toISOString().split("T")[0], receiptNumber: "" });
+  const [form, setForm] = useState({ description: "", amount: "", receiptNumber: "" });
   const [receiptUrl, setReceiptUrl] = useState<string>("");
   const [isUploading, setIsUploading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -1171,17 +1171,13 @@ function AddExpenseModal({ activeSemesterId, events, onClose, onSave }: {
       toast.warning("Please wait for the receipt photo to finish uploading.");
       return;
     }
-    if (!form.description?.trim()) {
-      toast.error("Please enter an expense description.");
-      return;
-    }
     const parsedAmount = parseFloat(form.amount);
     if (!form.amount || isNaN(parsedAmount) || parsedAmount <= 0) {
       toast.error("Please enter a valid expense amount greater than ₱0.");
       return;
     }
-    if (!form.date) {
-      toast.error("Please select an expense date.");
+    if (!form.description?.trim()) {
+      toast.error("Please enter an expense description.");
       return;
     }
 
@@ -1189,9 +1185,9 @@ function AddExpenseModal({ activeSemesterId, events, onClose, onSave }: {
     try {
       await onSave({
         semesterId: activeSemesterId,
-        date: Timestamp.fromDate(getTransactionDate(form.date)),
+        date: Timestamp.fromDate(new Date()),
         description: form.description.trim(),
-        eventId: form.event || null,
+        eventId: null,
         type: "expense",
         source: "manual_expense",
         amount: parsedAmount,
@@ -1223,36 +1219,33 @@ function AddExpenseModal({ activeSemesterId, events, onClose, onSave }: {
         </div>
 
         <div className="p-5 space-y-4 overflow-y-auto flex-1">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Date <span className="text-red-500">*</span></label>
-              <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Amount (₱) <span className="text-red-500">*</span></label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">₱</span>
-                <input type="number" placeholder="0.00" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })}
-                  className="w-full pl-8 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]" />
-              </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              Expense Amount (₱) <span className="text-red-500">*</span>
+            </label>
+            <div className="relative">
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-medium">₱</span>
+              <input
+                type="number"
+                placeholder="0.00"
+                value={form.amount}
+                onChange={(e) => setForm({ ...form, amount: e.target.value })}
+                className="w-full pl-8 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
+              />
             </div>
           </div>
+
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Description <span className="text-red-500">*</span></label>
-            <input type="text" placeholder="e.g. Expense – Tech Symposium 2026" value={form.description}
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              Description <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. Expense – Office Supplies, Venue Reservation, etc."
+              value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Related Event (optional)</label>
-            <select value={form.event} onChange={(e) => setForm({ ...form, event: e.target.value })}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]">
-              <option value="">— No specific event —</option>
-              {events.map((evt) => (
-                <option key={evt.id} value={evt.id}>{evt.title}</option>
-              ))}
-            </select>
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0E4EBD]/30 focus:border-[#0E4EBD]"
+            />
           </div>
 
           {/* ── Proof of Expense / Receipt Photo Upload ── */}
@@ -1699,14 +1692,12 @@ export function BudgetFundSettings() {
       toast.info(`No transactions to export.`);
       return;
     }
-    const headers = ["Date", "Description", "Added By", "Related Event", "Source", "Type", "Amount", "Running Balance"];
+    const headers = ["Date", "Description", "Added By", "Source", "Type", "Amount", "Running Balance"];
     const rows = filteredTx.map((t) => {
-      const displayEvent = t.eventId ? (eventMap.get(t.eventId) || t.eventId) : "";
       return [
         `"${formatAppDate(t.date, "-")}"`,
         `"${(t.description || "").replace(/"/g, '""')}"`,
         `"${(t.addedBy || "").replace(/"/g, '""')}"`,
-        `"${displayEvent.replace(/"/g, '""')}"`,
         `"${t.source || ""}"`,
         `"${t.type || ""}"`,
         `"${t.amount || 0}"`,
@@ -1952,7 +1943,7 @@ export function BudgetFundSettings() {
             <table className="w-full relative">
               <thead className="bg-gray-50/90 sticky top-0 z-10 shadow-xs border-b border-[#E0E0E0]">
                 <tr>
-                  {["Date", "Description", "Related Event", "Source", "Amount", "Running Balance", "Action"].map((col) => (
+                  {["Date", "Description", "Source", "Amount", "Running Balance", "Action"].map((col) => (
                     <th key={col} className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide bg-gray-50 border-b border-[#E0E0E0]">{col}</th>
                   ))}
                 </tr>
@@ -1960,20 +1951,12 @@ export function BudgetFundSettings() {
               <tbody className="divide-y divide-gray-100">
                 {paginatedTx.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-12 text-center text-gray-400 text-sm">
+                    <td colSpan={6} className="px-4 py-12 text-center text-gray-400 text-sm">
                       No transactions found matching your filters.
                     </td>
                   </tr>
                 ) : (
                   paginatedTx.map((tx) => {
-                    const linkedCollection = tx.collectionId
-                      ? collections.find((c) => c.id === tx.collectionId || c.id.includes(tx.collectionId!)) ?? null
-                      : null;
-
-                    const displayEventName = tx.eventId
-                      ? (eventMap.get(tx.eventId) || tx.eventId)
-                      : (linkedCollection?.eventName ?? null);
-
                     return (
                       <tr key={tx.id} className={`transition-colors ${tx.source === "student_collection" ? "bg-green-50/30 hover:bg-green-50/60" : "hover:bg-gray-50"}`}>
                         <td className="px-4 py-3 text-gray-500 text-sm whitespace-nowrap">
@@ -1987,9 +1970,6 @@ export function BudgetFundSettings() {
                               <p className="text-gray-400 text-[11px] mt-0.5">By {creator}</p>
                             ) : null;
                           })()}
-                        </td>
-                        <td className="px-4 py-3 text-gray-700 font-medium text-sm">
-                          {displayEventName ? displayEventName : <span className="text-gray-300">—</span>}
                         </td>
                         <td className="px-4 py-3">
                           <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${sourceBadgeMap[tx.source] || "bg-gray-100 text-gray-700"}`}>
@@ -2021,7 +2001,7 @@ export function BudgetFundSettings() {
               </tbody>
               <tfoot className="border-t border-[#E0E0E0]">
                 <tr className="bg-[#001A4D] shadow-md">
-                  <td colSpan={4} className="px-4 py-3 text-white font-bold text-sm bg-[#001A4D]">Current School Budget Balance</td>
+                  <td colSpan={3} className="px-4 py-3 text-white font-bold text-sm bg-[#001A4D]">Current School Budget Balance</td>
                   <td colSpan={3} className="px-4 py-3 text-[#FFD41C] font-bold text-lg bg-[#001A4D]">{formatCurrency(currentBalance)}</td>
                 </tr>
               </tfoot>
